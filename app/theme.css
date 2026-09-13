@@ -8,20 +8,20 @@
  */
 :root {
   color-scheme: light;
-  --brand: #573989;
+  --brand: #422378;
   --brand-hover: #422969;
   --brand-soft: #f1edf8;
   --on-brand: #ffffff;
-  --accent: #efc34b;
+  --accent: #ffc51c;
   --accent-hover: #ffcf52;
   --on-accent: #332447;
   --accent-soft: #fcf5df;
-  --background: #f7f7fa;
+  --background: #fdfdff;
   --surface: #ffffff;
   --surface-subtle: #fafafd;
   --surface-hover: #f6f3fa;
   --text: #252332;
-  --text-secondary: #777582;
+  --text-secondary: #656785;
   --text-tertiary: #9895a3;
   --border: #ebe9f0;
   --border-strong: #dcd7e5;
@@ -35,6 +35,8 @@
   --hero-bg: #392657;
   --hero-text: #ffffff;
   --hero-muted: #d8cfea;
+  --race-image-overlay: linear-gradient(90deg, #061f3ab3, #061f3a36 65%, #061f3a0a);
+  --live-image-overlay: linear-gradient(0deg, #061f3ab3, #061f3a26);
   --hero-overlay: linear-gradient(90deg, #392657 0%, #392657 29%, #392657e6 44%, #39265744 67%, #241d3010 100%);
   --success: #328768;
   --success-soft: #eaf5ee;
@@ -61,7 +63,7 @@
   --brand-hover: #cdb2f5;
   --brand-soft: #31263f;
   --on-brand: #21152e;
-  --accent: #efc34b;
+  --accent: #ffc51c;
   --accent-hover: #ffcf52;
   --on-accent: #332447;
   --accent-soft: #383021;
@@ -84,6 +86,8 @@
   --hero-bg: #392657;
   --hero-text: #ffffff;
   --hero-muted: #d8cfea;
+  --race-image-overlay: linear-gradient(90deg, #061f3ab3, #061f3a36 65%, #061f3a0a);
+  --live-image-overlay: linear-gradient(0deg, #061f3ab3, #061f3a26);
   --hero-overlay: linear-gradient(90deg, #392657 0%, #392657 29%, #392657e6 44%, #39265744 67%, #241d3010 100%);
   --success: #7bc5a4;
   --success-soft: #23372e;

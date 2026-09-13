@@ -21,3 +21,11 @@ export const initialMessages: Message[] = [
   { id: '4', name: 'Lucas Ribeiro', initials: 'LR', color: 'purple', team: 'Minerva Solar', text: 'Valeu pela torcida! Agora é preparar tudo pra resistência. Vai ser uma tarde de muita emoção 💪☀️', time: '10:37' },
   { id: '5', name: 'Marina Costa', initials: 'MC', color: 'green', team: 'Vento Sul', text: 'E aí, já escalaram as equipes no fantasy? Tô montando a minha aqui 👀', time: '10:40' },
 ];
+
+// Próxima prova demonstrativa. Atualize aqui os dados do card da home.
+export const nextRace = {
+  name: 'Match race',
+  day: 'Sábado',
+  date: '2026-09-19',
+  time: '09:00',
+};

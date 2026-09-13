@@ -3,8 +3,11 @@ import Image from 'next/image';
 import { useEffect, useRef } from 'react';
 import { X, Sun } from 'lucide-react';
 import type { Team } from '@/lib/mock-data';
-export function Brand({ compact = false }: { compact?: boolean }) {
-  return <div className="brand"><Image src="/images/event-logo.png" width={56} height={56} alt="Solar Brasil" className="brand-official" /><span className="brand-name">dsb<span>.</span></span>{!compact && <span className="brand-caption">DESAFIO<br />SOLAR BRASIL</span>}</div>;
+export function Brand() {
+  return <div className="brand">
+    <Image src="/images/event-logo.png" width={52} height={52} alt="" className="brand-official" />
+    <span className="brand-wordmark">SOLAR<br />BRASIL</span>
+  </div>;
 }
 export function TeamBadge({ team, small = false }: { team: Team; small?: boolean }) {
   return <span className={`team-badge color-${team.color} ${small ? 'small' : ''}`}><Sun size={small ? 12 : 16} /><b>{team.initials}</b></span>;

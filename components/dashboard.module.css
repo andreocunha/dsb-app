@@ -1,0 +1,240 @@
+.home {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+.race {
+  position: relative;
+  width: 100%;
+  height: clamp(270px, 29vw, 340px);
+  overflow: hidden;
+  border-radius: 22px;
+  color: var(--hero-text);
+  background: var(--hero-bg);
+}
+.racePhoto { object-fit: cover; object-position: center 68%; }
+.raceVisual { position: absolute; inset: 0; }
+.desktopCategory, .desktopDate { display: none; }
+.raceShade {
+  position: absolute;
+  inset: 0;
+  background: var(--race-image-overlay);
+}
+.raceContent {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding: 36px 42px;
+}
+.raceCategory { display: flex; align-items: center; gap: 12px; color: var(--accent); font-size: 15px; font-weight: 550; }
+.raceContent h1 { font-size: clamp(34px, 4vw, 52px); font-weight: 650; line-height: 1.15; letter-spacing: -1.4px; margin: 12px 0 18px; max-width: none; }
+.raceDetails { display: flex; flex-direction: column; gap: 10px; font-size: 21px; }
+.raceDetails>span { display: flex; align-items: center; gap: 13px; }
+.coverage { margin-top: 16px; }
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+}
+.tabs button {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px;
+  border-radius: 14px;
+  color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 500;
+  overflow: hidden;
+}
+.tabs button:not(:first-child)::before { content: ''; position: absolute; left: 0; height: 22px; width: 1px; background: var(--border-strong); }
+.tabs button.active { color: var(--on-brand); background: var(--brand); }
+.tabs button.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: var(--accent); }
+.tabs button.active::before, .tabs button.active+button::before { display: none; }
+.tabs button:not(.active):hover { background: var(--surface-hover); }
+.panel { border-radius: 20px; }
+.panel[hidden] { display: none; }
+.results { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 8px 24px; }
+.results table { width: 100%; border-collapse: collapse; text-align: left; }
+.results th { color: var(--text-secondary); font-weight: 450; font-size: 14px; height: 49px; }
+.results th:first-child { width: 48px; }
+.results th:last-child, .results td:last-child { text-align: right; white-space: nowrap; }
+.results td { height: 65px; border-top: 1px solid var(--border); font-size: 17px; font-weight: 550; }
+.results td:first-child, .results td:last-child { color: var(--brand); }
+.results small { font-size: 13px; font-weight: 500; }
+.team { display: flex; align-items: center; gap: 16px; }
+.team :global(.team-badge) { width: 39px; height: 41px; border-radius: 11px; }
+.map { position: relative; height: 510px; border-radius: 20px; background: var(--surface-subtle); overflow: hidden; border: 1px solid var(--border); }
+.map iframe { width: 100%; height: 100%; display: block; border: 0; }
+.mapLink { position: absolute; bottom: 58px; right: 16px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--brand); color: var(--on-brand); box-shadow: var(--shadow); }
+.mapLink:hover { background: var(--brand-hover); }
+.live { overflow: hidden; border-radius: 20px; }
+.video, .waiting { width: 100%; aspect-ratio: 16/9; min-height: 220px; border: 0; border-radius: 20px; overflow: hidden; display: block; }
+.waiting { position: relative; max-height: 490px; color: var(--hero-text); }
+.waiting>img { object-fit: cover; object-position: center 67%; }
+.waitingShade { position: absolute; inset: 0; background: var(--live-image-overlay); }
+.waitingMessage { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 17px; padding: 24px; }
+.waitingMessage>svg { width: 66px; height: 66px; padding: 15px; border-radius: 50%; background: var(--scrim); }
+.waitingMessage p { font-size: 18px; font-weight: 550; }
+.liveTitle { padding: 18px 12px; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.liveTitle h2 { font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
+.liveTitle p { color: var(--text-secondary); font-size: 14px; margin-top: 5px; }
+.liveTitle a { color: var(--brand); padding: 10px; }
+@media (max-width: 768px) {
+  .race { height: auto; aspect-ratio: 1.77; border-radius: 16px; min-height: 202px; }
+  .raceContent { padding: 22px 19px; }
+  .raceCategory { font-size: 12px; gap: 9px; }
+  .raceCategory svg { width: 18px; height: 18px; }
+  .raceContent h1 { font-size: 32px; letter-spacing: -.8px; margin: 10px 0 11px; }
+  .raceDetails { font-size: 17px; gap: 6px; }
+  .raceDetails>span { gap: 10px; }
+  .raceDetails svg { width: 20px; height: 20px; }
+  .coverage { margin-top: 12px; }
+  .tabs { padding: 8px; border-radius: 15px; margin-bottom: 8px; }
+  .tabs button { min-height: 43px; font-size: 13px; gap: 8px; border-radius: 12px; padding: 8px 5px; }
+  .tabs button svg { width: 21px; height: 21px; }
+  .tabs button.active::after { height: 3px; }
+  .results { padding: 3px 16px; border-radius: 16px; }
+  .results th { font-size: 12px; height: 38px; }
+  .results th:first-child { width: 29px; }
+  .results td { height: 47px; font-size: 14px; }
+  .results small { font-size: 11px; }
+  .team { gap: 12px; }
+  .team :global(.team-badge) { width: 30px; height: 32px; border-radius: 8px; }
+  .map { height: clamp(295px, 44dvh, 520px); border-radius: 16px; }
+  .mapLink { height: 38px; width: 38px; right: 10px; }
+  .video, .waiting { border-radius: 16px; aspect-ratio: 1.42; min-height: 220px; }
+  .waitingMessage p { font-size: 15px; }
+  .liveTitle { padding: 15px 9px; }
+  .liveTitle h2 { font-size: 16px; }
+  .liveTitle p { font-size: 13px; }
+}
+@media (max-width: 359px) {
+  .tabs button { font-size: 12px; gap: 6px; }
+  .tabs button svg { width: 18px; }
+  .team { gap: 8px; }
+  .results { padding-inline: 12px; }
+  .results td { font-size: 13px; }
+}
+
+/* Desktop has a compact event column and a dedicated viewing area. */
+@media (min-width: 769px) {
+  .home {
+    display: grid;
+    grid-template-columns: 296px minmax(0, 1fr);
+    align-items: start;
+    gap: 28px;
+    max-width: none;
+  }
+  .race {
+    height: auto;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .raceVisual {
+    position: relative;
+    inset: auto;
+    height: 270px;
+    margin: 9px 9px 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .racePhoto { object-position: 49% 66%; }
+  .raceShade { display: none; }
+  .raceContent { height: auto; padding: 25px 24px 28px; }
+  .raceCategory { font-size: 11px; gap: 8px; color: var(--text-secondary); font-weight: 500; }
+  .raceCategory svg { width: 15px; height: 15px; color: var(--brand); }
+  .mobileCategory { display: none; }
+  .desktopCategory, .desktopDate { display: inline; }
+  .raceContent h1 { font-size: 29px; letter-spacing: -.9px; margin: 11px 0 24px; }
+  .raceDetails { font-size: 13px; gap: 15px; color: var(--text-secondary); }
+  .raceDetails>span { gap: 10px; }
+  .raceDetails svg { width: 17px; height: 17px; color: var(--text-tertiary); }
+  .coverage {
+    margin-top: 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    overflow: hidden;
+    min-width: 0;
+  }
+  .tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 28px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    margin: 0;
+    padding: 0 24px;
+  }
+  .tabs button {
+    gap: 8px;
+    border-radius: 0;
+    font-size: 13px;
+    min-height: 61px;
+    padding: 0 3px;
+    overflow: visible;
+  }
+  .tabs button svg { width: 17px; height: 17px; }
+  .tabs button:not(:first-child)::before { display: none; }
+  .tabs button.active { background: transparent; color: var(--brand); font-weight: 600; }
+  .tabs button.active::after { height: 2px; background: var(--brand); bottom: -1px; }
+  .tabs button:not(.active):hover { background: transparent; color: var(--text); }
+  .tabs button:focus-visible { outline-offset: -5px; }
+  .panel { border-radius: 0; }
+  .results { border: 0; border-radius: 0; padding: 0 24px 8px; }
+  .results th { height: 54px; font-size: 12px; }
+  .results th:first-child { width: 52px; }
+  .results td { height: 70px; font-size: 14px; font-weight: 500; }
+  .results td:first-child { color: var(--text-tertiary); font-size: 12px; }
+  .results td:last-child { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .results small { font-size: 11px; font-weight: 400; color: var(--text-tertiary); }
+  .team { gap: 13px; }
+  .team :global(.team-badge) { width: 34px; height: 36px; border-radius: 8px; }
+  .map {
+    height: clamp(440px, 64dvh, 650px);
+    margin: 14px;
+    border-radius: 8px;
+    border: 0;
+  }
+  .mapLink { width: 35px; height: 35px; right: 12px; bottom: 57px; border-radius: 7px; background: var(--surface); color: var(--brand); border: 1px solid var(--border); }
+  .mapLink:hover { background: var(--surface-hover); }
+  .mapLink svg { width: 16px; }
+  .live { border-radius: 0; padding: 14px; }
+  .video, .waiting { border-radius: 8px; min-height: 330px; }
+  .waiting { background: var(--surface-subtle); color: var(--text-secondary); }
+  .waiting>img, .waitingShade { display: none; }
+  .waitingMessage { gap: 20px; }
+  .waitingMessage>svg { background: var(--brand-soft); color: var(--brand); width: 56px; height: 56px; padding: 15px; }
+  .waitingMessage p { font-size: 15px; font-weight: 450; }
+  .liveTitle { padding: 20px 8px 12px; }
+  .liveTitle h2 { font-size: 14px; font-weight: 550; }
+  .liveTitle p { font-size: 12px; margin-top: 6px; }
+}
+@media (min-width: 769px) and (max-width: 1100px) {
+  .home { grid-template-columns: 244px minmax(0,1fr); gap: 20px; }
+  .raceVisual { height: 228px; }
+  .raceContent { padding: 21px 19px 25px; }
+  .raceContent h1 { font-size: 26px; }
+  .raceDetails { font-size: 12px; }
+  .tabs { gap: 22px; padding-inline: 18px; }
+  .tabs button { font-size: 12px; }
+  .results { padding-inline: 18px; }
+  .results th:first-child { width: 32px; }
+  .map { margin: 10px; }
+}

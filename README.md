@@ -32,7 +32,7 @@ npm start
 - `--sidebar-*` e `--hero-*`: navegação e banner institucional.
 - `--team-*`: cores ilustrativas das equipes.
 
-O tema escolhido é salvo no navegador. Os ícones de instalação são gerados a partir do SVG em `scripts/generate-icons.mjs`; suas cores institucionais podem ser alteradas nesse script. As imagens fornecidas ficam em `public/images/event-logo.png` e `public/images/event-race.jpg`. A fotografia é a referência enviada pelo usuário, proveniente de desafiosolar.com.br. A imagem gerada durante a exploração inicial não é utilizada pelo app.
+A home usa estilos isolados em `components/dashboard.module.css`; o cabeçalho, a navegação e os ajustes compartilhados ficam em `app/minimal.css`. O tema escolhido é salvo no navegador. Os ícones de instalação são gerados a partir do SVG em `scripts/generate-icons.mjs`; suas cores institucionais podem ser alteradas nesse script. As imagens fornecidas ficam em `public/images/event-logo.png` e `public/images/event-race.jpg`. A fotografia é a referência enviada pelo usuário, proveniente de desafiosolar.com.br. A imagem gerada durante a exploração inicial não é utilizada pelo app.
 
 ## Links do evento
 
@@ -45,15 +45,15 @@ Também é possível definir `NEXT_PUBLIC_YOUTUBE_LIVE_URL` em `.env.local` ante
 
 ## Telas
 
-- `/`: próxima prova, resultados por etapa, mapa incorporado, live, programação e clima ilustrativo.
+- `/`: card da próxima prova e abas Mapa, Resultado e Live. O mapa abre por padrão e a tabela mostra posição, equipe e pontos.
 - `/comunidade/`: chat em grupo com mensagens locais e emojis.
 - `/fantasy/`: escalação de três equipes com orçamento de 100 sóis, capitã com pontos em dobro, confirmação e ranking ilustrativo.
 - `/configuracoes/`: nome, tema e preferências locais.
 - Menu: bottom sheet com configurações, aparência, instalação e saída do perfil demo.
 
-No desktop há navegação lateral; no mobile, barra fixa inferior com ícones. O layout considera `safe-area-inset` e `dvh`. Os diálogos prendem o foco, fecham com Escape e devolvem o foco ao controle que os abriu.
+No desktop há navegação horizontal no cabeçalho e uma home em duas colunas: card compacto da próxima prova à esquerda e painel principal de acompanhamento à direita, com abas discretas. O chat tem largura limitada para leitura, e o fantasy mantém a escalação ao lado das equipes. No mobile, a home permanece empilhada e a barra inferior fica fixa, com ícones e detalhe amarelo na página e aba ativas. O layout considera `safe-area-inset` e `dvh`. Os diálogos prendem o foco, fecham com Escape e devolvem o foco ao controle que os abriu.
 
-Resultados, programação, clima, conversa inicial e fantasy são demonstrativos. Mensagens, nome, preferências e escalação ficam em `localStorage`, com fallback em memória se o armazenamento estiver indisponível. Sair troca o perfil demo por visitante; não há autenticação. As preferências de notificação não enviam push.
+A próxima prova, os resultados, a conversa inicial e o fantasy são demonstrativos. Os dados da prova estão em `nextRace`, no arquivo `lib/mock-data.ts`. Mensagens, nome, preferências e escalação ficam em `localStorage`, com fallback em memória se o armazenamento estiver indisponível. Sair troca o perfil demo por visitante; não há autenticação. As preferências de notificação não enviam push.
 
 ## PWA
 

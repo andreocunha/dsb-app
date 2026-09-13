@@ -1,38 +1,162 @@
 'use client';
+
 import Image from 'next/image';
-import Link from 'next/link';
-import { useState } from 'react';
-import { ArrowRight, ArrowUpRight, CalendarDays, MapPin, Clock3, Flag, Trophy, Radio, Map, ChevronDown, ArrowUp, ArrowDown, Minus, Sun, Wind, Waves, Zap, Users, MessageCircle, Check, ExternalLink } from 'lucide-react';
-import { teams, schedule, type Team } from '@/lib/mock-data';
-import { TeamBadge, Sheet } from './ui';
-import { useApp } from './app-shell';
+import { useRef, useState, type KeyboardEvent } from 'react';
+import { CalendarDays, Clock3, ExternalLink, Map, Radio, Trophy } from 'lucide-react';
+import { teams, nextRace } from '@/lib/mock-data';
 import { eventConfig, youtubeEmbedUrl } from '@/lib/event-config';
+import { TeamBadge } from './ui';
+import styles from './dashboard.module.css';
+
+const tabs = [
+  { id: 'map', label: 'Mapa', icon: Map },
+  { id: 'results', label: 'Resultado', icon: Trophy },
+  { id: 'live', label: 'Live', icon: Radio },
+] as const;
+type Tab = typeof tabs[number]['id'];
+
 export function Dashboard() {
-  const [tab, setTab] = useState('results');
-  const [showSchedule, setShowSchedule] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [stage, setStage] = useState('overall');
-  const [allTeams, setAllTeams] = useState(false);
-  const { notify } = useApp();
-  return <div className="page-enter"><div className="page-heading"><div><div className="eyebrow">SOL, ÁGUA E MUITA EMOÇÃO</div><h1>O desafio acontece aqui<span className="heading-dot">.</span></h1><p>Acompanhe cada largada. Torça por um futuro mais sustentável.</p></div><div className="location-label"><MapPin size={16} /><span>Rio de Janeiro, RJ</span></div></div>
-    <section className="race-hero" aria-label="Próxima prova"><Image src="/images/event-race.jpg" fill priority sizes="(max-width: 768px) 100vw, 70vw" alt="Barco solar em uma etapa do Desafio Solar Brasil, com o Cristo Redentor ao fundo" className="hero-photo" /><div className="hero-overlay" /><div className="hero-content"><span className="hero-eyebrow"><span className="pulse-dot" /> PRÓXIMA PROVA <span className="hero-stage">ETAPA 03</span></span><h2>Energia para<br />ir mais longe.</h2><p>Prova de resistência</p><div className="hero-meta"><span><CalendarDays size={15} /> 12 de setembro</span><i /><span><Clock3 size={15} /> 14h00</span></div><button className="button button-gold" onClick={() => setShowSchedule(true)}>Conhecer a prova <ArrowUpRight size={18} /></button></div><div className="hero-location"><MapPin size={15} /><span>Marina da Glória <small>Rio de Janeiro · Brasil</small></span></div><span className="hero-photo-credit">DESAFIO SOLAR BRASIL</span></section>
-    <div className="dashboard-grid"><section className="card race-center"><div className="race-tabs" role="tablist" aria-label="Acompanhar o evento"><button id="tab-results" role="tab" aria-selected={tab === 'results'} aria-controls="race-panel" className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}><Trophy size={18} /><span>Resultados gerais</span></button><button id="tab-map" role="tab" aria-selected={tab === 'map'} aria-controls="race-panel" className={tab === 'map' ? 'active' : ''} onClick={() => setTab('map')}><Map size={18} /><span>Mapa em tempo real</span></button><button id="tab-live" role="tab" aria-selected={tab === 'live'} aria-controls="race-panel" className={tab === 'live' ? 'active' : ''} onClick={() => setTab('live')}><Radio size={18} /><span>Live</span><span className="live-tab-dot" /></button></div>
-    <div id="race-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-      {tab === 'results' && <><div className="section-heading"><div><h2>Na disputa pelo sol</h2><p>Cada ponto conta. Cada equipe faz a diferença.</p></div><label className="select-wrap"><span className="sr-only">Classificação por etapa</span><select value={stage} onChange={e => setStage(e.target.value)}><option value="overall">Classificação geral</option><option value="speed">Prova de velocidade</option></select><ChevronDown size={14} /></label></div><div className="race-stats"><div><span className="stat-icon"><Flag size={19} /></span><span><strong>06<small>equipes</small></strong><span>Na mesma direção</span></span></div><div><span className="stat-icon"><Waves size={20} /></span><span><strong>02<small>de 04 provas</small></strong><span>Desafio em andamento</span></span></div><div><span className="stat-icon"><Zap size={19} /></span><span><strong>100%<small>solar</small></strong><span>Energia que transforma</span></span></div></div>
-      <div className="table-scroll"><table className="leaderboard"><thead><tr><th className="rank-column">POS.</th><th>EQUIPE</th><th className="table-speed">{stage === 'overall' ? 'VEL. MÉDIA' : 'TEMPO'}</th><th>PONTOS</th><th className="change-column"><span className="sr-only">Variação</span></th></tr></thead><tbody>{teams.slice(0, allTeams ? 6 : 5).map((team, index) => <tr key={team.id} className={index === 0 ? 'leader-row' : ''}><td><span className={`rank rank-${index}`}>{String(index + 1).padStart(2, '0')}</span></td><td><button className="team-cell" onClick={() => setSelectedTeam(team)}><TeamBadge team={team} /><span><strong>{team.name}{index === 0 && <Trophy className="leader-cup" size={13} />}</strong><small>{team.university}</small></span></button></td><td className="table-speed">{stage === 'overall' ? <>{team.speed} <small>km/h</small></> : team.time}</td><td className="points">{stage === 'overall' ? team.points : 100 - index * 8}<small>pts</small></td><td><span className={`position-change ${team.change > 0 ? 'up' : team.change < 0 ? 'down' : ''}`}>{team.change > 0 ? <ArrowUp size={12} /> : team.change < 0 ? <ArrowDown size={12} /> : <Minus size={12} />}{team.change !== 0 && Math.abs(team.change)}</span></td></tr>)}</tbody></table></div><div className="table-footer"><span><span className="tiny-dot" /> Resultados demonstrativos</span><button className="text-link" onClick={() => setAllTeams(!allTeams)}>{allTeams ? 'Mostrar menos' : 'Ver todas as equipes'} <ArrowRight size={15} /></button></div></>}
-      {tab === 'map' && <RaceMap />}
-      {tab === 'live' && <LivePanel />}
-    </div></section>
-    <aside className="dashboard-aside"><section className="card schedule-card"><div className="aside-heading"><h2>Hoje no desafio</h2><CalendarDays size={18} /></div><div className="schedule-date">SÁBADO, 12 DE SETEMBRO <span>DEMO</span></div><div className="timeline">{schedule.map(item => <div className={`timeline-item ${item.status}`} key={item.time}><div className="timeline-marker">{item.status === 'done' ? <Check size={10} /> : item.status === 'next' ? <span /> : null}</div><div><span className="timeline-time">{item.time}{item.status === 'next' && <b>A SEGUIR</b>}</span><h3>{item.title}</h3><p>{item.subtitle}</p></div></div>)}</div><button className="schedule-link" onClick={() => setShowSchedule(true)}>Programação completa <ArrowUpRight size={16} /></button></section><section className="weather-card"><div className="weather-top"><div><span>O CENÁRIO DE HOJE</span><h3>Sol a favor <Sun size={14} /></h3></div><Sun size={38} strokeWidth={1.3} /></div><div className="weather-numbers"><strong>28°<span>Ensolarado</span></strong><div><span><Wind size={14} /> 12 km/h</span><span><Waves size={14} /> Mar calmo</span></div></div><small>Condições ilustrativas · Marina da Glória</small></section></aside></div>
-    <div className="engagement-grid"><Link href="/comunidade/" className="engagement-card community-promo"><div className="promo-icon"><MessageCircle size={25} /></div><div><span>A TORCIDA TAMBÉM FAZ PARTE</span><h3>Essa energia é coletiva.</h3><p>Entre na conversa com quem vive o desafio.</p><div className="promo-bottom"><div className="avatar-stack"><b>MC</b><b>PA</b><b>AS</b><b>LR</b></div><small>Junte-se à comunidade</small></div></div><ArrowUpRight className="promo-arrow" size={20} /></Link><Link href="/fantasy/" className="engagement-card fantasy-promo"><div className="promo-icon"><Trophy size={26} /></div><div><span>SEU PALPITE VALE O PÓDIO</span><h3>Monte seu time. Entre no jogo.</h3><p>Escale suas favoritas no Fantasy DSB.</p><div className="promo-bottom"><span className="fantasy-cta">Escalar minha equipe <ArrowRight size={15} /></span><span className="tag gold">É grátis!</span></div></div><ArrowUpRight className="promo-arrow" size={20} /></Link></div>
-    <Sheet open={showSchedule} onClose={() => setShowSchedule(false)} title="O dia de quem vai mais longe"><span className="tag gold">12 SET · PROGRAMAÇÃO DEMONSTRATIVA</span><h3 className="detail-title">Prova de resistência</h3><p className="detail-copy">A partir das 14h, as equipes colocam estratégia, eficiência e energia solar à prova. Vence quem completa mais voltas dentro do tempo da bateria.</p><div className="detail-facts"><span><MapPin size={18} /> Marina da Glória, Rio de Janeiro</span><span><Clock3 size={18} /> Largada às 14h · Duração de 90 minutos</span><span><Users size={18} /> 6 equipes participantes</span></div>{schedule.map(item => <div className="schedule-detail-row" key={item.time}><strong>{item.time}</strong><span>{item.title}<small>{item.subtitle}</small></span></div>)}<button className="button button-primary full-width" onClick={() => { setShowSchedule(false); notify('Lembrete salvo nesta demonstração. A prova começa às 14h.'); }}>Combinado, estarei na torcida <Check size={18} /></button></Sheet>
-    <Sheet open={!!selectedTeam} onClose={() => setSelectedTeam(null)} title="Conheça a equipe">{selectedTeam && <><div className="team-detail-heading"><TeamBadge team={selectedTeam} /><div><h3>{selectedTeam.name}</h3><p>{selectedTeam.university}</p></div></div><p className="detail-copy">Tecnologia, trabalho em equipe e um propósito: mostrar que o futuro da navegação pode ser movido pelo sol.</p><div className="team-detail-stats"><div><strong>{selectedTeam.points}</strong><span>Pontos no desafio</span></div><div><strong>{selectedTeam.speed}</strong><span>Velocidade · km/h</span></div><div><strong>{selectedTeam.price}</strong><span>Preço no fantasy · ☀</span></div></div><Link href="/fantasy/" className="button button-primary full-width">Levar para meu fantasy <ArrowRight size={18} /></Link><p className="sheet-footnote">Equipes e resultados usados para demonstração.</p></>}</Sheet>
-  </div>;
+  const [tab, setTab] = useState<Tab>('map');
+  const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function moveTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let next = index;
+    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    setTab(tabs[next].id);
+    tabButtons.current[next]?.focus();
+  }
+
+  return (
+    <div className={styles.home}>
+      <section className={styles.race} aria-label="Próxima prova">
+        <div className={styles.raceVisual}>
+        <Image
+          src="/images/event-race.jpg"
+          fill
+          priority
+          sizes="(max-width: 768px) 100vw, 320px"
+          alt="Uma etapa do Desafio Solar Brasil na Baía de Guanabara"
+          className={styles.racePhoto}
+        />
+        <div className={styles.raceShade} />
+        </div>
+        <div className={styles.raceContent}>
+          <span className={styles.raceCategory}><Trophy size={21} /><span className={styles.mobileCategory}>Competição</span><span className={styles.desktopCategory}>Próxima prova</span></span>
+          <h1>{nextRace.name}</h1>
+          <div className={styles.raceDetails}>
+            <span><CalendarDays size={23} /><time dateTime={nextRace.date}>{nextRace.day}<span className={styles.desktopDate}>, {new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${nextRace.date}T12:00:00Z`))}</span></time></span>
+            <span><Clock3 size={23} /><time dateTime={`${nextRace.date}T${nextRace.time}:00-03:00`}>{nextRace.time}</time></span>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="Acompanhar o evento" className={styles.coverage}>
+        <div className={styles.tabs} role="tablist" aria-label="Acompanhar o evento">
+          {tabs.map((item, index) => (
+            <button
+              key={item.id}
+              ref={element => { tabButtons.current[index] = element; }}
+              id={`tab-${item.id}`}
+              role="tab"
+              aria-selected={tab === item.id}
+              aria-controls={`panel-${item.id}`}
+              tabIndex={tab === item.id ? 0 : -1}
+              className={tab === item.id ? styles.active : ''}
+              onClick={() => setTab(item.id)}
+              onKeyDown={event => moveTab(event, index)}
+            >
+              <item.icon size={23} strokeWidth={1.8} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+        {tabs.map(item => (
+          <div
+            key={item.id}
+            id={`panel-${item.id}`}
+            role="tabpanel"
+            aria-labelledby={`tab-${item.id}`}
+            hidden={tab !== item.id}
+            tabIndex={0}
+            className={styles.panel}
+          >
+            {tab === item.id && (
+              item.id === 'map' ? <RaceMap /> :
+              item.id === 'results' ? <Results /> : <LivePanel />
+            )}
+          </div>
+        ))}
+      </section>
+    </div>
+  );
 }
+
+function Results() {
+  return (
+    <div className={styles.results}>
+      <table>
+        <caption className="sr-only">Classificação geral demonstrativa do Desafio Solar Brasil</caption>
+        <thead><tr><th scope="col">#</th><th scope="col">Equipe</th><th scope="col">Pontos</th></tr></thead>
+        <tbody>
+          {teams.map((team, index) => (
+            <tr key={team.id}>
+              <td>{index + 1}</td>
+              <td><div className={styles.team}><TeamBadge team={team} /><span>{team.name}</span></div></td>
+              <td>{team.points}<small> pts</small></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function RaceMap() {
-  return <div className="map-panel"><div className="section-heading"><div><h2>De olho em cada movimento</h2><p>Acompanhe as embarcações no mapa do desafio.</p></div><a className="icon-button" href={eventConfig.trackingUrl} target="_blank" rel="noopener noreferrer" aria-label="Abrir mapa em outra aba"><ExternalLink size={18} /></a></div><iframe className="tracking-frame" src={eventConfig.trackingUrl} title="Rastreamento das embarcações do Desafio Solar Brasil" allow="fullscreen" allowFullScreen loading="lazy" referrerPolicy="strict-origin-when-cross-origin" /><div className="table-footer"><span>Rastreamento do Desafio Solar Brasil</span><a className="text-link" href={eventConfig.trackingUrl} target="_blank" rel="noopener noreferrer">Abrir mapa <ArrowUpRight size={15} /></a></div><p className="map-note">O mapa precisa de internet. Se não carregar, abra-o em uma nova aba.</p></div>;
+  return (
+    <div className={styles.map}>
+      <iframe
+        src={eventConfig.trackingUrl}
+        title="Rastreamento das embarcações do Desafio Solar Brasil"
+        allow="fullscreen"
+        allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
+      />
+      <a className={styles.mapLink} href={eventConfig.trackingUrl} target="_blank" rel="noopener noreferrer" aria-label="Abrir mapa em outra aba">
+        <ExternalLink size={19} />
+      </a>
+    </div>
+  );
 }
+
 function LivePanel() {
   const embedUrl = youtubeEmbedUrl(eventConfig.youtubeUrl);
-  return <div className="live-panel"><div className="section-heading"><div><h2>Na primeira fila do desafio</h2><p>A emoção da água, de onde você estiver.</p></div><span className="tag"><Radio size={13} /> DSB TV</span></div>{embedUrl ? <><iframe className="youtube-frame" src={embedUrl} title="Transmissão do Desafio Solar Brasil no YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /><div className="table-footer"><span>Transmissão pelo YouTube</span><a className="text-link" href={eventConfig.youtubeUrl} target="_blank" rel="noopener noreferrer">Assistir no YouTube <ExternalLink size={15} /></a></div></> : <><div className="live-preview"><Image src="/images/event-race.jpg" fill sizes="(max-width: 768px) 100vw, 55vw" alt="Etapa do Desafio Solar Brasil na Baía de Guanabara" /><div className="live-shade" /><span className="live-badge"><Radio size={14} /> DSB TV</span><span className="live-wait-icon"><Radio size={35} /></span><div className="live-caption"><span>DESAFIO SOLAR BRASIL</span><h3>A transmissão começa em breve.</h3><p>Seu lugar na primeira fila já está reservado.</p></div></div><div className="live-description"><span className="soft-icon"><Radio size={20} /></span><div><h3>Da largada ao último raio de sol</h3><p>Acompanhe a transmissão do evento aqui, pelo YouTube. O player estará disponível assim que a live for anunciada.</p></div></div></>}</div>;
+  return (
+    <div className={styles.live}>
+      {embedUrl ? (
+        <iframe
+          className={styles.video}
+          src={embedUrl}
+          title="Transmissão do Desafio Solar Brasil no YouTube"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          referrerPolicy="strict-origin-when-cross-origin"
+        />
+      ) : (
+        <div className={styles.waiting}>
+          <Image src="/images/event-race.jpg" fill sizes="(max-width: 768px) 100vw, 1040px" alt="Desafio Solar Brasil" />
+          <div className={styles.waitingShade} />
+          <div className={styles.waitingMessage}><Radio size={35} /><p>A transmissão começa em breve.</p></div>
+        </div>
+      )}
+      <div className={styles.liveTitle}>
+        <div><h2>Desafio Solar Brasil{embedUrl ? ' — ao vivo' : ''}</h2><p>Transmissão no YouTube</p></div>
+        {embedUrl && <a href={eventConfig.youtubeUrl} target="_blank" rel="noopener noreferrer" aria-label="Assistir no YouTube"><ExternalLink size={20} /></a>}
+      </div>
+    </div>
+  );
 }
