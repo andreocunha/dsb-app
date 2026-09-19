@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Bell, Check, Moon, Sun, UserRound, Palette, ShieldCheck } from 'lucide-react';
+import { Check, Moon, Sun } from 'lucide-react';
 import { useApp } from './app-shell';
 import { useLocalState } from '@/lib/local-state';
 export function Preferences() {
@@ -9,5 +9,32 @@ export function Preferences() {
   const [raceAlerts, setRaceAlerts] = useLocalState('dsb-race-alerts', true);
   const [communityAlerts, setCommunityAlerts] = useLocalState('dsb-community-alerts', false);
   const [draft, setDraft] = useState<string | null>(null);
-  return <div className="page-enter settings-page"><div className="page-heading"><div><h1>Configurações</h1></div></div><section className="card settings-section"><div className="settings-section-title"><span className="soft-icon"><UserRound size={22} /></span><div><h2>Seu perfil</h2><p>Como você aparece na comunidade.</p></div><span className="tag">Demo</span></div><form onSubmit={e => { e.preventDefault(); const value = (draft ?? name).trim(); if (!value) return; setName(value); setDraft(null); notify('Seu nome foi atualizado.'); }}><label className="field-label" htmlFor="display-name">Nome de exibição</label><div className="name-field"><input id="display-name" required maxLength={40} value={draft ?? name} onChange={e => setDraft(e.target.value)} /><button className="button button-primary" type="submit"><Check size={17} /> Salvar</button></div></form></section><section className="card settings-section"><div className="settings-section-title"><span className="soft-icon"><Palette size={22} /></span><div><h2>Aparência</h2><p>Escolha o tema do aplicativo.</p></div></div><div className="theme-options">{[{ id: 'light', title: 'Tema claro', description: 'Leve como um dia de sol.', icon: Sun }, { id: 'dark', title: 'Tema escuro', description: 'Conforto quando a luz baixa.', icon: Moon }].map(option => <button className={`theme-option ${theme === option.id ? 'selected' : ''}`} key={option.id} aria-pressed={theme === option.id} onClick={() => setTheme(option.id)}><div className={`theme-preview ${option.id}`}><span /><div><i /><b /><b /></div></div><div><option.icon size={19} /><strong>{option.title}</strong>{theme === option.id && <Check size={17} />}</div><p>{option.description}</p></button>)}</div></section><section className="card settings-section"><div className="settings-section-title"><span className="soft-icon"><Bell size={22} /></span><div><h2>Suas preferências</h2><p>Preferências locais, preparadas para quando os alertas chegarem.</p></div></div><div className="preference-row"><div><h3>Novidades das provas</h3><p>Largadas, resultados e momentos importantes.</p></div><button className={`toggle ${raceAlerts ? 'on' : ''}`} role="switch" aria-checked={raceAlerts} aria-label="Novidades das provas" onClick={() => setRaceAlerts(!raceAlerts)}><span /></button></div><div className="preference-row"><div><h3>Atividade da comunidade</h3><p>Fique por dentro das conversas da torcida.</p></div><button className={`toggle ${communityAlerts ? 'on' : ''}`} role="switch" aria-checked={communityAlerts} aria-label="Atividade da comunidade" onClick={() => setCommunityAlerts(!communityAlerts)}><span /></button></div><p className="sheet-footnote">Nesta demonstração, nenhum alerta push é enviado.</p></section><div className="settings-privacy"><ShieldCheck size={20} /><p>Suas preferências, mensagens e escalação ficam salvas neste dispositivo. Nenhuma conta é necessária.</p></div></div>;
+  const toggles = [
+    { title: 'Novidades das provas', description: 'Largadas, resultados e momentos importantes.', value: raceAlerts, set: setRaceAlerts },
+    { title: 'Atividade da comunidade', description: 'Fique por dentro das conversas da torcida.', value: communityAlerts, set: setCommunityAlerts },
+  ];
+  return <div className="page settings">
+    <div className="page-heading"><div><h1>Configurações</h1><p>Tudo fica salvo neste dispositivo. Nenhuma conta é necessária.</p></div></div>
+    <section className="card">
+      <h2>Seu perfil</h2>
+      <form className="name-field" onSubmit={e => { e.preventDefault(); const value = (draft ?? name).trim(); if (!value) return; setName(value); setDraft(null); notify('Seu nome foi atualizado.'); }}>
+        <label htmlFor="display-name">Nome de exibição</label>
+        <div><input id="display-name" required maxLength={40} value={draft ?? name} onChange={e => setDraft(e.target.value)} /><button className="button primary" type="submit"><Check size={16} /> Salvar</button></div>
+      </form>
+    </section>
+    <section className="card">
+      <h2>Aparência</h2>
+      <div className="theme-options">
+        {[{ id: 'light', title: 'Tema claro', icon: Sun }, { id: 'dark', title: 'Tema escuro', icon: Moon }].map(option => <button key={option.id} aria-pressed={theme === option.id} onClick={() => setTheme(option.id)}><option.icon size={18} />{option.title}{theme === option.id && <Check size={16} />}</button>)}
+      </div>
+    </section>
+    <section className="card">
+      <h2>Notificações</h2>
+      {toggles.map(item => <div className="preference-row" key={item.title}>
+        <div><h3>{item.title}</h3><p>{item.description}</p></div>
+        <button className="toggle" role="switch" aria-checked={item.value} aria-label={item.title} onClick={() => item.set(!item.value)}><span /></button>
+      </div>)}
+      <p className="footnote">Nesta demonstração, nenhum alerta push é enviado.</p>
+    </section>
+  </div>;
 }

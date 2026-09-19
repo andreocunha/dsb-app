@@ -1,26 +1,130 @@
 'use client';
 import { useState } from 'react';
-import { ArrowRight, Check, CircleHelp, Crown, Plus, Search, Sun, Trophy, Users, X, Zap } from 'lucide-react';
-import { teams } from '@/lib/mock-data';
+import { Check, CircleHelp, Copy, Lock, Plus, Sun, X } from 'lucide-react';
+import { fantasyPlayers, lineupSlots, races, teams, type Race, type Team } from '@/lib/mock-data';
+import { raceDate, raceTime, useStartedCount } from '@/lib/races';
 import { useLocalState } from '@/lib/local-state';
 import { useApp } from './app-shell';
 import { Sheet, TeamBadge } from './ui';
-type Lineup = { ids: string[]; captain: string; confirmed: boolean };
+
+// Uma escalação por prova: ids na ordem de lineupSlots ('' = vaga livre).
+type Lineups = Record<string, string[]>;
+const emptyLineup = () => lineupSlots.map(() => '');
+const tierLabel = { A: 'Tier A', B: 'Tier B', C: 'Tier C' };
+
+// Pontuação demonstrativa de um barco em uma prova já disputada.
+const raceScore = (team: Team, race: Race) => Math.round(team.points / 8) + ((race.number * 7 + team.id.charCodeAt(1)) % 15);
+
 export function Fantasy() {
-  const [lineup, setLineup] = useLocalState<Lineup>('dsb-lineup', { ids: [], captain: '', confirmed: false });
+  const [lineups, setLineups] = useLocalState<Lineups>('dsb-fantasy', {});
+  const [name] = useLocalState('dsb-name', 'Torcedor Solar');
+  const [guest] = useLocalState('dsb-guest', false);
+  const started = useStartedCount();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [picking, setPicking] = useState<number | null>(null);
   const [rules, setRules] = useState(false);
-  const [search, setSearch] = useState('');
-  const [view, setView] = useState('lineup');
   const { notify } = useApp();
-  const chosen = teams.filter(team => lineup.ids.includes(team.id));
-  const spent = chosen.reduce((sum, team) => sum + team.price, 0);
-  const projection = chosen.reduce((sum, team) => sum + team.points * (team.id === lineup.captain ? 2 : 1), 0);
-  function toggle(id: string) {
-    const team = teams.find(t => t.id === id)!;
-    if (lineup.ids.includes(id)) { const ids = lineup.ids.filter(selected => selected !== id); setLineup({ ids, captain: lineup.captain === id ? ids[0] ?? '' : lineup.captain, confirmed: false }); return; }
-    if (chosen.length === 3) { notify('Sua tripulação está completa. Remova uma equipe para trocar.'); return; }
-    if (spent + team.price > 100) { notify('Essa equipe ultrapassa seu orçamento de 100 sóis.'); return; }
-    setLineup({ ids: [...lineup.ids, id], captain: lineup.captain || id, confirmed: false });
+
+  const race = races.find(r => r.id === selectedId) ?? races[Math.min(started, races.length - 1)];
+  const locked = (r: Race) => races.indexOf(r) < started;
+  const lineupOf = (r: Race) => lineups[r.id] ?? emptyLineup();
+  const lineup = lineupOf(race);
+  const filled = (r: Race) => lineupOf(r).filter(Boolean).length;
+  const complete = races.filter(r => filled(r) === lineupSlots.length).length;
+  const myPoints = races.filter(locked).reduce((sum, r) => sum + lineupOf(r).reduce((s, id) => { const team = teams.find(t => t.id === id); return s + (team ? raceScore(team, r) : 0); }, 0), 0);
+  const ranking = [...fantasyPlayers, { name: guest ? 'Você' : name, points: myPoints, you: true }].sort((a, b) => b.points - a.points);
+
+  function setSlot(slot: number, id: string) {
+    const next = [...lineup]; next[slot] = id;
+    setLineups({ ...lineups, [race.id]: next });
+    setPicking(null);
   }
-  return <div className="page-enter"><div className="page-heading"><div><h1>Fantasy</h1><p>Escale 3 equipes com 100 sóis.</p></div><button className="button button-outline" onClick={() => setRules(true)}><CircleHelp size={17} /> Como jogar</button></div><div className="fantasy-tabs"><button className={view === 'lineup' ? 'active' : ''} onClick={() => setView('lineup')}><Users size={17} /> Minha escalação</button><button className={view === 'ranking' ? 'active' : ''} onClick={() => setView('ranking')}><Trophy size={17} /> Ranking da torcida</button></div>{view === 'lineup' ? <div className="fantasy-grid"><section className="card market-card"><div className="section-heading"><div><h2>Equipes</h2><p>Escolha suas favoritas.</p></div><span className="tag">{teams.length} equipes</span></div><label className="search-field"><Search size={18} /><input placeholder="Buscar equipe ou universidade" value={search} onChange={e => setSearch(e.target.value)} /></label><div className="team-market">{teams.filter(team => `${team.name} ${team.university}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))).map(team => { const selected = lineup.ids.includes(team.id); return <article className={`market-team ${selected ? 'selected' : ''}`} key={team.id}><TeamBadge team={team} /><div className="market-team-name"><h3>{team.name}</h3><p>{team.university.split(' · ')[0]}</p><span>{team.points} <small>pontos na competição</small></span></div><div className="team-price"><strong><Sun size={14} /> {team.price}</strong><small>sóis</small></div><button className={`select-team ${selected ? 'selected' : ''}`} aria-label={`${selected ? 'Remover' : 'Escalar'} ${team.name}`} aria-pressed={selected} onClick={() => toggle(team.id)}>{selected ? <Check size={19} /> : <Plus size={19} />}</button></article>; })}{!teams.some(team => `${team.name} ${team.university}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR'))) && <div className="empty-search"><Search size={27} /><h3>Nenhuma equipe por aqui</h3><p>Tente outro nome ou universidade.</p></div>}</div></section><aside className="card lineup-card"><div className="aside-heading"><h2>Minha escalação</h2><span className="tag">{chosen.length}/3</span></div><div className="budget"><div><span>SEU SALDO</span><strong><Sun size={23} /> {100 - spent}<small>sóis</small></strong></div><span>de 100 sóis</span></div><div className="budget-track"><span style={{ width: `${100 - spent}%` }} /></div><div className="lineup-slots">{[0, 1, 2].map(index => { const team = chosen[index]; return team ? <div className={`lineup-slot filled ${lineup.captain === team.id ? 'captain' : ''}`} key={team.id}><TeamBadge team={team} small /><div><strong>{team.name}</strong><button className="captain-toggle" aria-pressed={lineup.captain === team.id} onClick={() => setLineup({ ...lineup, captain: team.id, confirmed: false })}><Crown size={12} />{lineup.captain === team.id ? 'Capitã · pontos em dobro' : 'Escolher como capitã'}</button></div><button className="icon-button" aria-label={`Retirar ${team.name} da escalação`} onClick={() => toggle(team.id)}><X size={16} /></button></div> : <div className="lineup-slot empty" key={index}><Plus size={22} /><span>Escolha sua {index + 1}ª equipe</span></div>; })}</div><div className="lineup-tip"><Crown size={18} /><p>Sua equipe capitã vale <strong>2x os pontos.</strong> Escolha com estratégia!</p></div><button className="button button-primary full-width" disabled={chosen.length !== 3 || lineup.confirmed} onClick={() => { setLineup({ ...lineup, confirmed: true }); notify('Escalação confirmada e salva! Agora é torcer pelo seu time.'); }}>{lineup.confirmed ? <><Check size={18} /> Escalação confirmada</> : <>Confirmar escalação <ArrowRight size={17} /></>}</button><p className="sheet-footnote">{lineup.confirmed ? 'Você pode trocar suas equipes a qualquer momento nesta demo.' : `Escolha ${3 - chosen.length} ${3 - chosen.length === 1 ? 'equipe' : 'equipes'} para completar seu time.`}</p></aside></div> : <section className="card fantasy-ranking"><div className="section-heading"><div><h2>A torcida também tem pódio</h2><p>Uma prévia da liga DSB. Ranking e pontos ilustrativos.</p></div><Trophy size={26} /></div>{[{ name: 'Maré de Sorte', owner: 'Marina Costa', points: 1140 }, { name: 'Só Dá Sol', owner: 'Pedro Almeida', points: 1086 }, { name: 'Capitães do Amanhã', owner: 'Ana Souza', points: 1012 }].map((player, index) => <div className="fantasy-rank-row" key={player.name}><span className={`rank rank-${index}`}>{index + 1}</span><span className="profile-avatar"><Sun size={21} /></span><div><h3>{player.name}</h3><p>{player.owner}</p></div><strong>{player.points}<small>pts</small></strong></div>)}<div className="your-projection"><Zap size={22} /><div><h3>{lineup.confirmed ? `Seu time tem potencial para ${projection} pontos` : 'Seu lugar nessa disputa está esperando'}</h3><p>{lineup.confirmed ? 'Projeção com os resultados atuais e o bônus da capitã. Não representa uma classificação oficial.' : 'Confirme sua escalação para ver sua projeção de pontos.'}</p></div><button className="text-link" onClick={() => setView('lineup')}>Meu time <ArrowRight size={17} /></button></div></section>}<Sheet open={rules} onClose={() => setRules(false)} title="Da torcida para a estratégia"><span className="soft-icon gold"><Trophy size={27} /></span><h3 className="detail-title">É fácil entrar no Fantasy DSB.</h3><ol className="fantasy-rules"><li><strong>Comece com 100 sóis</strong><p>Esse é seu orçamento virtual para montar o time.</p></li><li><strong>Escale 3 equipes</strong><p>Escolha as favoritas sem ultrapassar seu saldo.</p></li><li><strong>Escolha sua capitã</strong><p>Uma das equipes recebe o dobro dos pontos.</p></li><li><strong>Confirme e entre na torcida</strong><p>A projeção soma os pontos das suas equipes e o bônus da capitã.</p></li></ol><p className="sheet-footnote">Fantasy gratuito e demonstrativo, sem apostas ou prêmios. Sua escalação fica salva apenas neste dispositivo.</p></Sheet></div>;
+  function copyForward() {
+    const next = { ...lineups };
+    races.slice(races.indexOf(race) + 1).forEach(r => { if (!locked(r)) next[r.id] = [...lineup]; });
+    setLineups(next);
+    notify('Escalação repetida em todas as próximas provas.');
+  }
+
+  const pickingTier = picking === null ? null : lineupSlots[picking];
+  const isLocked = locked(race);
+
+  return <div className="page fantasy">
+    <div className="page-heading">
+      <div><h1>Fantasy</h1><p>Para cada prova, escale 1 barco do tier A, 2 do tier B e 1 do tier C.</p></div>
+      <button className="button" onClick={() => setRules(true)}><CircleHelp size={16} /> Como jogar</button>
+    </div>
+    <div className="fantasy-grid">
+      <div className="race-list" role="tablist" aria-label="Provas">
+        {races.map(r => {
+          const count = filled(r);
+          return <button key={r.id} role="tab" aria-selected={r.id === race.id} onClick={() => setSelectedId(r.id)}>
+            <span className="race-number">Prova {r.number}</span>
+            <strong>{r.name}</strong>
+            <small>{raceDate(r)} · {raceTime(r)}</small>
+            <span className={`race-status ${locked(r) ? 'locked' : count === lineupSlots.length ? 'done' : ''}`}>
+              {locked(r) ? <><Lock size={11} /> Encerrada</> : count === lineupSlots.length ? <><Check size={11} /> Escalada</> : `${count}/${lineupSlots.length}`}
+            </span>
+          </button>;
+        })}
+      </div>
+
+      <section className="card lineup">
+        <div className="lineup-heading">
+          <div><h2>Prova {race.number} · {race.name}</h2><p>{isLocked ? 'Escalação travada: a prova já largou.' : `Você pode editar até a largada: ${raceDate(race)}, ${raceTime(race)}.`}</p></div>
+          {!isLocked && filled(race) === lineupSlots.length && race !== races[races.length - 1] && <button className="button" onClick={copyForward}><Copy size={15} /> Repetir nas próximas</button>}
+        </div>
+        <div className="slots">
+          {lineupSlots.map((tier, slot) => {
+            const team = teams.find(t => t.id === lineup[slot]);
+            return <button key={slot} className={`slot ${team ? 'filled' : ''}`} disabled={isLocked} onClick={() => setPicking(slot)} aria-label={team ? `${tierLabel[tier]}: ${team.name}. Trocar` : `Escolher barco ${tierLabel[tier]}`}>
+              <span className={`tier tier-${tier}`}>{tierLabel[tier]}</span>
+              {team ? <><TeamBadge team={team} /><strong>{team.name}</strong><small>{team.university.split(' · ')[0]}</small></>
+                : <><span className="slot-empty"><Plus size={22} /></span><strong>Escolher barco</strong><small>&nbsp;</small></>}
+            </button>;
+          })}
+        </div>
+        <p className="footnote">{complete} de {races.length} provas escaladas.</p>
+      </section>
+
+      <aside className="card ranking">
+        <div className="ranking-heading"><h2>Ranking</h2><span className="tag">{ranking.length} participantes</span></div>
+        <ol>
+          {ranking.map((player, index) => <li key={player.name + index} className={'you' in player ? 'you' : ''}>
+            <span className={`position p${index + 1}`}>{index + 1}</span>
+            <span className="avatar small">{'you' in player ? <Sun size={14} /> : player.name.split(' ').map(p => p[0]).join('').slice(0, 2)}</span>
+            <span className="ranking-name">{player.name}{'you' in player && <small> (você)</small>}</span>
+            <strong>{player.points}<small> pts</small></strong>
+          </li>)}
+        </ol>
+        <p className="footnote">Ranking e pontos ilustrativos nesta demonstração.</p>
+      </aside>
+    </div>
+
+    <Sheet open={picking !== null} onClose={() => setPicking(null)} title={pickingTier ? `Escolha um barco · ${tierLabel[pickingTier]}` : ''}>
+      {picking !== null && <div className="picker">
+        {teams.filter(t => t.tier === pickingTier).map(team => {
+          const current = lineup[picking] === team.id;
+          const used = !current && lineup.includes(team.id);
+          return <button key={team.id} className={`picker-row ${current ? 'selected' : ''}`} disabled={used} onClick={() => setSlot(picking, team.id)}>
+            <TeamBadge team={team} />
+            <span><strong>{team.name}</strong><small>{used ? 'Já está na sua escalação' : team.university}</small></span>
+            <span className="picker-points">{team.points}<small> pts</small></span>
+            {current && <Check size={18} />}
+          </button>;
+        })}
+        {lineup[picking] && <button className="button danger" onClick={() => setSlot(picking, '')}><X size={16} /> Liberar vaga</button>}
+      </div>}
+    </Sheet>
+
+    <Sheet open={rules} onClose={() => setRules(false)} title="Como jogar">
+      <ol className="rules">
+        <li><strong>Uma escalação por prova</strong><p>São 7 provas. Monte sua equipe separadamente para cada uma.</p></li>
+        <li><strong>4 barcos: 1 A, 2 B e 1 C</strong><p>Os barcos são divididos em tiers pelo desempenho. Equilibre favoritos e apostas.</p></li>
+        <li><strong>Trava na largada</strong><p>Você pode trocar os barcos até o horário de início de cada prova.</p></li>
+        <li><strong>Suba no ranking</strong><p>Os pontos que seus barcos fazem na prova somam para você no ranking geral.</p></li>
+      </ol>
+      <p className="footnote">Fantasy gratuito e demonstrativo, sem apostas ou prêmios. Sua escalação fica salva apenas neste dispositivo.</p>
+    </Sheet>
+  </div>;
 }

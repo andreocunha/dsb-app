@@ -2,56 +2,35 @@
  * DSB — TOKENS DE COR
  * Para mudar a identidade, edite apenas este arquivo.
  * :root = tema claro. [data-theme="dark"] = tema escuro.
- * --brand: ações e destaques; --accent: amarelo solar;
- * --sidebar-bg / --hero-bg: áreas institucionais.
+ * --brand: ações e destaques; --accent: amarelo solar.
  * As cores das equipes também são centralizadas aqui.
  */
 :root {
   color-scheme: light;
   --brand: #422378;
-  --brand-hover: #422969;
   --brand-soft: #f1edf8;
   --on-brand: #ffffff;
   --accent: #ffc51c;
-  --accent-hover: #ffcf52;
-  --on-accent: #332447;
-  --accent-soft: #fcf5df;
-  --background: #fdfdff;
+  --background: #f7f7fa;
   --surface: #ffffff;
   --surface-subtle: #fafafd;
-  --surface-hover: #f6f3fa;
+  --surface-hover: #f3f0f8;
   --text: #252332;
   --text-secondary: #656785;
   --text-tertiary: #9895a3;
   --border: #ebe9f0;
   --border-strong: #dcd7e5;
-  --sidebar-bg: #33224f;
-  --sidebar-text: #c5bbd6;
-  --sidebar-muted: #9e90b4;
-  --sidebar-active: #efc34b;
-  --sidebar-active-text: #34234e;
-  --sidebar-panel: #403059;
-  --sidebar-border: #514165;
-  --hero-bg: #392657;
-  --hero-text: #ffffff;
-  --hero-muted: #d8cfea;
-  --race-image-overlay: linear-gradient(90deg, #061f3ab3, #061f3a36 65%, #061f3a0a);
-  --live-image-overlay: linear-gradient(0deg, #061f3ab3, #061f3a26);
-  --hero-overlay: linear-gradient(90deg, #392657 0%, #392657 29%, #392657e6 44%, #39265744 67%, #241d3010 100%);
   --success: #328768;
   --success-soft: #eaf5ee;
-  --danger: #bb646c;
+  --danger: #bb4a55;
   --danger-soft: #faedf0;
-  --gold-text: #967014;
   --chat-background: #f3f1f7;
-  --chat-own: #ece4f8;
-  --shadow: 0 4px 24px #32234705;
+  --chat-own: #e9e0f7;
+  --shadow: 0 8px 30px #2a1d4014;
   --sheet-shadow: 0 20px 90px #1b102a30;
   --scrim: #18112470;
-  --preview-light: #f8f7fc;
-  --preview-dark: #221b30;
   --team-green: #286b50; --team-green-bg: #eaf3ec;
-  --team-gold: #a0781a; --team-gold-bg: #fbf3dc;
+  --team-gold: #8a6512; --team-gold-bg: #fbf3dc;
   --team-blue: #3d69a2; --team-blue-bg: #edf2fa;
   --team-orange: #a36140; --team-orange-bg: #faf0e9;
   --team-purple: #7b55a2; --team-purple-bg: #f1ebf8;
@@ -60,13 +39,9 @@
 [data-theme="dark"] {
   color-scheme: dark;
   --brand: #b99ae9;
-  --brand-hover: #cdb2f5;
   --brand-soft: #31263f;
   --on-brand: #21152e;
   --accent: #ffc51c;
-  --accent-hover: #ffcf52;
-  --on-accent: #332447;
-  --accent-soft: #383021;
   --background: #17131e;
   --surface: #211b2a;
   --surface-subtle: #251f2f;
@@ -76,27 +51,13 @@
   --text-tertiary: #8e839a;
   --border: #342b3f;
   --border-strong: #4a3d58;
-  --sidebar-bg: #21162f;
-  --sidebar-text: #c5bbd6;
-  --sidebar-muted: #a193b2;
-  --sidebar-active: #efc34b;
-  --sidebar-active-text: #34234e;
-  --sidebar-panel: #30213f;
-  --sidebar-border: #493455;
-  --hero-bg: #392657;
-  --hero-text: #ffffff;
-  --hero-muted: #d8cfea;
-  --race-image-overlay: linear-gradient(90deg, #061f3ab3, #061f3a36 65%, #061f3a0a);
-  --live-image-overlay: linear-gradient(0deg, #061f3ab3, #061f3a26);
-  --hero-overlay: linear-gradient(90deg, #392657 0%, #392657 29%, #392657e6 44%, #39265744 67%, #241d3010 100%);
   --success: #7bc5a4;
   --success-soft: #23372e;
   --danger: #eaa0a7;
   --danger-soft: #40252f;
-  --gold-text: #edcc6f;
   --chat-background: #1a1523;
   --chat-own: #3d2d50;
-  --shadow: 0 4px 24px #00000012;
+  --shadow: 0 8px 30px #00000040;
   --sheet-shadow: 0 20px 90px #00000060;
   --scrim: #0d081ab8;
   --team-green: #8fc9a6; --team-green-bg: #24392e;

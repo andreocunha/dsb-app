@@ -2,7 +2,7 @@
 export const eventConfig = {
   trackingUrl: 'https://dsb-rastreio.vercel.app/',
   // Aceita youtube.com/watch?v=..., youtube.com/live/... ou youtu.be/...
-  youtubeUrl: process.env.NEXT_PUBLIC_YOUTUBE_LIVE_URL || '',
+  youtubeUrl: process.env.NEXT_PUBLIC_YOUTUBE_LIVE_URL || 'https://www.youtube.com/watch?v=rFZHOHl-L8A', // live de teste
 };
 export function youtubeEmbedUrl(input: string): string | null {
   try {
