@@ -55,6 +55,19 @@ e envie uma nova versão para as lojas. Também atualize:
 4. Conta pessoal nova exige **teste fechado com 12 testadores por 14 dias** antes de publicar.
 
 ### Notificações
-1. Criar um projeto no Firebase (gratuito) e registrar os apps iOS e Android.
-2. Colocar `google-services.json` em `android/app/` e `GoogleService-Info.plist` em `ios/App/App/`.
-3. Ligar `NEXT_PUBLIC_PUSH_ENABLED=true` e criar a função que dispara os avisos das provas.
+
+Pronto: Firebase criado, `google-services.json` e `GoogleService-Info.plist` nos projetos nativos,
+chave APNs enviada ao Firebase, `NEXT_PUBLIC_PUSH_ENABLED=true`, Edge Function `send-push` publicada
+e agendamento no banco (`cron.job` "avisos-das-provas", a cada 5 minutos).
+
+Falta só colocar os segredos, que são seus e não passam por aqui:
+
+1. Supabase → Edge Functions → Secrets:
+   - `FCM_SERVICE_ACCOUNT`: o JSON da conta de serviço do Firebase
+     (Firebase → Configurações do projeto → Contas de serviço → Gerar nova chave privada).
+   - `CRON_SECRET`: uma senha qualquer que você inventar.
+2. Supabase → Integrations → Vault: criar o segredo `cron_secret` com **o mesmo valor** do `CRON_SECRET`.
+   É por ele que o agendamento se identifica na função.
+
+Para mandar um recado manual para todo mundo, chame a função com
+`{"modo":"aviso","titulo":"...","texto":"..."}` e o cabeçalho `x-cron-secret`.

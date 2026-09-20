@@ -84,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4200); return () => clearTimeout(id); }, [toast]);
   // Registra de novo ao entrar/sair, para associar o aparelho à conta.
-  useEffect(() => { void registerPush(); }, [userId]);
+  useEffect(() => { void registerPush(setToast); }, [userId]);
   useEffect(() => {
     const updateOnline = () => setOffline(!navigator.onLine);
     const beforeInstall = (e: Event) => { e.preventDefault(); setInstallEvent(e as InstallEvent); };
