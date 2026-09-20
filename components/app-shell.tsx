@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
-import { House, MessageCircle, Trophy, Menu, ChevronRight, Settings, Sun, Moon, LogIn, LogOut, Download, Check, X, WifiOff } from 'lucide-react';
+import { House, MessageCircle, Trophy, Menu, ChevronRight, Settings, ShieldCheck, Sun, Moon, LogIn, LogOut, Download, Check, X, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Avatar, Brand, Sheet } from './ui';
 import { useAuth } from './auth';
@@ -148,6 +148,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="sheet-row"><Sun size={20} /><span>Aparência</span><ThemeSwitch theme={theme} setTheme={setTheme} /></div>
       {!native && <button className="sheet-row" onClick={() => { setMenu(false); void install(); }}><Download size={20} /><span>Instalar aplicativo</span><ChevronRight size={18} /></button>}
       {userId && <button className="sheet-row danger" onClick={() => void logout()}><LogOut size={20} /><span>Sair da conta</span></button>}
+      <Link href="/privacidade/" className="sheet-row" onClick={() => setMenu(false)}><ShieldCheck size={20} /><span>Privacidade</span><ChevronRight size={18} /></Link>
       <p className="footnote">DSB · Desafio Solar Brasil · Versão 0.1.0</p>
     </Sheet>
     <Sheet open={installInfo} onClose={() => setInstallInfo(false)} title="Leve o DSB com você">

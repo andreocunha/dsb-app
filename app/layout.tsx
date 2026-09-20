@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: { default: "DSB • Desafio Solar Brasil", template: "%s • DSB" },
   description: "A energia do sol. A emoção da competição. Acompanhe o Desafio Solar Brasil, encontre a comunidade e monte seu fantasy.",
   applicationName: "DSB", appleWebApp: { capable: true, statusBarStyle: "default", title: "DSB" },
-  icons: { icon: "/icon.svg", apple: "/icons/apple-touch-icon.png" },
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#422c70" };
 export default function RootLayout({ children }: { children: React.ReactNode }) {

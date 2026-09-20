@@ -65,6 +65,7 @@ export function Preferences() {
         {[{ id: 'light', title: 'Tema claro', icon: Sun }, { id: 'dark', title: 'Tema escuro', icon: Moon }].map(option => <button key={option.id} aria-pressed={theme === option.id} onClick={() => setTheme(option.id)}><option.icon size={18} />{option.title}{theme === option.id && <Check size={16} />}</button>)}
       </div>
     </section>
+    <p className="footnote legal-link">Ao usar o chat e o fantasy você concorda com a nossa <a className="text-link" href="/privacidade/">política de privacidade</a>.</p>
     <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Excluir sua conta?">
       <div className="prose">
         <p>Isso apaga seu perfil, suas mensagens, arquivos enviados, reações e escalações do fantasy. <strong>Não dá para desfazer.</strong></p>

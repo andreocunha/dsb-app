@@ -44,7 +44,7 @@ small { font-size: 12px; color: var(--text-secondary); }
 .avatar.large { width: 44px; height: 44px; }
 .team-badge { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; font-size: 13px; font-weight: 700; letter-spacing: .3px; }
 .team-badge.small { width: 32px; height: 32px; border-radius: 9px; font-size: 11px; }
-.team-logo { object-fit: contain; background: #fff; border: 1px solid var(--border); padding: 3px; }
+.team-logo { object-fit: contain; border: 1px solid var(--border); }  /* o fundo já vem no arquivo */
 img.avatar { object-fit: cover; }
 .panel-note { padding: 12px 8px; color: var(--text-tertiary); font-size: 13px; }
 .muted { color: var(--text-secondary); }
@@ -303,7 +303,7 @@ img.avatar { object-fit: cover; }
 .picks-counter strong { color: var(--text); }
 
 /* Lista de barcos: toque escolhe, o 2x dobra os pontos de um deles. */
-.boat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.boat-list { display: flex; flex-direction: column; gap: 6px; }
 .boat-card { position: relative; }
 .boat-pick { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 12px; text-align: left; }
 .boat-pick:not(:disabled):hover { background: var(--surface-hover); }
@@ -316,8 +316,9 @@ img.avatar { object-fit: cover; }
 .boat-card.selected .boat-pick { border-color: var(--brand); background: var(--brand-soft); }
 .boat-card.selected .boat-pick { padding-right: 52px; }
 .boat-check { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--brand); color: var(--on-brand); }
-.double-toggle, .double-tag { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); min-width: 34px; height: 26px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); font-size: 12px; font-weight: 700; }
-.double-toggle.on, .double-tag { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.double-toggle, .double-tag { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); min-width: 36px; height: 28px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.double-toggle:hover { border-color: var(--success); color: var(--success); }
+.double-toggle.on, .double-tag { border-color: var(--success); background: var(--success); color: #fff; }
 .double-tag { position: static; transform: none; display: inline-grid; place-items: center; }
 
 .ranking { padding: 20px 12px 16px; }
@@ -326,6 +327,19 @@ img.avatar { object-fit: cover; }
 .ranking ol { padding: 0; list-style: none; }
 .ranking li { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; }
 .ranking li.you { background: var(--brand-soft); }
+/* Pódio: as três primeiras posições ganham destaque. */
+.ranking li.podium { margin-bottom: 4px; padding: 12px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-subtle); }
+.ranking li.podium .ranking-name { font-size: 15px; font-weight: 600; }
+.ranking li.podium strong { font-size: 16px; }
+.ranking li.podium .position { color: var(--text-tertiary); }
+.ranking li.p1 { border-color: var(--team-gold); background: var(--team-gold-bg); }
+.ranking li.p1 .position { color: var(--team-gold); }
+.ranking li.p1 .ranking-name { font-size: 16px; }
+.ranking li.p2 { border-color: var(--border-strong); }
+.ranking li.p2 .position { color: var(--text-secondary); }
+.ranking li.p3 { border-color: var(--team-orange); background: var(--team-orange-bg); }
+.ranking li.p3 .position { color: var(--team-orange); }
+.ranking li.podium.you { box-shadow: inset 0 0 0 1px var(--brand); }
 .ranking li strong { font-weight: 600; white-space: nowrap; }
 .ranking li strong small { font-weight: 400; }
 .ranking-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -334,26 +348,22 @@ img.avatar { object-fit: cover; }
 .position.p1 { color: var(--team-gold); }
 .ranking .footnote { padding: 0 8px; }
 
-.race-results { padding: 20px 12px 16px; }
-.race-results .race-list { margin: 0 -4px 8px; padding: 2px 8px 8px; }
-.race-results .results li { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; }
-.race-results .results li.mine { background: var(--brand-soft); }
-.race-total { margin-top: 10px; padding: 0 8px; color: var(--text-secondary); font-size: 13px; }
-.race-results .panel-note { padding: 4px 8px 8px; }
 
 .rules { display: flex; flex-direction: column; gap: 14px; padding-left: 20px; }
 .rules li::marker { color: var(--brand); font-weight: 700; }
 .rules p { color: var(--text-secondary); }
 
+.fantasy .ranking { max-width: 720px; }
+
 @media (min-width: 1100px) {
-  .fantasy-grid { grid-template-columns: 380px minmax(0, 1fr); }
-  .fantasy-grid .wide { grid-column: 1 / -1; }
-  .fantasy-grid .ranking.wide { grid-column: 1; }
-  .fantasy-grid .lineup.wide { grid-column: 1 / -1; }
+  .fantasy-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------- Configurações ---------- */
-.settings { max-width: 760px; }
+.settings, .legal { max-width: 760px; }
+.legal .prose h2 { margin-top: 6px; color: var(--text); font-size: 15px; font-weight: 600; }
+.legal-link { max-width: 760px; }
+.text-link { color: var(--brand); text-decoration: underline; }
 .settings .card { margin-bottom: 14px; }
 .settings .card h2 { margin-bottom: 14px; }
 .name-field label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px; }

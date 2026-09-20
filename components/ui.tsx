@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import type { Team } from '@/lib/data';
 export function Brand() {
   return <div className="brand">
-    <Image src="/images/event-logo.png" width={40} height={40} alt="" className="brand-logo" />
+    <Image src="/images/logo.png" width={40} height={40} alt="" className="brand-logo" />
     <span className="brand-wordmark">SOLAR<br />BRASIL</span>
   </div>;
 }

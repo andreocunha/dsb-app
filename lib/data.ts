@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 
-export type Tier = 'A' | 'B' | 'C';
-export type Team = { id: string; name: string; university: string; initials: string; color: string; tier: Tier; logo: string | null; points: number };
+export type Team = { id: string; name: string; university: string; initials: string; color: string; logo: string | null; points: number };
 export type Race = { id: string; number: number; name: string; starts_at: string };
 
 export type RaceResult = { race_id: string; team_id: string; points: number };
@@ -31,7 +30,7 @@ function useCached<T>(store: ReturnType<typeof cached<T>>) {
 }
 
 const teamsStore = cached(async () => {
-  const { data, error } = await supabase.from('team_standings').select('*').order('points', { ascending: false }).order('name');
+  const { data, error } = await supabase.from('team_standings').select('*').order('name');
   if (error) throw error;
   return data as Team[];
 });

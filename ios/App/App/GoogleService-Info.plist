@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>32259780085-v016ecakkr6puoe4f5ufvmmgfjfoj4io.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.32259780085-v016ecakkr6puoe4f5ufvmmgfjfoj4io</string>
+	<key>API_KEY</key>
+	<string>AIzaSyAFBMtEgJi3KRYOTUk5W2QnScI47Jo3qEo</string>
+	<key>GCM_SENDER_ID</key>
+	<string>32259780085</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>br.com.desafiosolar.app</string>
+	<key>PROJECT_ID</key>
+	<string>rastreamento-barcos</string>
+	<key>STORAGE_BUCKET</key>
+	<string>rastreamento-barcos.appspot.com</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:32259780085:ios:9dfa1ed0e35ec977a604bc</string>
+</dict>
+</plist>

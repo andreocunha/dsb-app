@@ -72,9 +72,9 @@ export type Database = {
         Relationships: []
       }
       teams: {
-        Row: { active: boolean; color: string; id: string; initials: string; logo: string | null; name: string; tier: string; university: string }
-        Insert: { active?: boolean; color?: string; id: string; initials: string; logo?: string | null; name: string; tier: string; university?: string }
-        Update: { active?: boolean; color?: string; id?: string; initials?: string; logo?: string | null; name?: string; tier?: string; university?: string }
+        Row: { active: boolean; color: string; id: string; initials: string; logo: string | null; name: string; university: string }
+        Insert: { active?: boolean; color?: string; id: string; initials: string; logo?: string | null; name: string; university?: string }
+        Update: { active?: boolean; color?: string; id?: string; initials?: string; logo?: string | null; name?: string; university?: string }
         Relationships: []
       }
       user_blocks: {
@@ -93,7 +93,6 @@ export type Database = {
           logo: string | null
           name: string | null
           points: number | null
-          tier: string | null
           university: string | null
         }
         Relationships: []

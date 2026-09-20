@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
     "@capacitor/core": "^8.5.2",
     "@capacitor/ios": "^8.5.2",
     "@capacitor/push-notifications": "^8.1.2",
@@ -32,6 +34,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.5.2",
     "@types/node": "^20",
     "@types/react": "^19",

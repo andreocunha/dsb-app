@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { Check, CircleHelp, Copy, Lock, Trophy, Users } from 'lucide-react';
+import { Check, CircleHelp, Copy, Lock, Medal, Trophy, Users } from 'lucide-react';
 import { PICKS_PER_RACE, useRaceResults, useRaces, useTeams, type RaceResult, type Team } from '@/lib/data';
 import { hasStarted, nextRace, raceDate, raceTime, useNow } from '@/lib/races';
 import { supabase, errorMessage } from '@/lib/supabase';
@@ -84,11 +84,8 @@ export function Fantasy() {
     notify('Escalação repetida em todas as próximas provas.');
   }
 
-  const raceResults = results.filter(r => r.race_id === race.id)
-    .map(r => ({ ...r, team: teams.find(t => t.id === r.team_id) }))
-    .filter(r => r.team)
-    .sort((a, b) => b.points - a.points);
   const myRacePoints = lineupPoints(lineup, results, race.id);
+  const raceScored = results.some(r => r.race_id === race.id);
 
   const raceChips = <div className="race-list" role="tablist" aria-label="Provas">
     {races.map(r => {
@@ -117,41 +114,21 @@ export function Fantasy() {
       <button role="tab" aria-selected={view === 'meu'} onClick={() => setView('meu')}><Users size={16} /> Meu fantasy</button>
     </div>
 
-    {view === 'ranking' ? <div className="fantasy-grid">
-      <section className="card ranking wide">
-        <div className="ranking-heading"><h2>Ranking da torcida</h2>{ranking && <span className="tag">{ranking.length} {ranking.length === 1 ? 'participante' : 'participantes'}</span>}</div>
-        {ranking === null ? <p className="panel-note">Carregando…</p>
-          : ranking.length === 0 ? <p className="panel-note">Ninguém montou o fantasy ainda. Seja o primeiro!</p>
-          : <ol>
-            {ranking.map(player => <li key={player.user_id} className={player.user_id === userId ? 'you' : ''}>
-              <span className={`position p${player.position}`}>{player.position}</span>
-              <Avatar id={player.user_id} name={player.name} url={player.avatar_url} small />
-              <span className="ranking-name">{player.name}{player.user_id === userId && <small> (você)</small>}</span>
-              <strong>{player.points}<small> pts</small></strong>
-            </li>)}
-          </ol>}
-      </section>
-
-      <section className="card race-results">
-        <div className="ranking-heading"><h2>Prova {race.number} · {race.name}</h2></div>
-        {raceChips}
-        {raceResults.length === 0
-          ? <p className="panel-note">{isLocked ? 'Resultado ainda não publicado.' : `A prova começa em ${raceDate(race)}, ${raceTime(race)}.`}</p>
-          : <>
-            <ol className="results">
-              {raceResults.map((result, index) => <li key={result.team_id} className={picked(result.team_id) ? 'mine' : ''}>
-                <span className="position">{index + 1}</span>
-                <TeamBadge team={result.team!} small />
-                <span className="results-team"><strong>{result.team!.name}</strong><small>{result.team!.university.split(' · ')[0]}</small></span>
-                {lineup.double_team_id === result.team_id && <span className="double-tag">2x</span>}
-                <strong>{result.points}<small> pts</small></strong>
-              </li>)}
-            </ol>
-            {lineup.team_ids.length > 0 && <p className="race-total">Sua pontuação nesta prova: <strong>{myRacePoints} pts</strong></p>}
-          </>}
-      </section>
-    </div> : <div className="fantasy-grid">
-      <section className="card lineup wide">
+    {view === 'ranking' ? <section className="card ranking">
+      <div className="ranking-heading"><h2>Ranking geral</h2>{ranking && <span className="tag">{ranking.length} {ranking.length === 1 ? 'participante' : 'participantes'}</span>}</div>
+      {ranking === null ? <p className="panel-note">Carregando…</p>
+        : ranking.length === 0 ? <p className="panel-note">Ninguém montou o fantasy ainda. Seja o primeiro!</p>
+        : <ol>
+          {ranking.map(player => <li key={player.user_id} className={`${player.position <= 3 ? `podium p${player.position}` : ''} ${player.user_id === userId ? 'you' : ''}`}>
+            <span className="position">{player.position <= 3 ? <Medal size={player.position === 1 ? 20 : 18} /> : player.position}</span>
+            <Avatar id={player.user_id} name={player.name} url={player.avatar_url} small={player.position > 3} />
+            <span className="ranking-name">{player.name}{player.user_id === userId && <small> (você)</small>}</span>
+            <strong>{player.points}<small> pts</small></strong>
+          </li>)}
+        </ol>}
+      <p className="footnote">Os pontos somam os barcos escolhidos em cada prova, com o 2x já contado.</p>
+    </section> : <div className="fantasy-grid">
+      <section className="card lineup">
         <div className="lineup-heading">
           <div>
             <h2>Prova {race.number} · {race.name}</h2>
@@ -163,20 +140,24 @@ export function Fantasy() {
         <p className="picks-counter">
           <strong>{lineup.team_ids.length}/{PICKS_PER_RACE}</strong> barcos escolhidos
           {lineup.double_team_id && <> · 2x em <strong>{teams.find(t => t.id === lineup.double_team_id)?.name}</strong></>}
+          {raceScored && <> · você fez <strong>{myRacePoints} pts</strong> nesta prova</>}
         </p>
-        <div className="boat-grid">
+        <div className="boat-list">
           {teams.map(team => {
             const selected = picked(team.id);
             const doubled = lineup.double_team_id === team.id;
+            // O 2x aparece só no barco que já tem, ou em todos os escolhidos quando ninguém tem.
+            const showDouble = selected && (doubled || !lineup.double_team_id);
+            const racePoints = results.find(r => r.race_id === race.id && r.team_id === team.id)?.points;
             return <div key={team.id} className={`boat-card ${selected ? 'selected' : ''}`}>
               <button className="boat-pick" disabled={isLocked} onClick={() => toggleTeam(team)} aria-pressed={selected} aria-label={`${selected ? 'Remover' : 'Escolher'} ${team.name}`}>
                 <TeamBadge team={team} />
-                <span className="boat-name"><strong>{team.name}</strong><small>{team.university.split(' · ')[0]}</small></span>
-                <span className="boat-points">{team.points}<small> pts</small></span>
+                <span className="boat-name"><strong>{team.name}</strong>{team.university && <small>{team.university}</small>}</span>
+                {racePoints !== undefined && <span className="boat-points">{doubled ? racePoints * 2 : racePoints}<small> pts</small></span>}
                 {selected && <span className="boat-check"><Check size={14} /></span>}
               </button>
-              {selected && !isLocked && <button className={`double-toggle ${doubled ? 'on' : ''}`} onClick={() => toggleDouble(team)} aria-pressed={doubled} aria-label={`${doubled ? 'Remover' : 'Aplicar'} o 2x em ${team.name}`}>2x</button>}
-              {selected && isLocked && doubled && <span className="double-tag">2x</span>}
+              {showDouble && !isLocked && <button className={`double-toggle ${doubled ? 'on' : ''}`} onClick={() => toggleDouble(team)} aria-pressed={doubled} aria-label={`${doubled ? 'Remover' : 'Aplicar'} o 2x em ${team.name}`}>2x</button>}
+              {doubled && isLocked && <span className="double-tag">2x</span>}
             </div>;
           })}
         </div>

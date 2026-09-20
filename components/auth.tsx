@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase, errorMessage } from '@/lib/supabase';
+import { isNativeApp, listenNativeLogin, nativeSignIn } from '@/lib/native-auth';
 import { Sheet } from './ui';
 
 export type Profile = { id: string; name: string; avatar_url: string | null };
@@ -24,6 +25,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState<Profile | null>(null);
   const [loginReason, setLoginReason] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState<Provider | null>(null);
+
+  useEffect(() => listenNativeLogin(() => setLoginReason(null)), []);
 
   useEffect(() => {
     // getClaims valida o JWT localmente com as chaves públicas do projeto (JWKS), sem ida ao servidor.
@@ -40,8 +44,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signIn(provider: Provider) {
     setError('');
-    const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.href } });
-    if (error) setError(errorMessage(error));
+    setBusy(provider);
+    try {
+      // No app das lojas o login é pela tela nativa; no navegador, pelo fluxo web.
+      if (isNativeApp()) { await nativeSignIn(provider); setLoginReason(null); return; }
+      const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.href } });
+      if (error) throw error;
+    } catch (error) {
+      setError(errorMessage(error));
+    } finally { setBusy(null); }
   }
 
   const value: AuthValue = {
@@ -57,8 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <Sheet open={loginReason !== null} onClose={() => setLoginReason(null)} title="Entrar no DSB">
       <div className="login">
         <p>{loginReason}</p>
-        <button className="login-button" onClick={() => void signIn('google')}><GoogleIcon /> Continuar com Google</button>
-        <button className="login-button apple" onClick={() => void signIn('apple')}><AppleIcon /> Continuar com Apple</button>
+        <button className="login-button" disabled={busy !== null} onClick={() => void signIn('google')}><GoogleIcon /> {busy === 'google' ? 'Entrando…' : 'Continuar com Google'}</button>
+        <button className="login-button apple" disabled={busy !== null} onClick={() => void signIn('apple')}><AppleIcon /> {busy === 'apple' ? 'Entrando…' : 'Continuar com Apple'}</button>
         {error && <p className="form-error" role="alert">{error}</p>}
         <p className="footnote">Navegar pelo app continua livre. A conta só é usada para o chat e o fantasy.</p>
       </div>
