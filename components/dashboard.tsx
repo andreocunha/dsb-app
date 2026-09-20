@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, Clock3, Maximize2, PictureInPicture2, Radio, Trophy, X } from 'lucide-react';
-import { teams, races } from '@/lib/mock-data';
-import { raceDate, raceTime, useStartedCount } from '@/lib/races';
+import { useRaces, useTeams } from '@/lib/data';
+import { hasStarted, nextRace, raceDate, raceTime, useNow } from '@/lib/races';
 import { eventConfig, youtubeEmbedUrl } from '@/lib/event-config';
 import { TeamBadge } from './ui';
 
@@ -13,19 +13,22 @@ type LiveMode = 'off' | 'full' | 'pip';
 export function Dashboard() {
   const [results, setResults] = useState(false);
   const [live, setLive] = useState<LiveMode>('off');
-  const started = useStartedCount();
-  const race = races[Math.min(started, races.length - 1)];
+  const now = useNow();
+  const { data: races } = useRaces();
+  const race = races?.length ? nextRace(races, now) : null;
 
   return (
     <div className={`home fill ${live === 'pip' ? 'has-pip' : ''}`}>
       <div className="home-hud">
         <section className="hud-card race-card" aria-label="Próxima prova">
-          <span className="eyebrow">{started >= races.length ? 'Última prova' : 'Próxima prova'} · Prova {race.number}</span>
-          <h1>{race.name}</h1>
-          <p>
-            <span><CalendarDays size={14} /><time dateTime={race.start}>{raceDate(race)}</time></span>
-            <span><Clock3 size={14} /><time dateTime={race.start}>{raceTime(race)}</time></span>
-          </p>
+          {race ? <>
+            <span className="eyebrow">{hasStarted(race, now) ? 'Última prova' : 'Próxima prova'} · Prova {race.number}</span>
+            <h1>{race.name}</h1>
+            <p>
+              <span><CalendarDays size={14} /><time dateTime={race.starts_at}>{raceDate(race)}</time></span>
+              <span><Clock3 size={14} /><time dateTime={race.starts_at}>{raceTime(race)}</time></span>
+            </p>
+          </> : <><span className="eyebrow">Desafio Solar Brasil</span><h1>Carregando provas…</h1><p>&nbsp;</p></>}
           <div className="hud-actions">
             <button aria-pressed={results} aria-controls="results-panel" onClick={() => setResults(!results)}><Trophy size={16} /> Resultado</button>
             <button aria-pressed={live !== 'off'} onClick={() => setLive(live === 'off' ? 'full' : 'off')}><Radio size={16} /> Live</button>
@@ -43,18 +46,20 @@ export function Dashboard() {
           allowFullScreen
           referrerPolicy="strict-origin-when-cross-origin"
         />
-        {live !== 'off' && <Live mode={live} raceName={race.name} setMode={setLive} />}
+        {live !== 'off' && <Live mode={live} raceName={race?.name ?? 'Desafio Solar Brasil'} setMode={setLive} />}
       </div>
     </div>
   );
 }
 
 function Results({ onClose }: { onClose: () => void }) {
+  const { data: teams, error } = useTeams();
   return (
     <section id="results-panel" className="hud-card results-card" aria-label="Classificação geral">
       <div className="hud-card-title"><h2>Classificação geral</h2><button className="icon-button" onClick={onClose} aria-label="Fechar classificação"><X size={18} /></button></div>
+      {!teams && <p className="panel-note">{error ? 'Não foi possível carregar a classificação.' : 'Carregando…'}</p>}
       <ol className="results">
-        {[...teams].sort((a, b) => b.points - a.points).map((team, index) => (
+        {teams?.map((team, index) => (
           <li key={team.id}>
             <span className="position">{index + 1}</span>
             <TeamBadge team={team} small />

@@ -13,12 +13,18 @@
     "cap:add:android": "cap add android",
     "cap:ios": "cap open ios",
     "cap:android": "cap open android",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "db:link": "supabase link --project-ref ztzmvdmggxyokfbakajq",
+    "db:new": "supabase migration new",
+    "db:push": "supabase db push",
+    "db:status": "supabase migration list --linked"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
     "@capacitor/core": "^8.5.2",
     "@capacitor/ios": "^8.5.2",
+    "@capacitor/push-notifications": "^8.1.2",
+    "@supabase/supabase-js": "^2.116.0",
     "geist": "^1.7.2",
     "lucide-react": "^1.45.0",
     "next": "16.3.5",
@@ -30,6 +36,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "sharp": "^0.35.4",
