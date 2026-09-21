@@ -20,6 +20,15 @@ npx cap open android   # Android Studio
 JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleDebug
 ```
 
+## Manutenção com prazo
+
+- **Client secret da Apple**: expira em **22/03/2027**. Para renovar:
+  `node scripts/apple-secret.mjs ~/Downloads/secrets-dsb/AuthKey_7SW5GPASD5.p8`
+  e colar o conteúdo de `apple-secret.txt` em Supabase → Authentication → Providers → Apple.
+  Sem o `.p8` não há como gerar: a Apple não permite baixá-lo de novo.
+- Dados da conta Apple: Team ID `95TBL54DM8`, App ID `br.com.desafiosolar.app`,
+  Services ID `br.com.desafiosolar.app.signin`, chave de login `7SW5GPASD5`, chave APNs `H2PW78SD6Q`.
+
 ## Trocar de domínio
 
 Mude `site` no `capacitor.config.ts` (ou a variável `APP_SITE_URL`), refaça o build do app
