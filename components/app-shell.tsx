@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { House, MessageCircle, Trophy, Menu, ChevronRight, Settings, ShieldCheck, Sun, Moon, LogIn, LogOut, Download, Check, X, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -8,6 +8,9 @@ import { Avatar, Brand, Sheet } from './ui';
 import { useAuth } from './auth';
 import { useLocalState } from '@/lib/local-state';
 import { supabase } from '@/lib/supabase';
+import { shortName } from '@/lib/names';
+import { closeTopOverlay } from '@/lib/overlays';
+import { listenBackButton, paintStatusBar } from '@/lib/system-ui';
 import { registerPush } from '@/lib/push';
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 type AppValue = { theme: string; setTheme: (theme: string) => void; notify: (message: string) => void };
@@ -69,6 +72,7 @@ function useOnlineCount() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { userId, profile, requireLogin, signOut } = useAuth();
   const [theme, setTheme] = useLocalState('dsb-theme', 'light');
   const [menu, setMenu] = useState(false);
@@ -81,8 +85,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // No HTML estático é sempre web; no app nativo corrige após hidratar.
   const native = useSyncExternalStore(noopSubscribe, () => Capacitor.isNativePlatform(), () => false);
   const active = (href: string) => href === '/' ? pathname === '/' : pathname.startsWith(href.slice(0, -1));
-  useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+  useEffect(() => { document.documentElement.dataset.theme = theme; void paintStatusBar(theme); }, [theme]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4200); return () => clearTimeout(id); }, [toast]);
+  // Voltar do Android: fecha a camada aberta, senão vai para a home, senão sai do app.
+  useEffect(() => listenBackButton(async () => {
+    if (closeTopOverlay()) return;
+    if (window.location.pathname !== '/') { router.replace('/'); return; }
+    const { App } = await import('@capacitor/app');
+    await App.exitApp();
+  }), [router]);
+
   // Registra de novo ao entrar/sair, para associar o aparelho à conta.
   useEffect(() => { void registerPush(setToast); }, [userId]);
   useEffect(() => {
@@ -107,22 +119,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return <AppContext.Provider value={{ theme, setTheme, notify: setToast }}><OnlineContext.Provider value={online}><UnreadContext.Provider value={{ unread, markRead }}>
     <a href="#main-content" className="skip-link">Pular para o conteúdo</a>
     <aside className="sidebar">
-      <Link href="/" aria-label="Solar Brasil — início"><Brand /></Link>
+      <Link replace href="/" aria-label="Solar Brasil — início"><Brand /></Link>
       <nav className="sidebar-nav" aria-label="Navegação principal">
         {navigation.map(item => (
-          <Link key={item.href} href={item.href} className={active(item.href) ? 'active' : ''} aria-current={active(item.href) ? 'page' : undefined}>
+          <Link key={item.href} replace href={item.href} className={active(item.href) ? 'active' : ''} aria-current={active(item.href) ? 'page' : undefined}>
             <item.icon size={19} /><span>{item.label}</span>
             {item.href === '/comunidade/' && unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
           </Link>
         ))}
-        <Link href="/configuracoes/" className={settingsActive ? 'active' : ''} aria-current={settingsActive ? 'page' : undefined}><Settings size={19} /><span>Configurações</span></Link>
+        <Link replace href="/configuracoes/" className={settingsActive ? 'active' : ''} aria-current={settingsActive ? 'page' : undefined}><Settings size={19} /><span>Configurações</span></Link>
       </nav>
       <div className="sidebar-footer">
         <div className="sidebar-row"><span>Aparência</span><ThemeSwitch theme={theme} setTheme={setTheme} /></div>
         {!native && <button className="sidebar-row" onClick={() => void install()}><span>Instalar aplicativo</span><Download size={16} /></button>}
         {userId ? <div className="sidebar-profile">
           <Avatar id={userId} name={profile?.name ?? ''} url={profile?.avatar_url} />
-          <div><strong>{profile?.name ?? '…'}</strong><small>Conectado</small></div>
+          <div><strong>{profile ? shortName(profile.name) : '…'}</strong><small>Conectado</small></div>
           <button className="icon-button" onClick={() => void logout()} aria-label="Sair da conta"><LogOut size={16} /></button>
         </div> : <button className="button primary sidebar-login" onClick={() => requireLogin()}><LogIn size={16} /> Entrar</button>}
       </div>
@@ -133,7 +145,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </main>
     <nav className="mobile-nav" aria-label="Navegação mobile">
       {navigation.map(item => (
-        <Link key={item.href} href={item.href} className={active(item.href) && !menu ? 'active' : ''} aria-current={active(item.href) ? 'page' : undefined}>
+        <Link key={item.href} replace href={item.href} className={active(item.href) && !menu ? 'active' : ''} aria-current={active(item.href) ? 'page' : undefined}>
           <item.icon size={22} /><span>{item.label}</span>
           {item.href === '/comunidade/' && unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
         </Link>
@@ -142,9 +154,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </nav>
     <Sheet open={menu} onClose={() => setMenu(false)} title="Seu espaço">
       {userId
-        ? <div className="menu-profile"><Avatar id={userId} name={profile?.name ?? ''} url={profile?.avatar_url} /><div><h3>{profile?.name ?? '…'}</h3><p>Conectado</p></div></div>
+        ? <div className="menu-profile"><Avatar id={userId} name={profile?.name ?? ''} url={profile?.avatar_url} /><div><h3>{profile ? shortName(profile.name) : '…'}</h3><p>Conectado</p></div></div>
         : <button className="menu-profile" onClick={() => { setMenu(false); requireLogin(); }}><span className="avatar"><LogIn size={16} /></span><div><h3>Entrar</h3><p>Para usar o chat e o fantasy</p></div></button>}
-      <Link href="/configuracoes/" className="sheet-row" onClick={() => setMenu(false)}><Settings size={20} /><span>Configurações</span><ChevronRight size={18} /></Link>
+      <Link replace href="/configuracoes/" className="sheet-row" onClick={() => setMenu(false)}><Settings size={20} /><span>Configurações</span><ChevronRight size={18} /></Link>
       <div className="sheet-row"><Sun size={20} /><span>Aparência</span><ThemeSwitch theme={theme} setTheme={setTheme} /></div>
       {!native && <button className="sheet-row" onClick={() => { setMenu(false); void install(); }}><Download size={20} /><span>Instalar aplicativo</span><ChevronRight size={18} /></button>}
       {userId && <button className="sheet-row danger" onClick={() => void logout()}><LogOut size={20} /><span>Sair da conta</span></button>}

@@ -1,5 +1,6 @@
 'use client';
 import Image from 'next/image';
+import { registerOverlay } from '@/lib/overlays';
 import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import type { Team } from '@/lib/data';
@@ -25,9 +26,17 @@ export function Avatar({ id, name, url, small = false }: { id: string; name: str
 /** Bottom sheet no mobile, modal centralizado a partir de 640px (ver .sheet no CSS). */
 export function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Guardado em ref para o efeito não depender da identidade da função e reabrir o diálogo a cada render.
+  const fechar = useRef(onClose);
+  useEffect(() => { fechar.current = onClose; }, [onClose]);
   useEffect(() => {
     const dialog = ref.current;
-    if (open) { dialog?.showModal(); const overflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { dialog?.close(); document.body.style.overflow = overflow; }; }
+    if (!open) return;
+    dialog?.showModal();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const solta = registerOverlay(() => fechar.current());
+    return () => { dialog?.close(); document.body.style.overflow = overflow; solta(); };
   }, [open]);
   return <dialog ref={ref} className="sheet" onCancel={onClose} onClick={e => { if (e.target === e.currentTarget) onClose(); }} aria-label={title}>
     <div className="sheet-content">

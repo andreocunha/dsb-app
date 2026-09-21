@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowDown, Ban, Download, FileText, Flag, Info, LogIn, Paperclip, Pin, Play, Send, Smile, Sun, Trash2, X } from 'lucide-react';
 import type { Database } from '@/lib/database.types';
+import { registerOverlay } from '@/lib/overlays';
+import { shortName } from '@/lib/names';
 import { supabase, chatFileUrl, errorMessage } from '@/lib/supabase';
 import { formatSize, makeThumbnail, MAX_FILE_SIZE, storageName } from '@/lib/media';
 import { useApp, useChatUnread, useOnline } from './app-shell';
@@ -242,7 +244,7 @@ export function Community() {
               <div className={`bubble ${message.deleted_at ? 'deleted' : ''}`} role={message.deleted_at ? undefined : 'button'} tabIndex={message.deleted_at ? undefined : 0} aria-label={message.deleted_at ? undefined : 'Ações da mensagem'}
                 onClick={() => { if (!message.deleted_at) setActive(active === message.id ? null : message.id); }}
                 onKeyDown={e => { if (!message.deleted_at && e.key === 'Enter' && e.target === e.currentTarget) setActive(active === message.id ? null : message.id); }}>
-                {!own && !grouped && <b className="bubble-author">{message.author_name}</b>}
+                {!own && !grouped && <b className="bubble-author">{shortName(message.author_name)}</b>}
                 {message.deleted_at
                   ? <p className="deleted-text"><Ban size={14} /> {own ? 'Você apagou esta mensagem' : 'Esta mensagem foi apagada'}</p>
                   : <>
@@ -319,7 +321,15 @@ function Attachment({ message, onOpen }: { message: Message; onOpen: () => void 
 
 function Viewer({ message, onClose }: { message: Message | null; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => { const dialog = ref.current; if (message) { dialog?.showModal(); return () => dialog?.close(); } }, [message]);
+  const fechar = useRef(onClose);
+  useEffect(() => { fechar.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!message) return;
+    dialog?.showModal();
+    const solta = registerOverlay(() => fechar.current());
+    return () => { dialog?.close(); solta(); };
+  }, [message]);
   const url = message?.file_path ? chatFileUrl(message.file_path) : '';
   return <dialog ref={ref} className="viewer" onCancel={onClose} onClick={e => { if (e.target === e.currentTarget) onClose(); }} aria-label="Visualizar mídia">
     {message && <>
@@ -348,7 +358,7 @@ function Reactors({ message, userId, onClose, onRemove }: { message: Message | n
     {!list ? <p className="panel-note">Carregando…</p> : <ul className="reactors">
       {list.map(r => <li key={r.user_id}>
         <Avatar id={r.user_id} name={r.name} url={r.avatar_url} small />
-        <span>{r.user_id === userId ? <>Você<button className="text-button" onClick={() => onRemove(message!)}>Toque para remover</button></> : r.name}</span>
+        <span>{r.user_id === userId ? <>Você<button className="text-button" onClick={() => onRemove(message!)}>Toque para remover</button></> : shortName(r.name)}</span>
         <b>{r.emoji}</b>
       </li>)}
     </ul>}

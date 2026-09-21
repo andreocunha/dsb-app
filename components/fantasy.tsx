@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Check, CircleHelp, Copy, Lock, Medal, Trophy, Users } from 'lucide-react';
 import { PICKS_PER_RACE, useRaceResults, useRaces, useTeams, type RaceResult, type Team } from '@/lib/data';
 import { hasStarted, nextRace, raceDate, raceTime, useNow } from '@/lib/races';
+import { shortName } from '@/lib/names';
 import { supabase, errorMessage } from '@/lib/supabase';
 import { useApp } from './app-shell';
 import { useAuth } from './auth';
@@ -122,7 +123,7 @@ export function Fantasy() {
           {ranking.map(player => <li key={player.user_id} className={`${player.position <= 3 ? `podium p${player.position}` : ''} ${player.user_id === userId ? 'you' : ''}`}>
             <span className="position">{player.position <= 3 ? <Medal size={player.position === 1 ? 20 : 18} /> : player.position}</span>
             <Avatar id={player.user_id} name={player.name} url={player.avatar_url} small={player.position > 3} />
-            <span className="ranking-name">{player.name}{player.user_id === userId && <small> (você)</small>}</span>
+            <span className="ranking-name">{shortName(player.name)}{player.user_id === userId && <small> (você)</small>}</span>
             <strong>{player.points}<small> pts</small></strong>
           </li>)}
         </ol>}

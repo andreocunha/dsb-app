@@ -10,7 +10,16 @@ export const metadata: Metadata = {
   applicationName: "DSB", appleWebApp: { capable: true, statusBarStyle: "default", title: "DSB" },
   icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#422c70" };
+// A barra do navegador acompanha o tema, com as mesmas cores de --surface em theme.css.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#211b2a" },
+  ],
+};
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return <html lang="pt-BR" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}><body><AuthProvider><AppShell>{children}</AppShell></AuthProvider></body></html>;
 }
