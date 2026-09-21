@@ -30,7 +30,9 @@ async function fetchPage(before?: number) {
 }
 
 export function Community() {
-  const { userId, requireLogin } = useAuth();
+  const { userId, profile, requireLogin } = useAuth();
+  // Moderação: a organização pode remover qualquer mensagem.
+  const moderador = profile?.role === 'moderator';
   const { notify } = useApp();
   const { markRead } = useChatUnread();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -179,7 +181,7 @@ export function Community() {
     const { data, error } = await supabase.rpc('delete_message', { p_id: message.id });
     if (error) { notify(errorMessage(error)); return; }
     setMessages(current => current.map(m => m.id !== message.id ? m
-      : { ...m, deleted_at: new Date().toISOString(), body: null, file_path: null, thumb_path: null, file_name: null, file_type: null, reactions: [] }));
+      : { ...m, deleted_at: new Date().toISOString(), deleted_by: userId, body: null, file_path: null, thumb_path: null, file_name: null, file_type: null, reactions: [] }));
     if (data?.length) void supabase.storage.from('chat').remove(data);
   }
 
@@ -239,6 +241,7 @@ export function Community() {
                   : <>
                     <button className="icon-button" onClick={() => void report(message)} aria-label="Denunciar mensagem"><Flag size={16} /></button>
                     <button className="icon-button" onClick={() => void block(message)} aria-label={`Bloquear ${message.author_name}`}><Ban size={16} /></button>
+                    {moderador && <button className="icon-button danger" onClick={() => void remove(message)} aria-label="Remover mensagem (moderação)"><Trash2 size={16} /></button>}
                   </>}
               </div>}
               <div className={`bubble ${message.deleted_at ? 'deleted' : ''}`} role={message.deleted_at ? undefined : 'button'} tabIndex={message.deleted_at ? undefined : 0} aria-label={message.deleted_at ? undefined : 'Ações da mensagem'}
@@ -246,7 +249,9 @@ export function Community() {
                 onKeyDown={e => { if (!message.deleted_at && e.key === 'Enter' && e.target === e.currentTarget) setActive(active === message.id ? null : message.id); }}>
                 {!own && !grouped && <b className="bubble-author">{shortName(message.author_name)}</b>}
                 {message.deleted_at
-                  ? <p className="deleted-text"><Ban size={14} /> {own ? 'Você apagou esta mensagem' : 'Esta mensagem foi apagada'}</p>
+                  ? <p className="deleted-text"><Ban size={14} /> {message.deleted_by && message.deleted_by !== message.user_id
+                      ? 'Mensagem removida pela organização'
+                      : own ? 'Você apagou esta mensagem' : 'Esta mensagem foi apagada'}</p>
                   : <>
                     {message.file_path && <Attachment message={message} onOpen={() => setViewer(message)} />}
                     {message.body && <p>{message.body}</p>}

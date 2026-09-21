@@ -421,3 +421,5 @@ img.avatar { object-fit: cover; }
 .email-login { display: flex; flex-direction: column; gap: 8px; }
 .email-login input { height: 44px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); }
 .email-login .button { height: 44px; }
+.icon-button.danger { color: var(--danger); }
+.icon-button.danger:hover { background: var(--danger-soft); color: var(--danger); }

@@ -33,6 +33,7 @@ export type Database = {
           body: string | null
           created_at: string
           deleted_at: string | null
+          deleted_by: string | null
           file_name: string | null
           file_path: string | null
           file_size: number | null
@@ -48,9 +49,9 @@ export type Database = {
         Relationships: []
       }
       profiles: {
-        Row: { avatar_url: string | null; created_at: string; id: string; name: string }
-        Insert: { avatar_url?: string | null; created_at?: string; id: string; name: string }
-        Update: { avatar_url?: string | null; created_at?: string; id?: string; name?: string }
+        Row: { avatar_url: string | null; created_at: string; id: string; name: string; role: string }
+        Insert: { avatar_url?: string | null; created_at?: string; id: string; name: string; role?: string }
+        Update: { avatar_url?: string | null; created_at?: string; id?: string; name?: string; role?: string }
         Relationships: []
       }
       push_devices: {
@@ -107,6 +108,7 @@ export type Database = {
           body: string
           created_at: string
           deleted_at: string
+          deleted_by: string
           file_name: string
           file_path: string
           file_size: number

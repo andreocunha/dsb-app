@@ -4,7 +4,7 @@ import { supabase, errorMessage } from '@/lib/supabase';
 import { isNativeApp, listenNativeLogin, nativeSignIn } from '@/lib/native-auth';
 import { Sheet } from './ui';
 
-export type Profile = { id: string; name: string; avatar_url: string | null };
+export type Profile = { id: string; name: string; avatar_url: string | null; role: string };
 type Provider = 'google' | 'apple' | 'email';
 type AuthValue = {
   userId: string | null;
@@ -18,7 +18,7 @@ const AuthContext = createContext<AuthValue>({ userId: null, profile: null, requ
 export const useAuth = () => useContext(AuthContext);
 
 const fetchProfile = async (id: string) =>
-  (await supabase.from('profiles').select('id, name, avatar_url').eq('id', id).maybeSingle()).data;
+  (await supabase.from('profiles').select('id, name, avatar_url, role').eq('id', id).maybeSingle()).data;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
