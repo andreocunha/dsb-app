@@ -27,7 +27,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<Provider | null>(null);
 
-  useEffect(() => listenNativeLogin(() => setLoginReason(null)), []);
+  useEffect(() => listenNativeLogin(erro => {
+    setBusy(null);
+    if (erro) setError(erro); else { setError(''); setLoginReason(null); }
+  }), []);
 
   useEffect(() => {
     // getClaims valida o JWT localmente com as chaves públicas do projeto (JWKS), sem ida ao servidor.
