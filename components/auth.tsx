@@ -5,7 +5,7 @@ import { isNativeApp, listenNativeLogin, nativeSignIn } from '@/lib/native-auth'
 import { Sheet } from './ui';
 
 export type Profile = { id: string; name: string; avatar_url: string | null };
-type Provider = 'google' | 'apple';
+type Provider = 'google' | 'apple' | 'email';
 type AuthValue = {
   userId: string | null;
   profile: Profile | null;
@@ -26,6 +26,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loginReason, setLoginReason] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<Provider | null>(null);
+  // Login por e-mail: caminho discreto, usado pelas contas de revisão das lojas.
+  // Google e Apple não dão credencial para entregar a um revisor, e as duas lojas
+  // exigem uma que elas mesmas possam usar.
+  const [emailForm, setEmailForm] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => listenNativeLogin(erro => {
     setBusy(null);
@@ -45,7 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { if (userId) void fetchProfile(userId).then(setLoaded); }, [userId]);
   const profile = loaded && loaded.id === userId ? loaded : null;
 
-  async function signIn(provider: Provider) {
+  async function signIn(provider: 'google' | 'apple') {
     setError('');
     setBusy(provider);
     try {
@@ -56,6 +62,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       setError(errorMessage(error));
     } finally { setBusy(null); }
+  }
+
+  async function signInWithEmail(evento: React.FormEvent) {
+    evento.preventDefault();
+    setError('');
+    setBusy('email');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setBusy(null);
+    if (error) setError(errorMessage(error)); else setLoginReason(null);
   }
 
   const value: AuthValue = {
@@ -73,6 +88,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         <p>{loginReason}</p>
         <button className="login-button" disabled={busy !== null} onClick={() => void signIn('google')}><GoogleIcon /> {busy === 'google' ? 'Entrando…' : 'Continuar com Google'}</button>
         <button className="login-button apple" disabled={busy !== null} onClick={() => void signIn('apple')}><AppleIcon /> {busy === 'apple' ? 'Entrando…' : 'Continuar com Apple'}</button>
+        {emailForm
+          ? <form className="email-login" onSubmit={evento => void signInWithEmail(evento)}>
+              <input type="email" required placeholder="E-mail" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />
+              <input type="password" required placeholder="Senha" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
+              <button className="button primary" type="submit" disabled={busy !== null}>{busy === 'email' ? 'Entrando…' : 'Entrar'}</button>
+            </form>
+          : <button className="text-button" onClick={() => { setError(''); setEmailForm(true); }}>Entrar com e-mail</button>}
         {error && <p className="form-error" role="alert">{error}</p>}
         <p className="footnote">Navegar pelo app continua livre. A conta só é usada para o chat e o fantasy.</p>
       </div>
