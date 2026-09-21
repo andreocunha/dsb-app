@@ -10,7 +10,7 @@ import { createSign } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
-const TEAM_ID = '96TBL54DM8';
+const TEAM_ID = '95TBL54DM8';
 const SERVICES_ID = 'br.com.desafiosolar.app.signin';
 const SEIS_MESES = 15777000; // máximo aceito pela Apple, em segundos
 
