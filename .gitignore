@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 !.env.example
 apple-secret.txt
+
+# chave de publicação do Android (nunca versionar)
+android/key.properties
+*.jks
+*.keystore

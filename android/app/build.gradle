@@ -1,5 +1,10 @@
 apply plugin: 'com.android.application'
 
+// Dados da chave de publicação ficam em android/key.properties (fora do git).
+def chaveArquivo = rootProject.file('key.properties')
+def chave = new Properties()
+if (chaveArquivo.exists()) chave.load(new FileInputStream(chaveArquivo))
+
 android {
     namespace = "br.com.desafiosolar.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +21,20 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (chave['storeFile']) {
+                storeFile rootProject.file(chave['storeFile'])
+                storePassword chave['storePassword']
+                keyAlias chave['keyAlias']
+                keyPassword chave['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            // Sem a chave configurada o build sai sem assinatura, em vez de falhar no meio.
+            if (chave['storeFile']) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
