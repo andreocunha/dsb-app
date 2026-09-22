@@ -45,38 +45,60 @@ e envie uma nova versão para as lojas. Também atualize:
 - Exclusão de conta dentro do app, denúncia e bloqueio no chat: o que as lojas exigem.
 - Política de privacidade em `/privacidade`.
 - Ícones e telas de abertura nativos gerados a partir de `assets/`.
+- Login por e-mail e senha, discreto, para as contas de revisão das lojas: Google e Apple não
+  entregam credencial que um revisor possa usar, e as duas lojas exigem uma.
+- Moderação do chat: `profiles.role = 'moderator'` apaga qualquer mensagem; os outros só as suas.
 
-## O que falta
+## Estado das lojas
+
+Ambas receberam a versão **1.0 (build 1)** em 22/09/2026 e estão em análise.
 
 ### Apple
-1. Registrar o App ID `br.com.desafiosolar.app` com **Sign In with Apple** e **Push Notifications**.
-2. Criar um **Services ID** (ex.: `br.com.desafiosolar.app.signin`) com o domínio do site e a
-   URL de retorno `https://ztzmvdmggxyokfbakajq.supabase.co/auth/v1/callback`.
-3. Criar uma **chave (.p8)** para Sign In with Apple e cadastrar no Supabase
-   (Authentication → Providers → Apple). A chave e o segredo são baixados e colados por você.
-4. Criar uma **chave APNs (.p8)** e subir no Firebase, para as notificações no iPhone.
-5. App Store Connect: criar o app, preencher ficha, privacidade e enviar para revisão.
+Tudo preenchido: ficha, privacidade do app (6 tipos de dado, todos ligados à identidade,
+nenhum para rastreamento), classificação **13+** (a calculadora da Apple dava 4+, mas o chat
+aberto pede o mesmo 13+ declarado no Play), preço **grátis** em todos os países, direitos de
+conteúdo como "tenho os direitos necessários" (o app usa a marca do evento e mostra fotos e
+vídeos enviados por usuários) e dados de acesso para o revisor.
+
+O alvo do Xcode continua chamado `App` — renomeá-lo quebraria as referências do projeto e do
+Capacitor. Quem define o nome que aparece é `PRODUCT_NAME = DSB`.
 
 ### Google Play
-1. Criar o app no Play Console com o pacote `br.com.desafiosolar.app`.
-2. Ativar o Play App Signing e pegar o **SHA-1 da chave de publicação**.
-3. Formulário de segurança de dados e classificação indicativa.
-4. Conta pessoal nova exige **teste fechado com 12 testadores por 14 dias** antes de publicar.
+Publicado direto em produção pela conta de organização, que não exige o teste fechado com
+12 testadores por 14 dias.
 
-### Notificações
+## Capturas de tela para as lojas
+
+Gerar pelo site, com Chrome headless na medida da tela pedida — é mais fiel e mais rápido do
+que tirar print do aparelho:
+
+```js
+await p.setViewport({ width: 1024, height: 1366, deviceScaleFactor: 2 }); // iPad 13" -> 2048x2732
+await p.goto('https://dsb.app.br/');
+await p.screenshot({ path: 'ipad.png' });
+```
+
+- iPhone 6,5": **1242 × 2688**. iPad 13": **2048 × 2732**. Play: **1080 × 1920** (9:16).
+- O iPad só é exigido porque o app é universal (`TARGETED_DEVICE_FAMILY = "1,2"`).
+- Esconda o botão "Instalar aplicativo" antes do clique: é do PWA e não existe no app nativo.
+- Chat e fantasy ficam com muita área vazia em tela de iPad; a home com o mapa rende melhor.
+
+## Notificações
 
 Pronto: Firebase criado, `google-services.json` e `GoogleService-Info.plist` nos projetos nativos,
 chave APNs enviada ao Firebase, `NEXT_PUBLIC_PUSH_ENABLED=true`, Edge Function `send-push` publicada
 e agendamento no banco (`cron.job` "avisos-das-provas", a cada 5 minutos).
 
-Falta só colocar os segredos, que são seus e não passam por aqui:
+Os segredos já estão postos e o envio foi confirmado em aparelho Android:
 
-1. Supabase → Edge Functions → Secrets:
-   - `FCM_SERVICE_ACCOUNT`: o JSON da conta de serviço do Firebase
-     (Firebase → Configurações do projeto → Contas de serviço → Gerar nova chave privada).
-   - `CRON_SECRET`: uma senha qualquer que você inventar.
-2. Supabase → Integrations → Vault: criar o segredo `cron_secret` com **o mesmo valor** do `CRON_SECRET`.
-   É por ele que o agendamento se identifica na função.
+- Supabase → Edge Functions → Secrets: `FCM_SERVICE_ACCOUNT` (JSON da conta de serviço do
+  Firebase) e `CRON_SECRET`.
+- Supabase → Integrations → Vault: `cron_secret`, com **o mesmo valor** do `CRON_SECRET`.
+  É por ele que o agendamento se identifica na função.
+
+Duas armadilhas que custaram tempo: o `pg_net` instala em `net.http_post`, não em
+`extensions.http_post`; e sem o `aps-environment` no `ios/App/App/App.entitlements` o iOS não
+entrega notificação nenhuma, por mais certo que esteja o Firebase.
 
 Para mandar um recado manual para todo mundo, chame a função com
 `{"modo":"aviso","titulo":"...","texto":"..."}` e o cabeçalho `x-cron-secret`.
