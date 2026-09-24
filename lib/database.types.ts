@@ -49,9 +49,9 @@ export type Database = {
         Relationships: []
       }
       profiles: {
-        Row: { avatar_url: string | null; created_at: string; id: string; name: string; role: string }
-        Insert: { avatar_url?: string | null; created_at?: string; id: string; name: string; role?: string }
-        Update: { avatar_url?: string | null; created_at?: string; id?: string; name?: string; role?: string }
+        Row: { avatar_url: string | null; banned_at: string | null; banned_by: string | null; created_at: string; id: string; name: string; role: string; terms_accepted_at: string | null }
+        Insert: { avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id: string; name: string; role?: string; terms_accepted_at?: string | null }
+        Update: { avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id?: string; name?: string; role?: string; terms_accepted_at?: string | null }
         Relationships: []
       }
       push_devices: {
@@ -100,6 +100,8 @@ export type Database = {
       }
     }
     Functions: {
+      accept_terms: { Args: { p_accepted_at?: string }; Returns: undefined }
+      ban_user: { Args: { p_user_id: string }; Returns: undefined }
       chat_messages: {
         Args: { p_before?: number; p_limit?: number }
         Returns: {

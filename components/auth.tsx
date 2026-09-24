@@ -20,6 +20,18 @@ export const useAuth = () => useContext(AuthContext);
 const fetchProfile = async (id: string) =>
   (await supabase.from('profiles').select('id, name, avatar_url, role').eq('id', id).maybeSingle()).data;
 
+// O aceite acontece antes de haver sessão, e o login com Google recarrega a página.
+// A data fica guardada aqui até dar para registrá-la no perfil.
+const ACCEPT_KEY = 'dsb.termos-aceitos-em';
+const markAccepted = () => { try { localStorage.setItem(ACCEPT_KEY, new Date().toISOString()); } catch { /* janela anônima */ } };
+async function saveAcceptance() {
+  let when: string | null = null;
+  try { when = localStorage.getItem(ACCEPT_KEY); } catch { /* janela anônima */ }
+  if (!when) return;
+  const { error } = await supabase.rpc('accept_terms', { p_accepted_at: when });
+  if (!error) { try { localStorage.removeItem(ACCEPT_KEY); } catch { /* janela anônima */ } }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<Profile | null>(null);
@@ -32,6 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [emailForm, setEmailForm] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // A App Store exige (diretriz 1.2) que quem publica conteúdo aceite os termos antes de entrar.
+  const [accepted, setAccepted] = useState(false);
 
   useEffect(() => listenNativeLogin(erro => {
     setBusy(null);
@@ -48,11 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const reloadProfile = useCallback(async () => {
     if (userId) setLoaded(await fetchProfile(userId));
   }, [userId]);
-  useEffect(() => { if (userId) void fetchProfile(userId).then(setLoaded); }, [userId]);
+  useEffect(() => { if (userId) { void fetchProfile(userId).then(setLoaded); void saveAcceptance(); } }, [userId]);
   const profile = loaded && loaded.id === userId ? loaded : null;
 
   async function signIn(provider: 'google' | 'apple') {
     setError('');
+    markAccepted();
     setBusy(provider);
     try {
       // No app das lojas o login é pela tela nativa; no navegador, pelo fluxo web.
@@ -67,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signInWithEmail(evento: React.FormEvent) {
     evento.preventDefault();
     setError('');
+    markAccepted();
     setBusy('email');
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(null);
@@ -86,13 +102,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <Sheet open={loginReason !== null} onClose={() => setLoginReason(null)} title="Entrar no DSB">
       <div className="login">
         <p>{loginReason}</p>
-        <button className="login-button" disabled={busy !== null} onClick={() => void signIn('google')}><GoogleIcon /> {busy === 'google' ? 'Entrando…' : 'Continuar com Google'}</button>
-        <button className="login-button apple" disabled={busy !== null} onClick={() => void signIn('apple')}><AppleIcon /> {busy === 'apple' ? 'Entrando…' : 'Continuar com Apple'}</button>
+        <label className="terms-check">
+          <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} />
+          <span>
+            Li e aceito os <a className="text-link" href="/termos" target="_blank" rel="noreferrer">termos de uso</a> e a{' '}
+            <a className="text-link" href="/privacidade" target="_blank" rel="noreferrer">política de privacidade</a>.
+            O chat não tolera conteúdo ofensivo nem gente abusiva: quem publicar tem a conta banida.
+          </span>
+        </label>
+        <button className="login-button" disabled={!accepted || busy !== null} onClick={() => void signIn('google')}><GoogleIcon /> {busy === 'google' ? 'Entrando…' : 'Continuar com Google'}</button>
+        <button className="login-button apple" disabled={!accepted || busy !== null} onClick={() => void signIn('apple')}><AppleIcon /> {busy === 'apple' ? 'Entrando…' : 'Continuar com Apple'}</button>
         {emailForm
           ? <form className="email-login" onSubmit={evento => void signInWithEmail(evento)}>
               <input type="email" required placeholder="E-mail" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />
               <input type="password" required placeholder="Senha" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
-              <button className="button primary" type="submit" disabled={busy !== null}>{busy === 'email' ? 'Entrando…' : 'Entrar'}</button>
+              <button className="button primary" type="submit" disabled={!accepted || busy !== null}>{busy === 'email' ? 'Entrando…' : 'Entrar'}</button>
             </form>
           : <button className="text-button" onClick={() => { setError(''); setEmailForm(true); }}>Entrar com e-mail</button>}
         {error && <p className="form-error" role="alert">{error}</p>}

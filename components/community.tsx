@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, Ban, Download, FileText, Flag, Info, LogIn, Paperclip, Pin, Play, Send, Smile, Sun, Trash2, X } from 'lucide-react';
+import { ArrowDown, Ban, Download, FileText, Flag, Info, LogIn, Paperclip, Pin, Play, Send, Smile, Sun, Trash2, UserX, X } from 'lucide-react';
 import type { Database } from '@/lib/database.types';
 import { registerOverlay } from '@/lib/overlays';
 import { shortName } from '@/lib/names';
@@ -195,8 +195,19 @@ export function Community() {
     setActive(null);
     const { error } = await supabase.from('user_blocks').insert({ blocked_id: message.user_id });
     if (error && error.code !== '23505') { notify(errorMessage(error)); return; }
+    // A App Store exige que bloquear também avise a organização sobre o conteúdo.
+    void supabase.rpc('report_message', { p_message_id: message.id, p_reason: 'bloqueio' });
     setBlocked(current => [...current, message.user_id]);
-    notify(`Você não verá mais mensagens de ${message.author_name}.`);
+    notify(`Você não verá mais mensagens de ${message.author_name}. A organização foi avisada.`);
+  }
+
+  async function ban(message: Message) {
+    setActive(null);
+    const { error } = await supabase.rpc('ban_user', { p_user_id: message.user_id });
+    if (error) { notify(errorMessage(error)); return; }
+    setMessages(current => current.map(m => m.user_id !== message.user_id || m.deleted_at ? m
+      : { ...m, deleted_at: new Date().toISOString(), deleted_by: userId, body: null, file_path: null, thumb_path: null, file_name: null, file_type: null, reactions: [] }));
+    notify(`${shortName(message.author_name)} foi banido do chat e as mensagens saíram do ar.`);
   }
 
   function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -241,7 +252,10 @@ export function Community() {
                   : <>
                     <button className="icon-button" onClick={() => void report(message)} aria-label="Denunciar mensagem"><Flag size={16} /></button>
                     <button className="icon-button" onClick={() => void block(message)} aria-label={`Bloquear ${message.author_name}`}><Ban size={16} /></button>
-                    {moderador && <button className="icon-button danger" onClick={() => void remove(message)} aria-label="Remover mensagem (moderação)"><Trash2 size={16} /></button>}
+                    {moderador && <>
+                      <button className="icon-button danger" onClick={() => void remove(message)} aria-label="Remover mensagem (moderação)"><Trash2 size={16} /></button>
+                      <button className="icon-button danger" onClick={() => void ban(message)} aria-label={`Banir ${message.author_name} do chat`}><UserX size={16} /></button>
+                    </>}
                   </>}
               </div>}
               <div className={`bubble ${message.deleted_at ? 'deleted' : ''}`} role={message.deleted_at ? undefined : 'button'} tabIndex={message.deleted_at ? undefined : 0} aria-label={message.deleted_at ? undefined : 'Ações da mensagem'}
@@ -297,7 +311,8 @@ export function Community() {
           <li>Evite spam e a divulgação de informações pessoais.</li>
           <li>Toque em uma mensagem para reagir, denunciar ou bloquear quem estiver incomodando.</li>
         </ul>
-        <p className="footnote">Mensagens denunciadas são revisadas pela organização e podem ser removidas.</p>
+        <p>Não há tolerância com ofensa nem com discurso de ódio. Denúncias são analisadas em até 24 horas: a mensagem sai do ar e a conta responsável é banida do chat.</p>
+        <p className="footnote">Ao entrar você aceitou os <a className="text-link" href="/termos" target="_blank" rel="noreferrer">termos de uso</a>.</p>
       </div>
     </Sheet>
   </section>;

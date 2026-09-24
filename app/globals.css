@@ -52,6 +52,9 @@ img.avatar { object-fit: cover; }
 .form-error { color: var(--danger); font-size: 13px; }
 .login { display: flex; flex-direction: column; gap: 10px; }
 .login > p:first-child { margin-bottom: 6px; color: var(--text-secondary); }
+.terms-check { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; color: var(--text-secondary); font-size: 13px; line-height: 1.45; cursor: pointer; }
+.terms-check input { flex-shrink: 0; width: 18px; height: 18px; margin-top: 1px; accent-color: var(--brand); }
+.login-button:disabled { opacity: .5; }
 .login-button { display: flex; align-items: center; justify-content: center; gap: 10px; height: 48px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface); font-size: 15px; font-weight: 600; }
 .login-button:hover { background: var(--surface-hover); }
 .login-button.apple { border-color: #000; background: #000; color: #fff; }
