@@ -422,7 +422,8 @@ img.avatar { object-fit: cover; }
 
 /* Login por e-mail (contas de revisão das lojas). */
 .email-login { display: flex; flex-direction: column; gap: 8px; }
-.email-login input { height: 44px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); }
+/* 16px evita o zoom automático que o iOS dá ao focar campos com fonte menor. */
+.email-login input { height: 44px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); font-size: 16px; }
 .email-login .button { height: 44px; }
 .icon-button.danger { color: var(--danger); }
 .icon-button.danger:hover { background: var(--danger-soft); color: var(--danger); }
