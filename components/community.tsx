@@ -312,7 +312,7 @@ export function Community() {
           <li>Toque em uma mensagem para reagir, denunciar ou bloquear quem estiver incomodando.</li>
         </ul>
         <p>Não há tolerância com ofensa nem com discurso de ódio. Denúncias são analisadas em até 24 horas: a mensagem sai do ar e a conta responsável é banida do chat.</p>
-        <p className="footnote">Ao entrar você aceitou os <a className="text-link" href="/termos" target="_blank" rel="noreferrer">termos de uso</a>.</p>
+        <p className="footnote">Ao entrar você aceitou os <a className="text-link" href="/termos/">termos de uso</a>.</p>
       </div>
     </Sheet>
   </section>;

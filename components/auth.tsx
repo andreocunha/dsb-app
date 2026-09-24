@@ -105,8 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         <label className="terms-check">
           <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} />
           <span>
-            Li e aceito os <a className="text-link" href="/termos" target="_blank" rel="noreferrer">termos de uso</a> e a{' '}
-            <a className="text-link" href="/privacidade" target="_blank" rel="noreferrer">política de privacidade</a>.
+            Li e aceito os <a className="text-link" href="/termos/">termos de uso</a> e a{' '}
+            <a className="text-link" href="/privacidade/">política de privacidade</a>.
             O chat não tolera conteúdo ofensivo nem gente abusiva: quem publicar tem a conta banida.
           </span>
         </label>
