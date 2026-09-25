@@ -51,9 +51,14 @@ e envie uma nova versão para as lojas. Também atualize:
 
 ## Estado das lojas
 
-Ambas receberam a versão **1.0 (build 1)** em 22/09/2026 e estão em análise.
+Ambas receberam a versão **1.0 (build 1)** em 22/09/2026 e estão em análise. Nenhuma das duas
+chegou às lojas ainda: enquanto a análise não termina, as páginas públicas respondem 404.
 
 ### Apple
+Recusada em 24/09 na diretriz 1.2 (conteúdo de usuário): faltavam o aceite dos termos e um
+filtro. Os dois foram feitos, respondemos com uma gravação de tela e reenviamos a mesma
+compilação — como o app carrega o site, a correção já vale no binário que eles têm.
+
 Tudo preenchido: ficha, privacidade do app (6 tipos de dado, todos ligados à identidade,
 nenhum para rastreamento), classificação **13+** (a calculadora da Apple dava 4+, mas o chat
 aberto pede o mesmo 13+ declarado no Play), preço **grátis** em todos os países, direitos de
@@ -64,8 +69,19 @@ O alvo do Xcode continua chamado `App` — renomeá-lo quebraria as referências
 Capacitor. Quem define o nome que aparece é `PRODUCT_NAME = DSB`.
 
 ### Google Play
-Publicado direto em produção pela conta de organização, que não exige o teste fechado com
-12 testadores por 14 dias.
+Enviado direto para produção (lançamento total, só Brasil) pela conta de organização, que não
+exige o teste fechado com 12 testadores por 14 dias. **Em análise desde 22/09/2026** — enquanto
+o Google não aprova, a página da loja responde 404, e isso é o esperado.
+
+Para saber se saiu de verdade, o teste honesto é a página pública, não o console:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "https://play.google.com/store/apps/details?id=br.com.desafiosolar.app"
+```
+
+200 significa no ar; 404, ainda não. Compare sempre com um app conhecido (`com.whatsapp`),
+porque o Google também devolve 404 quando bloqueia a requisição.
 
 ## Capturas de tela para as lojas
 
