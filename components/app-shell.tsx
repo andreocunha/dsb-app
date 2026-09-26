@@ -10,7 +10,7 @@ import { useLocalState } from '@/lib/local-state';
 import { supabase } from '@/lib/supabase';
 import { shortName } from '@/lib/names';
 import { closeTopOverlay } from '@/lib/overlays';
-import { listenBackButton, paintStatusBar } from '@/lib/system-ui';
+import { hideSplash, listenBackButton, paintStatusBar } from '@/lib/system-ui';
 import { registerPush } from '@/lib/push';
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 type AppValue = { theme: string; setTheme: (theme: string) => void; notify: (message: string) => void };
@@ -103,6 +103,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('online', updateOnline); window.addEventListener('offline', updateOnline); window.addEventListener('beforeinstallprompt', beforeInstall);
     updateOnline();
     if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator && !Capacitor.isNativePlatform()) navigator.serviceWorker.register('/sw.js').catch(error => console.warn('Não foi possível preparar o modo offline:', error));
+    // A tela de abertura fica segurada até aqui, que é quando já há interface para mostrar.
+    void hideSplash();
     return () => { window.removeEventListener('online', updateOnline); window.removeEventListener('offline', updateOnline); window.removeEventListener('beforeinstallprompt', beforeInstall); };
   }, []);
   async function install() {

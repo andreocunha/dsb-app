@@ -18,5 +18,17 @@ const config: CapacitorConfig = {
     errorPath: '/offline.html',
   },
   ios: { contentInset: 'never' },
+  plugins: {
+    SplashScreen: {
+      // O app carrega um site: sem segurar, a abertura apaga antes de haver o que mostrar
+      // e sobra um retângulo da cor de fundo. Quem esconde é hideSplash(), já com interface.
+      launchAutoHide: false,
+      // Rede ruim não pode deixar ninguém preso na tela de abertura.
+      launchShowDuration: 5000,
+      backgroundColor: '#422378',
+      showSpinner: false,
+      androidScaleType: 'CENTER_CROP',
+    },
+  },
 };
 export default config;

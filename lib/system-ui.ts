@@ -19,6 +19,21 @@ export async function paintStatusBar(theme: string) {
   }
 }
 
+/**
+ * Esconde a tela de abertura, que fica segurada até aqui (`launchAutoHide: false`).
+ * Sem isso o app mostra a splash, apaga, e deixa um retângulo da cor de fundo no ar
+ * enquanto o site carrega. Chamar quando a interface já tem o que mostrar.
+ */
+export async function hideSplash() {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const { SplashScreen } = await import('@capacitor/splash-screen');
+    await SplashScreen.hide({ fadeOutDuration: 250 });
+  } catch {
+    // Some sozinha pelo launchFadeOutDuration: melhor do que arriscar travar o app aqui.
+  }
+}
+
 /** Botão físico de voltar do Android. */
 export function listenBackButton(onBack: () => void) {
   if (!Capacitor.isNativePlatform()) return () => {};
