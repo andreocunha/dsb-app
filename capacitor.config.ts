@@ -27,7 +27,12 @@ const config: CapacitorConfig = {
       launchShowDuration: 5000,
       backgroundColor: '#422378',
       showSpinner: false,
-      androidScaleType: 'CENTER_CROP',
+      // As imagens já vêm no tamanho de cada tela, com margem: encaixar inteiro evita
+      // cortar a arte em proporções que fogem do previsto.
+      androidScaleType: 'CENTER_INSIDE',
+      // No Android 12+ quem abre é a tela do sistema, que só aceita cor e ícone. A arte
+      // com o nome do evento entra logo depois, nesta, e é ela que segura até o app carregar.
+      androidSplashResourceName: 'splash',
     },
   },
 };
