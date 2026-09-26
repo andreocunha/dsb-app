@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack && node scripts/build-service-worker.mjs",
+    "build": "next build --webpack",
     "start": "node scripts/serve.mjs",
     "lint": "eslint",
     "prebuild": "node scripts/generate-icons.mjs",
