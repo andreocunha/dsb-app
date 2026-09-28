@@ -60,22 +60,40 @@ export type Database = {
         Update: { platform?: string; token?: string; updated_at?: string; user_id?: string | null }
         Relationships: []
       }
-      race_results: {
-        Row: { points: number; race_id: string; team_id: string }
-        Insert: { points?: number; race_id: string; team_id: string }
-        Update: { points?: number; race_id?: string; team_id?: string }
+      match_duels: {
+        Row: { race_id: string; slot: number; stage: string; team_a: string | null; team_b: string | null; time_a: number | null; time_b: number | null }
+        Insert: { race_id: string; slot: number; stage: string; team_a?: string | null; team_b?: string | null; time_a?: number | null; time_b?: number | null }
+        Update: { race_id?: string; slot?: number; stage?: string; team_a?: string | null; team_b?: string | null; time_a?: number | null; time_b?: number | null }
+        Relationships: []
+      }
+      penalties: {
+        Row: { created_at: string; id: number; points: number; race_id: string | null; reason: string; team_id: string }
+        Insert: { created_at?: string; points: number; race_id?: string | null; reason: string; team_id: string }
+        Update: { created_at?: string; points?: number; race_id?: string | null; reason?: string; team_id?: string }
+        Relationships: []
+      }
+      race_laps: {
+        Row: { completed_at: string; race_id: string; team_id: string }
+        Insert: { completed_at: string; race_id: string; team_id: string }
+        Update: { completed_at?: string; race_id?: string; team_id?: string }
+        Relationships: []
+      }
+      race_status: {
+        Row: { note: string; position: number | null; race_id: string; status: string; team_id: string }
+        Insert: { note?: string; position?: number | null; race_id: string; status?: string; team_id: string }
+        Update: { note?: string; position?: number | null; race_id?: string; status?: string; team_id?: string }
         Relationships: []
       }
       races: {
-        Row: { id: string; name: string; number: number; starts_at: string }
-        Insert: { id: string; name: string; number: number; starts_at: string }
-        Update: { id?: string; name?: string; number?: number; starts_at?: string }
+        Row: { duration_minutes: number | null; id: string; kind: string; name: string; number: number; started_at: string | null; starts_at: string }
+        Insert: { duration_minutes?: number | null; id: string; kind?: string; name: string; number: number; started_at?: string | null; starts_at: string }
+        Update: { duration_minutes?: number | null; id?: string; kind?: string; name?: string; number?: number; started_at?: string | null; starts_at?: string }
         Relationships: []
       }
       teams: {
-        Row: { active: boolean; color: string; id: string; initials: string; logo: string | null; name: string; university: string }
-        Insert: { active?: boolean; color?: string; id: string; initials: string; logo?: string | null; name: string; university?: string }
-        Update: { active?: boolean; color?: string; id?: string; initials?: string; logo?: string | null; name?: string; university?: string }
+        Row: { active: boolean; article_delivered: boolean; color: string; docs_delivered: number; id: string; initials: string; logo: string | null; name: string; university: string }
+        Insert: { active?: boolean; article_delivered?: boolean; color?: string; docs_delivered?: number; id: string; initials: string; logo?: string | null; name: string; university?: string }
+        Update: { active?: boolean; article_delivered?: boolean; color?: string; docs_delivered?: number; id?: string; initials?: string; logo?: string | null; name?: string; university?: string }
         Relationships: []
       }
       user_blocks: {
@@ -86,14 +104,38 @@ export type Database = {
       }
     }
     Views: {
+      race_results: {
+        Row: { points: number | null; race_id: string | null; team_id: string | null }
+        Relationships: []
+      }
+      race_scores: {
+        Row: {
+          duel_time: number | null
+          last_lap_at: string | null
+          laps: number | null
+          note: string | null
+          points: number | null
+          position: number | null
+          race_id: string | null
+          stage: string | null
+          status: string | null
+          team_id: string | null
+        }
+        Relationships: []
+      }
       team_standings: {
         Row: {
+          article_delivered: boolean | null
           color: string | null
+          docs_delivered: number | null
           id: string | null
           initials: string | null
           logo: string | null
           name: string | null
+          penalty_points: number | null
           points: number | null
+          race_points: number | null
+          tiebreak_position: number | null
           university: string | null
         }
         Relationships: []
@@ -130,6 +172,7 @@ export type Database = {
         Args: { p_limit?: number }
         Returns: { avatar_url: string; name: string; points: number; position: number; user_id: string }[]
       }
+      placement_points: { Args: { p_position: number }; Returns: number }
       message_reactors: {
         Args: { p_message_id: number }
         Returns: { avatar_url: string; emoji: string; name: string; user_id: string }[]

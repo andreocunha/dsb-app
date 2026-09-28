@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, Clock3, Maximize2, PictureInPicture2, Radio, Trophy, X } from 'lucide-react';
-import { useRaces, useTeams } from '@/lib/data';
+import { useRaces } from '@/lib/data';
 import { hasStarted, nextRace, raceDate, raceTime, useNow } from '@/lib/races';
 import { eventConfig, youtubeEmbedUrl } from '@/lib/event-config';
-import { TeamBadge } from './ui';
+import { ResultsSheet } from './results';
 
 // A live fica em tela cheia sobre o mapa ou num mini player (PiP) no canto.
 type LiveMode = 'off' | 'full' | 'pip';
@@ -30,11 +30,10 @@ export function Dashboard() {
             </p>
           </> : <><span className="eyebrow">Desafio Solar Brasil</span><h1>Carregando provas…</h1><p>&nbsp;</p></>}
           <div className="hud-actions">
-            <button aria-pressed={results} aria-controls="results-panel" onClick={() => setResults(!results)}><Trophy size={16} /> Resultado</button>
+            <button aria-haspopup="dialog" onClick={() => setResults(true)}><Trophy size={16} /> Resultado</button>
             <button aria-pressed={live !== 'off'} onClick={() => setLive(live === 'off' ? 'full' : 'off')}><Radio size={16} /> Live</button>
           </div>
         </section>
-        {results && <Results onClose={() => setResults(false)} />}
       </div>
 
       <div className="home-stage">
@@ -48,28 +47,8 @@ export function Dashboard() {
         />
         {live !== 'off' && <Live mode={live} raceName={race?.name ?? 'Desafio Solar Brasil'} setMode={setLive} />}
       </div>
+      <ResultsSheet open={results} onClose={() => setResults(false)} />
     </div>
-  );
-}
-
-function Results({ onClose }: { onClose: () => void }) {
-  const { data: teams, error } = useTeams();
-  const standings = [...(teams ?? [])].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name, 'pt-BR'));
-  return (
-    <section id="results-panel" className="hud-card results-card" aria-label="Classificação geral">
-      <div className="hud-card-title"><h2>Classificação geral</h2><button className="icon-button" onClick={onClose} aria-label="Fechar classificação"><X size={18} /></button></div>
-      {!teams && <p className="panel-note">{error ? 'Não foi possível carregar a classificação.' : 'Carregando…'}</p>}
-      <ol className="results">
-        {standings.map((team, index) => (
-          <li key={team.id}>
-            <span className="position">{index + 1}</span>
-            <TeamBadge team={team} small />
-            <span className="results-team"><strong>{team.name}</strong>{team.university && <small>{team.university}</small>}</span>
-            <strong>{team.points}<small> pts</small></strong>
-          </li>
-        ))}
-      </ol>
-    </section>
   );
 }
 

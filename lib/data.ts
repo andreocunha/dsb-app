@@ -2,8 +2,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 
-export type Team = { id: string; name: string; university: string; initials: string; color: string; logo: string | null; points: number };
-export type Race = { id: string; number: number; name: string; starts_at: string };
+/** Linha de team_standings: `points` já soma provas, documentação, artigo e penalidades. */
+export type Team = {
+  id: string; name: string; university: string; initials: string; color: string; logo: string | null; points: number;
+  race_points: number; docs_delivered: number; article_delivered: boolean; penalty_points: number; tiebreak_position: number | null;
+};
+export type Race = { id: string; number: number; name: string; starts_at: string; kind: 'laps' | 'bracket'; duration_minutes: number | null; started_at: string | null };
 
 export type RaceResult = { race_id: string; team_id: string; points: number };
 
@@ -37,7 +41,7 @@ const teamsStore = cached(async () => {
 const racesStore = cached(async () => {
   const { data, error } = await supabase.from('races').select('*').order('number');
   if (error) throw error;
-  return data;
+  return data as Race[];
 });
 
 export const useTeams = () => useCached(teamsStore);
@@ -47,7 +51,7 @@ export function useRaceResults() {
   const [results, setResults] = useState<RaceResult[] | null>(null);
   useEffect(() => {
     let alive = true;
-    void supabase.from('race_results').select('race_id, team_id, points').then(({ data }) => { if (alive) setResults(data ?? []); });
+    void supabase.from('race_results').select('race_id, team_id, points').then(({ data }) => { if (alive) setResults((data ?? []) as RaceResult[]); });
     return () => { alive = false; };
   }, []);
   return results;
