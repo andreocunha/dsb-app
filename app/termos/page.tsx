@@ -25,7 +25,7 @@ export default function Page() {
       <h2>O que você pode fazer</h2>
       <ul>
         <li><strong>Denunciar:</strong> toque na mensagem e escolha denunciar. A organização recebe na hora.</li>
-        <li><strong>Bloquear:</strong> toque na mensagem e bloqueie quem escreveu. As mensagens dessa pessoa somem do seu chat na mesma hora, e a organização é avisada.</li>
+        <li><strong>Bloquear:</strong> toque na mensagem e bloqueie quem escreveu. As mensagens dessa pessoa somem do seu chat na mesma hora, e a organização é avisada. Para desbloquear, abra as regras do chat (ícone ⓘ) e toque em Desbloquear.</li>
         <li><strong>Sair:</strong> em <strong>Configurações → Sua conta → Excluir conta</strong> você apaga perfil, mensagens e arquivos de uma vez.</li>
       </ul>
 

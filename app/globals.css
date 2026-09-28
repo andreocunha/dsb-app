@@ -622,6 +622,8 @@ button.race-row:disabled { cursor: default; }
 .prose { display: flex; flex-direction: column; gap: 12px; color: var(--text-secondary); }
 .prose strong { color: var(--text); }
 .prose ul { display: flex; flex-direction: column; gap: 6px; padding-left: 20px; color: var(--text); }
+.prose h3 { margin-top: 6px; color: var(--text); font-size: 15px; font-weight: 600; }
+.prose .reactors { padding-left: 0; }
 
 /* ---------- Toast ---------- */
 .toast { position: fixed; left: calc(50% + var(--sidebar-w) / 2); bottom: calc(var(--nav-h) + 16px); z-index: 50; display: flex; align-items: center; gap: 10px; width: max-content; max-width: calc(100% - 32px); padding: 10px 10px 10px 14px; border-radius: 12px; background: var(--text); color: var(--background); box-shadow: var(--shadow); transform: translateX(-50%); font-size: 13px; }

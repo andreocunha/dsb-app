@@ -201,6 +201,12 @@ export function Community() {
     notify(`Você não verá mais mensagens de ${message.author_name}. A organização foi avisada.`);
   }
 
+  async function unblock(id: string) {
+    const { error } = await supabase.from('user_blocks').delete().eq('blocked_id', id);
+    if (error) { notify(errorMessage(error)); return; }
+    setBlocked(current => current.filter(b => b !== id));
+  }
+
   async function ban(message: Message) {
     setActive(null);
     const { error } = await supabase.rpc('ban_user', { p_user_id: message.user_id });
@@ -309,9 +315,10 @@ export function Community() {
           <li>Respeite as pessoas e todas as equipes.</li>
           <li>Mantenha a conversa relacionada ao evento.</li>
           <li>Evite spam e a divulgação de informações pessoais.</li>
-          <li>Toque em uma mensagem para reagir, denunciar ou bloquear quem estiver incomodando.</li>
+          <li>Toque em uma mensagem para reagir, denunciar ou bloquear quem estiver incomodando. Quem você bloqueou aparece aqui embaixo, para desbloquear quando quiser.</li>
         </ul>
         <p>Não há tolerância com ofensa nem com discurso de ódio. Denúncias são analisadas em até 24 horas: a mensagem sai do ar e a conta responsável é banida do chat.</p>
+        {blocked.length > 0 && <Blocked ids={blocked} onUnblock={id => void unblock(id)} />}
         <p className="footnote">Ao entrar você aceitou os <a className="text-link" href="/termos/">termos de uso</a>.</p>
       </div>
     </Sheet>
@@ -363,6 +370,28 @@ function Viewer({ message, onClose }: { message: Message | null; onClose: () => 
         : <img src={url} alt={message.file_name ?? ''} />}
     </>}
   </dialog>;
+}
+
+function Blocked({ ids, onUnblock }: { ids: string[]; onUnblock: (id: string) => void }) {
+  const [people, setPeople] = useState<{ id: string; name: string; avatar_url: string | null }[]>([]);
+  const key = ids.join();
+  useEffect(() => {
+    void supabase.from('profiles').select('id, name, avatar_url').in('id', key.split(',')).then(({ data }) => setPeople(data ?? []));
+  }, [key]);
+  return <>
+    <h3>Pessoas bloqueadas</h3>
+    <ul className="reactors">
+      {ids.map(id => {
+        const person = people.find(p => p.id === id);
+        const name = person ? shortName(person.name) : 'Carregando…';
+        return <li key={id}>
+          <Avatar id={id} name={person?.name ?? '?'} url={person?.avatar_url ?? null} small />
+          <span>{name}</span>
+          <button className="button" onClick={() => onUnblock(id)} aria-label={`Desbloquear ${name}`}>Desbloquear</button>
+        </li>;
+      })}
+    </ul>
+  </>;
 }
 
 function Reactors({ message, userId, onClose, onRemove }: { message: Message | null; userId: string | null; onClose: () => void; onRemove: (message: Message) => void }) {
