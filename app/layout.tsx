@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   description: "A energia do sol. A emoção da competição. Acompanhe o Desafio Solar Brasil, encontre a comunidade e monte seu fantasy.",
   applicationName: "DSB", appleWebApp: { capable: true, statusBarStyle: "default", title: "DSB" },
   icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
+  // Posse de dsb.app.br no Search Console, exigida para mostrar a marca no login com Google.
+  verification: { google: "W47X3qr-mr9EjeU-pE0M70iO6wIbampySybbudUQqP8" },
 };
 // A barra do navegador acompanha o tema, com as mesmas cores de --surface em theme.css.
 export const viewport: Viewport = {
