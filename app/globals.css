@@ -5,7 +5,10 @@
   /* Mobile: cabeçalho no topo e navegação embaixo. Desktop: sidebar. */
   --sidebar-w: 0px;
   --header-h: env(safe-area-inset-top); /* sem cabeçalho no mobile, só a área do notch */
-  --nav-h: calc(64px + env(safe-area-inset-bottom));
+  /* Android 8–14 com barra de navegação opaca: o sistema informa a altura dela, mas o app
+     não desenha por baixo. lib/system-ui.ts marca html.nav-solida e o recuo vira zero. */
+  --safe-bottom: env(safe-area-inset-bottom);
+  --nav-h: calc(64px + var(--safe-bottom));
 }
 @media (min-width: 900px) {
   :root { --sidebar-w: 240px; --header-h: 0px; --nav-h: 0px; }
@@ -83,7 +86,7 @@ img.avatar { object-fit: cover; }
 /* Telas que ocupam todo o espaço disponível (home e chat). */
 .main:has(> .fill) { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
 .fill { flex: 1; min-height: 0; }
-.mobile-nav { position: fixed; inset: auto 0 0; z-index: 20; display: grid; grid-template-columns: repeat(4, 1fr); height: var(--nav-h); padding-bottom: env(safe-area-inset-bottom); background: var(--surface); border-top: 1px solid var(--border); }
+.mobile-nav { position: fixed; inset: auto 0 0; z-index: 20; display: grid; grid-template-columns: repeat(4, 1fr); height: var(--nav-h); padding-bottom: var(--safe-bottom); background: var(--surface); border-top: 1px solid var(--border); }
 .mobile-nav a, .mobile-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--text-tertiary); font-size: 11px; font-weight: 500; }
 .mobile-nav a { position: relative; }
 .mobile-nav a .badge { position: absolute; top: 4px; left: calc(50% + 4px); }
@@ -253,7 +256,7 @@ img.avatar { object-fit: cover; }
 .viewer-bar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .viewer-bar .icon-button { color: #fff; }
 .viewer-bar .icon-button:hover { background: #ffffff1f; color: #fff; }
-.viewer img, .viewer video { flex: 1; min-height: 0; width: 100%; object-fit: contain; padding-bottom: env(safe-area-inset-bottom); }
+.viewer img, .viewer video { flex: 1; min-height: 0; width: 100%; object-fit: contain; padding-bottom: var(--safe-bottom); }
 .reactors { display: flex; flex-direction: column; gap: 4px; padding: 0; list-style: none; }
 .reactors li { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
 .reactors li span { flex: 1; display: flex; flex-direction: column; font-weight: 500; }
@@ -589,7 +592,7 @@ button.race-row:disabled { cursor: default; }
 .sheet-content { display: flex; flex-direction: column; max-height: 90dvh; overflow: hidden; padding-top: 8px; border-radius: 20px 20px 0 0; background: var(--surface); box-shadow: var(--sheet-shadow); }
 /* Alça e título: é por aqui que se arrasta para fechar, então não rolam junto. */
 .sheet-grab { flex-shrink: 0; padding: 0 20px; touch-action: none; user-select: none; -webkit-user-select: none; }
-.sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px calc(20px + env(safe-area-inset-bottom)); }
+.sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px calc(20px + var(--safe-bottom)); }
 .sheet-handle { display: block; width: 36px; height: 4px; margin: 0 auto 8px; border-radius: 4px; background: var(--border-strong); }
 .sheet-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 -8px 12px 0; }
 .sheet-title > div:first-child { min-width: 0; }
@@ -640,3 +643,5 @@ button.race-row:disabled { cursor: default; }
 .email-login .button { height: 44px; }
 .icon-button.danger { color: var(--danger); }
 .icon-button.danger:hover { background: var(--danger-soft); color: var(--danger); }
+
+html.nav-solida { --safe-bottom: 0px; }
