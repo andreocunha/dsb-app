@@ -104,9 +104,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // No HTML estático é sempre web; no app nativo corrige após hidratar.
   const native = useSyncExternalStore(noopSubscribe, () => Capacitor.isNativePlatform(), () => false);
   const active = (href: string) => href === '/' ? pathname === '/' : pathname.startsWith(href.slice(0, -1));
-  // O chat ocupa a tela toda no celular, como uma conversa do WhatsApp (sem a barra de navegação).
+  // As conversas vão até a borda de cima (os topos do chat já descontam o notch); ver chat.css.
   const immersive = active('/comunidade/');
-  useEffect(() => { document.documentElement.dataset.theme = theme; void paintStatusBar(theme, immersive ? '--wa-header' : '--surface'); }, [theme, immersive]);
+  useEffect(() => { document.documentElement.dataset.theme = theme; void paintStatusBar(theme); }, [theme]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4200); return () => clearTimeout(id); }, [toast]);
   // Voltar do Android: fecha a camada aberta, senão vai para a home, senão sai do app.
   useEffect(() => listenBackButton(async () => {
