@@ -465,6 +465,8 @@ export function Community() {
 
   return <section className={`chat fill ${info ? 'with-info' : ''}`} aria-label="Chat da comunidade">
     <div className="chat-main" onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={onDrop}>
+      {/* Atrás de tudo, inclusive da barra de digitar, que flutua sobre ele. */}
+      <div className="chat-wallpaper" aria-hidden />
       <header className="chat-header">
         <button className="icon-button chat-back only-mobile" onClick={() => router.replace('/')} aria-label="Voltar para o início"><ArrowLeft size={22} /></button>
         <button className="chat-title" onClick={() => setInfo('info')} aria-label="Dados do grupo">
@@ -487,7 +489,6 @@ export function Community() {
       </button>
 
       <div className="chat-body">
-        <div className="chat-wallpaper" aria-hidden />
         <div className="chat-messages" ref={list} onScroll={onScroll} role="log" aria-label="Mensagens da comunidade" aria-live="polite">
           {loadingOlder && <p className="chat-notice"><span className="spinner" /></p>}
           {status === 'loading' && <p className="chat-notice">Carregando conversa…</p>}

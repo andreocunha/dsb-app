@@ -74,8 +74,8 @@
  * --wa-name-0…11: cor do nome de cada pessoa no grupo (lib/chat-format.ts → nameColor).
  */
 :root {
-  --wa-bg: #efeae2;
-  --wa-doodle: #d6cdbd;
+  --wa-bg: #f5f2ec;
+  --wa-doodle: #e3ded4;
   --wa-in: #ffffff;
   --wa-out: #d9fdd3;
   --wa-text: #111b21;
@@ -109,7 +109,7 @@
 }
 [data-theme="dark"] {
   --wa-bg: #0b141a;
-  --wa-doodle: #17232a;
+  --wa-doodle: #16222a;
   --wa-in: #202c33;
   --wa-out: #005c4b;
   --wa-text: #e9edef;

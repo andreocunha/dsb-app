@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Camera, Check, FileText, Image as ImageIcon, Keyboard, Paperclip, Plus, SendHorizontal, Smile, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Camera, Check, FileText, Image as ImageIcon, Keyboard, Paperclip, SendHorizontal, Smile, X } from 'lucide-react';
 import { EmojiPicker } from './emoji-picker';
 import { Quote } from './message';
 import { toReply, type Message } from './types';
@@ -10,6 +10,8 @@ export type ComposeContext = { kind: 'reply' | 'edit'; message: Message } | null
 const MAX_LINES = 6;
 const desktop = () => window.matchMedia('(min-width: 900px)').matches;
 const hasKeyboard = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+const WIDE = '(min-width: 900px)';
+const onWideChange = (notify: () => void) => { const query = window.matchMedia(WIDE); query.addEventListener('change', notify); return () => query.removeEventListener('change', notify); };
 
 /** Barra de digitar: pílula com emoji, texto e anexos no celular; barra inteira no desktop (WhatsApp Web). */
 export function Compose({ text, setText, context, userId, inputRef, onCancelContext, onSubmit, onFile, onTyping }: {
@@ -24,6 +26,8 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
   const camera = useRef<HTMLInputElement>(null);
   const editing = context?.kind === 'edit';
   const empty = !text.trim();
+  // O WhatsApp diz "Mensagem" no celular e "Digite uma mensagem" no computador.
+  const placeholder = useSyncExternalStore(onWideChange, () => window.matchMedia(WIDE).matches, () => false) ? 'Digite uma mensagem' : 'Mensagem';
 
   useEffect(() => {
     if (!attach) return;
@@ -92,10 +96,9 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
           {emojis ? <><Keyboard size={22} className="only-mobile" /><X size={24} className="only-desktop" /></> : <Smile size={24} />}
         </button>
         {!editing && <button type="button" className="compose-icon compose-attach" onClick={() => { setEmojis(false); setAttach(!attach); }} aria-label="Anexar" aria-expanded={attach}>
-          <Paperclip size={22} className="only-mobile" />
-          <Plus size={26} className={`only-desktop ${attach ? 'rotated' : ''}`} />
+          <Paperclip size={22} />
         </button>}
-        <textarea ref={inputRef} rows={1} value={text} maxLength={2000} placeholder="Mensagem" aria-label="Sua mensagem"
+        <textarea ref={inputRef} rows={1} value={text} maxLength={2000} placeholder={placeholder} aria-label="Sua mensagem"
           onChange={e => { setText(e.target.value); if (e.target.value.trim()) onTyping(); }}
           onFocus={() => { if (!desktop()) setEmojis(false); }}
           onPaste={onPaste}
