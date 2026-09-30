@@ -71,19 +71,19 @@ async function addIcon(names, count, minSize, maxSize, gap, maxAngle) {
 }
 
 await addIcon(BIG, 12, 84, 112, 5, 12);
-await addIcon(MEDIUM, 120, 40, 62, 4, 20);
-await addIcon(SMALL, 90, 20, 28, 4, 25);
-// Enchimento: bolinhas, tracinhos e brilhos pequenos em todo vão que sobrar, como no WhatsApp.
-for (let i = 0; i < 900; i++) {
+await addIcon(MEDIUM, 115, 40, 60, 6, 18);
+await addIcon(SMALL, 22, 20, 26, 9, 20);
+// Enchimento, quase só bolinhas, nos vãos que sobrarem (como no WhatsApp).
+for (let i = 0; i < 420; i++) {
   const kind = random();
-  if (kind < .7) {
-    const r = between(3, 6), spot = place(r + 1, 5);
+  if (kind < .82) {
+    const r = between(3, 5.5), spot = place(r + 1, 11);
     if (spot) shapes.push(copies(spot, (x, y) => `<circle cx="${x}" cy="${y}" r="${r.toFixed(1)}"/>`));
-  } else if (kind < .85) {
-    const spot = place(8, 5), angle = between(-40, 40).toFixed(0);
+  } else if (kind < .93) {
+    const spot = place(8, 11), angle = between(-40, 40).toFixed(0);
     if (spot) shapes.push(copies(spot, (x, y) => `<rect x="-7" y="-2.5" width="14" height="5" rx="2.5" transform="translate(${x} ${y}) rotate(${angle})"/>`));
   } else {
-    const spot = place(7, 5), s = between(5, 7.5);
+    const spot = place(7, 11), s = between(5, 7);
     if (spot) shapes.push(copies(spot, (x, y) => `<path d="M0 ${-s}Q0 0 ${s} 0Q0 0 0 ${s}Q0 0 ${-s} 0Q0 0 0 ${-s}z" transform="translate(${x} ${y})"/>`));
   }
 }
