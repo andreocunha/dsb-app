@@ -169,15 +169,24 @@
 .attach-menu button { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--wa-text-2); font-size: 13px; }
 .attach-menu span { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; color: #fff; }
 
-.emoji-panel { height: 300px; border-top: 1px solid var(--wa-divider); background: var(--wa-drawer); }
-.emoji-panel.in-sheet { height: 360px; margin: 0 -8px; border: 0; }
-.emoji-panel emoji-picker {
-  width: 100%; height: 100%;
-  --background: var(--wa-drawer); --border-color: transparent; --border-size: 0; --indicator-color: var(--wa-green);
-  --input-border-color: var(--wa-divider); --input-border-radius: 8px; --input-font-color: var(--wa-text); --input-placeholder-color: var(--wa-text-2);
-  --input-padding: .4rem .75rem; --outline-color: var(--wa-green); --button-hover-background: var(--wa-hover); --button-active-background: var(--wa-hover);
-  --category-font-color: var(--wa-text-2); --emoji-size: 1.7rem; --emoji-padding: .35rem; --num-columns: 8;
-}
+/* Painel de emojis do WhatsApp: abas, busca, seções e grade. No celular fica no lugar do teclado. */
+.emoji-panel { display: flex; flex-direction: column; height: 300px; border-top: 1px solid var(--wa-divider); background: var(--wa-drawer); }
+.emoji-panel.in-sheet { height: 380px; margin: 0 -8px; border: 0; }
+.emoji-tabs { flex-shrink: 0; display: flex; padding: 0 8px; }
+.emoji-tabs button { position: relative; flex: 1; display: grid; place-items: center; height: 48px; color: var(--wa-icon); }
+.emoji-tabs button:hover { color: var(--wa-text); }
+.emoji-tabs button[aria-selected="true"] { color: var(--wa-text); }
+.emoji-tabs button[aria-selected="true"]::after { content: ''; position: absolute; bottom: 3px; left: 50%; width: 26px; height: 3px; margin-left: -13px; border-radius: 2px; background: var(--wa-green); }
+.emoji-search { flex-shrink: 0; display: flex; align-items: center; gap: 10px; height: 40px; margin: 6px 14px 4px; padding: 0 16px; border: 2px solid var(--wa-divider); border-radius: 20px; color: var(--wa-text-2); cursor: text; }
+.emoji-search:focus-within { border-color: var(--wa-green); }
+.emoji-search input { flex: 1; min-width: 0; border: 0; background: none; color: var(--wa-text); font-size: 16px; outline: none; }
+.emoji-search input::placeholder { color: var(--wa-text-2); }
+.emoji-scroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 10px 10px; }
+.emoji-scroll h3 { padding: 12px 6px 6px; color: var(--wa-text-2); font-size: 14px; font-weight: 500; }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); }
+.emoji-grid button { display: grid; place-items: center; aspect-ratio: 1; border-radius: 8px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-size: 27px; line-height: 1; }
+.emoji-grid button:hover, .emoji-grid button:focus-visible { background: var(--wa-hover); outline: none; }
+.emoji-empty { padding: 40px 12px; color: var(--wa-text-2); text-align: center; }
 
 .chat-login { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--wa-panel); color: var(--wa-text-2); font-size: 14px; text-align: center; }
 
@@ -343,8 +352,13 @@ a.group-member:hover, .group-member.me { background: var(--wa-hover); }
   .attach-menu button:hover { background: var(--wa-hover); }
   .attach-menu span { width: 30px; height: 30px; }
   .attach-menu span svg { width: 16px; height: 16px; }
-  .emoji-panel { order: -1; height: 340px; margin-bottom: 8px; overflow: hidden; border: 0; border-radius: 16px; box-shadow: var(--wa-menu-shadow); }
-  .emoji-panel emoji-picker { --num-columns: 12; }
+  /* No WhatsApp Web o painel é um cartão flutuando sobre a conversa, acima da barra. */
+  .emoji-panel { position: absolute; bottom: calc(100% + 8px); left: 4.5%; z-index: 10; width: min(560px, 91%); height: min(548px, calc(100dvh - 220px)); padding-top: 4px; border: 0; border-radius: 16px; box-shadow: var(--wa-menu-shadow); transform-origin: bottom left; animation: pop-in .15s ease-out; }
+  .emoji-panel.in-sheet { position: static; width: auto; box-shadow: none; animation: none; }
+  .emoji-search { height: 42px; border-radius: 21px; }
+  .emoji-search input { font-size: 15px; }
+  .emoji-grid { grid-template-columns: repeat(12, 1fr); }
+  .emoji-grid button { font-size: 28px; }
   .chat-login { flex-direction: row; justify-content: center; gap: 16px; margin: 0 4.5% 12px; padding: 10px 16px; border-radius: 26px; background: var(--wa-input); box-shadow: 0 1px 3px #0b141a1f; }
 
   .menu-list { padding: 8px 0; border-radius: 12px; }

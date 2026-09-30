@@ -8,7 +8,6 @@ import { toReply, type Message } from './types';
 export type ComposeContext = { kind: 'reply' | 'edit'; message: Message } | null;
 
 const MAX_LINES = 6;
-const desktop = () => window.matchMedia('(min-width: 900px)').matches;
 const hasKeyboard = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 const WIDE = '(min-width: 900px)';
 const onWideChange = (notify: () => void) => { const query = window.matchMedia(WIDE); query.addEventListener('change', notify); return () => query.removeEventListener('change', notify); };
@@ -26,8 +25,8 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
   const camera = useRef<HTMLInputElement>(null);
   const editing = context?.kind === 'edit';
   const empty = !text.trim();
-  // O WhatsApp diz "Mensagem" no celular e "Digite uma mensagem" no computador.
-  const placeholder = useSyncExternalStore(onWideChange, () => window.matchMedia(WIDE).matches, () => false) ? 'Digite uma mensagem' : 'Mensagem';
+  const wide = useSyncExternalStore(onWideChange, () => window.matchMedia(WIDE).matches, () => false);
+  const wrap = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!attach) return;
@@ -35,6 +34,16 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [attach]);
+
+  // No desktop o painel de emojis flutua sobre a conversa: fecha com Esc ou clicando fora da barra.
+  useEffect(() => {
+    if (!emojis || !wide) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setEmojis(false); inputRef.current?.focus(); } };
+    const onDown = (e: PointerEvent) => { if (!wrap.current?.contains(e.target as Node)) setEmojis(false); };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onDown);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('pointerdown', onDown); };
+  }, [emojis, wide, inputRef]);
 
   // Cresce com o texto até 6 linhas, depois rola.
   useLayoutEffect(() => {
@@ -49,7 +58,7 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
     e?.preventDefault();
     if (empty) return;
     onSubmit();
-    if (!desktop()) setEmojis(false);
+    if (!wide) setEmojis(false);
   }
 
   function insert(emoji: string) {
@@ -59,14 +68,14 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
     requestAnimationFrame(() => {
       if (!el) return;
       el.setSelectionRange(start + emoji.length, start + emoji.length);
-      if (desktop()) el.focus();
+      if (wide) el.focus();
     });
   }
 
   function toggleEmojis() {
     // No celular o painel ocupa o lugar do teclado; o ícone vira um teclado para voltar a digitar.
-    if (emojis) { setEmojis(false); if (!desktop()) inputRef.current?.focus(); return; }
-    if (!desktop()) inputRef.current?.blur();
+    if (emojis) { setEmojis(false); if (!wide) inputRef.current?.focus(); return; }
+    if (!wide) inputRef.current?.blur();
     setAttach(false);
     setEmojis(true);
   }
@@ -85,7 +94,7 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
     onFile(file);
   }
 
-  return <div className={`compose-wrap ${emojis ? 'with-emojis' : ''}`}>
+  return <div ref={wrap} className={`compose-wrap ${emojis ? 'with-emojis' : ''}`}>
     <form className="compose" onSubmit={submit}>
       <div className="compose-field">
         {context && <div className="compose-context">
@@ -93,14 +102,14 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
           <button type="button" className="icon-button" onClick={onCancelContext} aria-label={editing ? 'Cancelar edição' : 'Cancelar resposta'}><X size={20} /></button>
         </div>}
         <button type="button" className="compose-icon" onClick={toggleEmojis} aria-label={emojis ? 'Fechar emojis' : 'Emojis'} aria-expanded={emojis}>
-          {emojis ? <><Keyboard size={22} className="only-mobile" /><X size={24} className="only-desktop" /></> : <Smile size={24} />}
+          {emojis && !wide ? <Keyboard size={22} /> : <Smile size={24} />}
         </button>
         {!editing && <button type="button" className="compose-icon compose-attach" onClick={() => { setEmojis(false); setAttach(!attach); }} aria-label="Anexar" aria-expanded={attach}>
           <Paperclip size={22} />
         </button>}
-        <textarea ref={inputRef} rows={1} value={text} maxLength={2000} placeholder={placeholder} aria-label="Sua mensagem"
+        <textarea ref={inputRef} rows={1} value={text} maxLength={2000} placeholder={wide ? 'Digite uma mensagem' : 'Mensagem'} aria-label="Sua mensagem"
           onChange={e => { setText(e.target.value); if (e.target.value.trim()) onTyping(); }}
-          onFocus={() => { if (!desktop()) setEmojis(false); }}
+          onFocus={() => { if (!wide) setEmojis(false); }}
           onPaste={onPaste}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && hasKeyboard()) submit(e); }} />
         {empty && !editing && <button type="button" className="compose-icon compose-camera only-mobile" onClick={() => camera.current?.click()} aria-label="Câmera"><Camera size={22} /></button>}
@@ -122,7 +131,7 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
     <input ref={media} type="file" hidden accept="image/*,video/*" onChange={picked} />
     <input ref={camera} type="file" hidden accept="image/*" capture="environment" onChange={picked} />
 
-    {emojis && <EmojiPicker onPick={insert} />}
+    {emojis && <EmojiPicker onPick={insert} autoFocus={wide} />}
   </div>;
 }
 
