@@ -13,7 +13,7 @@ import { GROUP_KEY, targetKey, type Person, type Target } from './types';
 import { useWide, WIDE } from './use-wide';
 
 type Last = { id: number; user_id: string; author_name?: string; body: string | null; file_type: string | null; file_name: string | null; created_at: string; deleted: boolean };
-type Chat = { id: string; other: Person; last: Last | null; unread: number; otherRead: number };
+type Chat = { id: string; other: Person; last: Last | null; unread: number; otherRead: number; otherDelivered: number };
 type Filter = 'all' | 'unread' | 'groups';
 
 const GROUP: Target = { kind: 'group' };
@@ -47,7 +47,7 @@ export function Chats() {
     if (!userId) return;
     void supabase.rpc('my_conversations').then(({ data }) => setChats((data ?? []).map(row => ({
       id: row.id, other: { id: row.other_id, name: row.other_name, avatar_url: row.other_avatar },
-      last: row.last as unknown as Last | null, unread: row.unread, otherRead: row.other_read_id,
+      last: row.last as unknown as Last | null, unread: row.unread, otherRead: row.other_read_id, otherDelivered: row.other_delivered_id,
     }))));
   }, [userId]);
 
@@ -78,9 +78,12 @@ export function Chats() {
         else setChats(current => current?.map(c => c.id === row.conversation_id ? { ...c, last: patch(c.last) } : c) ?? current);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_reads' }, ({ new: row }) => {
-        const read = row as { conversation_id?: string; user_id?: string; last_read_id?: number };
+        const read = row as { conversation_id?: string; user_id?: string; last_read_id?: number; last_delivered_id?: number };
         if (!read.conversation_id || read.user_id === userId) return;
-        setChats(current => current?.map(c => c.id === read.conversation_id ? { ...c, otherRead: Math.max(c.otherRead, read.last_read_id ?? 0) } : c) ?? current);
+        setChats(current => current?.map(c => c.id !== read.conversation_id ? c : {
+          ...c, otherRead: Math.max(c.otherRead, read.last_read_id ?? 0),
+          otherDelivered: Math.max(c.otherDelivered, read.last_delivered_id ?? 0, read.last_read_id ?? 0),
+        }) ?? current);
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -162,11 +165,12 @@ export function Chats() {
 }
 
 /** Texto curto da última mensagem, como na lista do WhatsApp. */
-function LastPreview({ last, userId, group, read }: { last: Last | null; userId: string | null; group: boolean; read: number | null }) {
+function LastPreview({ last, userId, group, receipts }: { last: Last | null; userId: string | null; group: boolean; receipts: { read: number; delivered: number } | null }) {
   if (!last) return <span className="chat-row-preview">{group ? 'Toque para conversar com a torcida' : 'Nenhuma mensagem ainda'}</span>;
   const own = last.user_id === userId;
   const who = group && !own && last.author_name ? `${shortName(last.author_name)}: ` : '';
-  const tick = own && !last.deleted && (read !== null && last.id <= read ? <CheckCheck size={16} className="tick-read" /> : <Check size={16} />);
+  const tick = own && !last.deleted && (receipts && last.id <= receipts.read ? <CheckCheck size={16} className="tick-read" aria-label="Lida" />
+    : receipts && last.id <= receipts.delivered ? <CheckCheck size={16} aria-label="Entregue" /> : <Check size={16} aria-label="Enviada" />);
   const icon = last.deleted ? <Ban size={15} /> : !last.body && last.file_type?.startsWith('image/') ? <Camera size={15} />
     : !last.body && last.file_type?.startsWith('video/') ? <Video size={15} /> : !last.body && last.file_type ? <FileText size={15} /> : null;
   const text = last.deleted ? (own ? 'Você apagou esta mensagem' : 'Mensagem apagada')
@@ -219,7 +223,7 @@ function ChatList({ userId, chats, groupLast, groupUnread, open, blocked, onOpen
         <span className="chat-row-main">
           <span className="chat-row-top"><strong>Torcida Solar</strong>{groupLast && <time className={groupUnread ? 'unread' : ''}>{listTime(groupLast.created_at)}</time>}</span>
           <span className="chat-row-bottom">
-            <LastPreview last={groupLast && !blocked.includes(groupLast.user_id) ? groupLast : null} userId={userId} group read={null} />
+            <LastPreview last={groupLast && !blocked.includes(groupLast.user_id) ? groupLast : null} userId={userId} group receipts={null} />
             {groupUnread > 0 && <b className="chat-row-badge">{groupUnread > 99 ? '99+' : groupUnread}</b>}
             <Pin size={16} className="chat-row-pin" aria-label="Fixada" />
           </span>
@@ -233,7 +237,7 @@ function ChatList({ userId, chats, groupLast, groupUnread, open, blocked, onOpen
         <span className="chat-row-main">
           <span className="chat-row-top"><strong>{c.other.name}</strong>{c.last && <time className={c.unread ? 'unread' : ''}>{listTime(c.last.created_at)}</time>}</span>
           <span className="chat-row-bottom">
-            <LastPreview last={c.last} userId={userId} group={false} read={c.otherRead} />
+            <LastPreview last={c.last} userId={userId} group={false} receipts={{ read: c.otherRead, delivered: c.otherDelivered }} />
             {blocked.includes(c.other.id) && <Ban size={15} className="chat-row-pin" aria-label="Bloqueado" />}
             {c.unread > 0 && <b className="chat-row-badge">{c.unread > 99 ? '99+' : c.unread}</b>}
           </span>

@@ -9,6 +9,8 @@ import { useFileUrl } from './files';
 import { authorLabel, isImage, isVideo, isVisual, replySnippet, time, type Message, type Reply } from './types';
 
 export type MenuMode = 'full' | 'menu' | 'reactions';
+/** Conversa particular: até onde a outra pessoa recebeu e leu (os tiques do WhatsApp). */
+export type Receipts = { read: number; delivered: number };
 export type MenuRequest = { message: Message; first: boolean; mode: MenuMode; rect: DOMRect; point?: { x: number; y: number } };
 
 const SWIPE_REPLY = 64;
@@ -17,10 +19,10 @@ export const nameStyle = (id: string, userId: string | null) =>
   ({ '--q': id === userId ? 'var(--wa-green)' : `var(--wa-name-${nameColor(id)})` }) as React.CSSProperties;
 
 /** Uma linha da conversa: avatar, balão, reações e os gestos (segurar abre o menu, arrastar responde). */
-export function MessageRow({ message, first, userId, reply, flash, group, readUpTo, onMenu, onReply, onOpen, onJump, onReactors }: {
+export function MessageRow({ message, first, userId, reply, flash, group, receipts, onMenu, onReply, onOpen, onJump, onReactors }: {
   message: Message; first: boolean; userId: string | null; reply: Reply | null; flash: boolean;
-  /** group: mostra foto e nome de quem escreveu. readUpTo: até onde a outra pessoa leu (conversa particular). */
-  group: boolean; readUpTo: number | null;
+  /** group: mostra foto e nome de quem escreveu. receipts: tiques de entrega e leitura (só na particular). */
+  group: boolean; receipts: Receipts | null;
   onMenu: (request: MenuRequest) => void; onReply: (message: Message) => void; onOpen: (message: Message) => void;
   onJump: (id: number) => void; onReactors: (message: Message) => void;
 }) {
@@ -100,7 +102,7 @@ export function MessageRow({ message, first, userId, reply, flash, group, readUp
     {interactive && <span className="msg-swipe" ref={swipeIcon} aria-hidden><ReplyIcon size={18} /></span>}
     {!own && group && (first ? <Avatar id={message.user_id} name={message.author_name} url={message.author_avatar} small /> : <span className="avatar-space" />)}
     <div className="msg-main" ref={main}>
-      <Bubble ref={bubble} message={message} first={first} userId={userId} reply={reply} group={group} readUpTo={readUpTo} onJump={onJump} onOpen={onOpen}
+      <Bubble ref={bubble} message={message} first={first} userId={userId} reply={reply} group={group} receipts={receipts} onJump={onJump} onOpen={onOpen}
         onContextMenu={onContextMenu} onKeyDown={onKeyDown}
         onChevron={interactive ? e => { const r = e.currentTarget.getBoundingClientRect(); openMenu('menu', { x: own ? r.right : r.left, y: r.bottom }); } : undefined} />
       {emojis.length > 0 && <button className="reactions" onClick={() => onReactors(message)} aria-label={`${message.reactions.length} ${message.reactions.length === 1 ? 'reação' : 'reações'}. Ver quem reagiu`}>
@@ -116,8 +118,8 @@ export function MessageRow({ message, first, userId, reply, flash, group, readUp
 }
 
 /** O balão em si. Também é desenhado de novo, por cima do fundo escurecido, quando o menu de toque longo abre. */
-export function Bubble({ ref, message, first, userId, reply, group, readUpTo, onJump, onOpen, onChevron, onContextMenu, onKeyDown }: {
-  ref?: React.Ref<HTMLDivElement>; message: Message; first: boolean; userId: string | null; reply: Reply | null; group: boolean; readUpTo: number | null;
+export function Bubble({ ref, message, first, userId, reply, group, receipts, onJump, onOpen, onChevron, onContextMenu, onKeyDown }: {
+  ref?: React.Ref<HTMLDivElement>; message: Message; first: boolean; userId: string | null; reply: Reply | null; group: boolean; receipts: Receipts | null;
   onJump?: (id: number) => void; onOpen?: (message: Message) => void; onChevron?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void; onKeyDown?: (e: React.KeyboardEvent) => void;
 }) {
@@ -133,7 +135,8 @@ export function Bubble({ ref, message, first, userId, reply, group, readUpTo, on
     {message.edited_at && !deleted && <span className="meta-edited">Editada</span>}
     <span>{time(message.created_at)}</span>
     {own && !deleted && (message.pending ? <Clock3 size={12} aria-label="Enviando" />
-      : readUpTo !== null && message.id <= readUpTo ? <CheckCheck size={16} className="tick-read" aria-label="Lida" />
+      : receipts && message.id <= receipts.read ? <CheckCheck size={16} className="tick-read" aria-label="Lida" />
+      : receipts && message.id <= receipts.delivered ? <CheckCheck size={16} aria-label="Entregue" />
       : <Check size={15} aria-label="Enviada" />)}
   </>;
 
