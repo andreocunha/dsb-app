@@ -34,12 +34,14 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           deleted_by: string | null
+          edited_at: string | null
           file_name: string | null
           file_path: string | null
           file_size: number | null
           file_type: string | null
           height: number | null
           id: number
+          reply_to: number | null
           thumb_path: string | null
           user_id: string
           width: number | null
@@ -153,6 +155,7 @@ export type Database = {
           created_at: string
           deleted_at: string
           deleted_by: string
+          edited_at: string
           file_name: string
           file_path: string
           file_size: number
@@ -160,6 +163,8 @@ export type Database = {
           height: number
           id: number
           reactions: Json
+          reply: Json
+          reply_to: number
           thumb_path: string
           user_id: string
           width: number
@@ -168,6 +173,7 @@ export type Database = {
       copy_lineup_forward: { Args: { p_race_id: string }; Returns: undefined }
       delete_account: { Args: never; Returns: undefined }
       delete_message: { Args: { p_id: number }; Returns: string[] }
+      edit_message: { Args: { p_body: string; p_id: number }; Returns: Database["public"]["Tables"]["messages"]["Row"] }
       fantasy_ranking: {
         Args: { p_limit?: number }
         Returns: { avatar_url: string; name: string; points: number; position: number; user_id: string }[]
@@ -188,6 +194,7 @@ export type Database = {
           p_file_name?: string
           p_file_path?: string
           p_height?: number
+          p_reply_to?: number
           p_thumb_path?: string
           p_width?: number
         }
