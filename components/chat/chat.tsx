@@ -521,7 +521,8 @@ export function Community() {
         </div>}
     </div>
 
-    <GroupInfo open={!!info} focusBlocked={info === 'blocked'} online={online} blocked={blocked} onUnblock={id => void unblock(id)} onClose={() => setInfo(null)} />
+    <GroupInfo key={info ?? 'fechado'} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online} blocked={blocked}
+      onUnblock={id => void unblock(id)} onOpenMedia={setViewer} onClose={() => setInfo(null)} />
 
     {menu && menuMessage && <MessageMenu request={menu} own={menuMessage.user_id === userId}
       myReaction={menuMessage.reactions.find(r => r.user_id === userId)?.emoji ?? null} actions={actionsFor(menuMessage)} onAction={id => runAction(menuMessage, id)}
