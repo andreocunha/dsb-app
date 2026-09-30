@@ -102,6 +102,12 @@ export function dayLabel(iso: string, now = new Date()) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/** Horário na lista de conversas: a hora se foi hoje, senão Ontem, dia da semana ou data. */
+export function listTime(iso: string, now = new Date()) {
+  const day = dayLabel(iso, now);
+  return day === 'Hoje' ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : day;
+}
+
 /** "hoje às 14:32", como no topo do visualizador de mídia. */
 export function whenLabel(iso: string, now = new Date()) {
   const day = dayLabel(iso, now);

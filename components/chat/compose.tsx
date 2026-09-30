@@ -1,16 +1,15 @@
 'use client';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Camera, Check, FileText, Image as ImageIcon, Keyboard, Paperclip, SendHorizontal, Smile, X } from 'lucide-react';
 import { EmojiPicker } from './emoji-picker';
 import { Quote } from './message';
+import { useWide } from './use-wide';
 import { toReply, type Message } from './types';
 
 export type ComposeContext = { kind: 'reply' | 'edit'; message: Message } | null;
 
 const MAX_LINES = 6;
 const hasKeyboard = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-const WIDE = '(min-width: 900px)';
-const onWideChange = (notify: () => void) => { const query = window.matchMedia(WIDE); query.addEventListener('change', notify); return () => query.removeEventListener('change', notify); };
 
 /** Barra de digitar: pílula com emoji, texto e anexos no celular; barra inteira no desktop (WhatsApp Web). */
 export function Compose({ text, setText, context, userId, inputRef, onCancelContext, onSubmit, onFile, onTyping }: {
@@ -25,7 +24,7 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
   const camera = useRef<HTMLInputElement>(null);
   const editing = context?.kind === 'edit';
   const empty = !text.trim();
-  const wide = useSyncExternalStore(onWideChange, () => window.matchMedia(WIDE).matches, () => false);
+  const wide = useWide();
   const wrap = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,7 +97,7 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
     <form className="compose" onSubmit={submit}>
       <div className="compose-field">
         {context && <div className="compose-context">
-          <Quote reply={toReply(context.message)} userId={userId} label={editing ? 'Editar mensagem' : undefined} />
+          <Quote reply={toReply(context.message)} userId={userId} conversationId={context.message.conversation_id} label={editing ? 'Editar mensagem' : undefined} />
           <button type="button" className="icon-button" onClick={onCancelContext} aria-label={editing ? 'Cancelar edição' : 'Cancelar resposta'}><X size={20} /></button>
         </div>}
         <button type="button" className="compose-icon" onClick={toggleEmojis} aria-label={emojis ? 'Fechar emojis' : 'Emojis'} aria-expanded={emojis}>

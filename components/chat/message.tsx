@@ -1,11 +1,11 @@
 'use client';
 import { useRef, useState } from 'react';
-import { Ban, Camera, Check, ChevronDown, Clock3, Download, FileText, Play, Reply as ReplyIcon, SmilePlus, Video } from 'lucide-react';
+import { Ban, Camera, Check, CheckCheck, ChevronDown, Clock3, Download, FileText, Play, Reply as ReplyIcon, SmilePlus, Video } from 'lucide-react';
 import { formatMessage, jumboEmoji, nameColor, preview, type Token } from '@/lib/chat-format';
 import { formatSize } from '@/lib/media';
 import { shortName } from '@/lib/names';
-import { chatFileUrl } from '@/lib/supabase';
 import { Avatar } from '../ui';
+import { useFileUrl } from './files';
 import { authorLabel, isImage, isVideo, isVisual, replySnippet, time, type Message, type Reply } from './types';
 
 export type MenuMode = 'full' | 'menu' | 'reactions';
@@ -17,8 +17,10 @@ export const nameStyle = (id: string, userId: string | null) =>
   ({ '--q': id === userId ? 'var(--wa-green)' : `var(--wa-name-${nameColor(id)})` }) as React.CSSProperties;
 
 /** Uma linha da conversa: avatar, balão, reações e os gestos (segurar abre o menu, arrastar responde). */
-export function MessageRow({ message, first, userId, reply, flash, onMenu, onReply, onOpen, onJump, onReactors }: {
+export function MessageRow({ message, first, userId, reply, flash, group, readUpTo, onMenu, onReply, onOpen, onJump, onReactors }: {
   message: Message; first: boolean; userId: string | null; reply: Reply | null; flash: boolean;
+  /** group: mostra foto e nome de quem escreveu. readUpTo: até onde a outra pessoa leu (conversa particular). */
+  group: boolean; readUpTo: number | null;
   onMenu: (request: MenuRequest) => void; onReply: (message: Message) => void; onOpen: (message: Message) => void;
   onJump: (id: number) => void; onReactors: (message: Message) => void;
 }) {
@@ -96,9 +98,9 @@ export function MessageRow({ message, first, userId, reply, flash, onMenu, onRep
   return <div id={`m-${message.id}`} className={`msg ${own ? 'own' : 'in'} ${first ? 'first' : ''} ${flash ? 'flash' : ''} ${message.reactions.length ? 'reacted' : ''}`}
     onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
     {interactive && <span className="msg-swipe" ref={swipeIcon} aria-hidden><ReplyIcon size={18} /></span>}
-    {!own && (first ? <Avatar id={message.user_id} name={message.author_name} url={message.author_avatar} small /> : <span className="avatar-space" />)}
+    {!own && group && (first ? <Avatar id={message.user_id} name={message.author_name} url={message.author_avatar} small /> : <span className="avatar-space" />)}
     <div className="msg-main" ref={main}>
-      <Bubble ref={bubble} message={message} first={first} userId={userId} reply={reply} onJump={onJump} onOpen={onOpen}
+      <Bubble ref={bubble} message={message} first={first} userId={userId} reply={reply} group={group} readUpTo={readUpTo} onJump={onJump} onOpen={onOpen}
         onContextMenu={onContextMenu} onKeyDown={onKeyDown}
         onChevron={interactive ? e => { const r = e.currentTarget.getBoundingClientRect(); openMenu('menu', { x: own ? r.right : r.left, y: r.bottom }); } : undefined} />
       {emojis.length > 0 && <button className="reactions" onClick={() => onReactors(message)} aria-label={`${message.reactions.length} ${message.reactions.length === 1 ? 'reação' : 'reações'}. Ver quem reagiu`}>
@@ -114,8 +116,8 @@ export function MessageRow({ message, first, userId, reply, flash, onMenu, onRep
 }
 
 /** O balão em si. Também é desenhado de novo, por cima do fundo escurecido, quando o menu de toque longo abre. */
-export function Bubble({ ref, message, first, userId, reply, onJump, onOpen, onChevron, onContextMenu, onKeyDown }: {
-  ref?: React.Ref<HTMLDivElement>; message: Message; first: boolean; userId: string | null; reply: Reply | null;
+export function Bubble({ ref, message, first, userId, reply, group, readUpTo, onJump, onOpen, onChevron, onContextMenu, onKeyDown }: {
+  ref?: React.Ref<HTMLDivElement>; message: Message; first: boolean; userId: string | null; reply: Reply | null; group: boolean; readUpTo: number | null;
   onJump?: (id: number) => void; onOpen?: (message: Message) => void; onChevron?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void; onKeyDown?: (e: React.KeyboardEvent) => void;
 }) {
@@ -130,15 +132,17 @@ export function Bubble({ ref, message, first, userId, reply, onJump, onOpen, onC
   const meta = <>
     {message.edited_at && !deleted && <span className="meta-edited">Editada</span>}
     <span>{time(message.created_at)}</span>
-    {own && !deleted && (message.pending ? <Clock3 size={12} aria-label="Enviando" /> : <Check size={15} aria-label="Enviada" />)}
+    {own && !deleted && (message.pending ? <Clock3 size={12} aria-label="Enviando" />
+      : readUpTo !== null && message.id <= readUpTo ? <CheckCheck size={16} className="tick-read" aria-label="Lida" />
+      : <Check size={15} aria-label="Enviada" />)}
   </>;
 
   return <div ref={ref} className={`bubble ${kind} ${deleted ? 'deleted' : ''}`} tabIndex={onKeyDown && !deleted ? 0 : undefined}
     aria-label={onKeyDown && !deleted ? `Mensagem de ${own ? 'você' : shortName(message.author_name)}. Enter abre as ações` : undefined}
     onContextMenu={onContextMenu} onKeyDown={onKeyDown}>
     {first && !jumbo && <Tail />}
-    {!own && first && !jumbo && <b className="bubble-author" style={nameStyle(message.user_id, userId)}>{shortName(message.author_name)}</b>}
-    {reply && !deleted && <Quote reply={reply} userId={userId} onClick={onJump ? () => onJump(reply.id) : undefined} />}
+    {!own && group && first && !jumbo && <b className="bubble-author" style={nameStyle(message.user_id, userId)}>{shortName(message.author_name)}</b>}
+    {reply && !deleted && <Quote reply={reply} userId={userId} conversationId={message.conversation_id} onClick={onJump ? () => onJump(reply.id) : undefined} />}
     {file && <Attachment message={message} onOpen={onOpen} />}
     {deleted
       ? <p className="bubble-text deleted-text"><Ban size={15} /><i>{message.deleted_by && message.deleted_by !== message.user_id
@@ -179,8 +183,8 @@ function Tokens({ tokens, plain }: { tokens: Token[]; plain: boolean }) {
 }
 
 /** Citação: dentro do balão (toque leva até a original) e acima do campo de digitar. */
-export function Quote({ reply, userId, onClick, label }: { reply: Reply; userId: string | null; onClick?: () => void; label?: string }) {
-  const thumb = !reply.deleted && reply.thumb_path ? chatFileUrl(reply.thumb_path) : null;
+export function Quote({ reply, userId, conversationId, onClick, label }: { reply: Reply; userId: string | null; conversationId: string | null; onClick?: () => void; label?: string }) {
+  const thumb = useFileUrl(conversationId, !reply.deleted ? reply.thumb_path : null);
   const icon = reply.deleted ? <Ban size={14} /> : !reply.body && isImage(reply) ? <Camera size={14} /> : !reply.body && isVideo(reply) ? <Video size={14} /> : !reply.body && reply.file_type ? <FileText size={14} /> : null;
   const content = <>
     <span className="quote-text">
@@ -198,23 +202,30 @@ const extension = (name: string | null) => (name?.match(/\.([a-z0-9]{1,5})$/i)?.
 
 /** Imagem e vídeo aparecem pela miniatura leve; o original só carrega ao tocar. Documento vira o cartão do WhatsApp. */
 function Attachment({ message, onOpen }: { message: Message; onOpen?: (message: Message) => void }) {
-  if (isVisual(message)) {
-    const ratio = message.width && message.height ? Math.min(Math.max(message.width / message.height, .5), 2) : isVideo(message) ? 16 / 9 : 4 / 3;
-    const src = message.localUrl && isImage(message) ? message.localUrl : message.thumb_path ? chatFileUrl(message.thumb_path) : null;
-    return <button type="button" className="bubble-media" style={{ aspectRatio: ratio }} disabled={message.pending || !onOpen}
-      onClick={e => { e.stopPropagation(); onOpen?.(message); }} aria-label={`Abrir ${isVideo(message) ? 'vídeo' : 'foto'}`}>
-      {src && <img src={src} alt="" loading="lazy" draggable={false} />}
-      {message.pending ? <span className="media-round"><span className="spinner" /></span>
-        : isVideo(message) && <span className="media-round"><Play size={22} fill="currentColor" /></span>}
-    </button>;
-  }
+  return isVisual(message) ? <MediaAttachment message={message} onOpen={onOpen} /> : <DocAttachment message={message} />;
+}
+
+function MediaAttachment({ message, onOpen }: { message: Message; onOpen?: (message: Message) => void }) {
+  const thumb = useFileUrl(message.conversation_id, message.thumb_path);
+  const ratio = message.width && message.height ? Math.min(Math.max(message.width / message.height, .5), 2) : isVideo(message) ? 16 / 9 : 4 / 3;
+  const src = message.localUrl && isImage(message) ? message.localUrl : thumb;
+  return <button type="button" className="bubble-media" style={{ aspectRatio: ratio }} disabled={message.pending || !onOpen}
+    onClick={e => { e.stopPropagation(); onOpen?.(message); }} aria-label={`Abrir ${isVideo(message) ? 'vídeo' : 'foto'}`}>
+    {src && <img src={src} alt="" loading="lazy" draggable={false} />}
+    {message.pending ? <span className="media-round"><span className="spinner" /></span>
+      : isVideo(message) && <span className="media-round"><Play size={22} fill="currentColor" /></span>}
+  </button>;
+}
+
+function DocAttachment({ message }: { message: Message }) {
+  const href = useFileUrl(message.conversation_id, message.pending ? null : message.file_path, message.file_name ?? 'arquivo');
   const ext = extension(message.file_name);
   const content = <>
     <span className={`doc-icon doc-${ext.toLowerCase()}`}>{ext.slice(0, 4)}</span>
     <span className="doc-info"><strong>{message.file_name}</strong><small>{ext} · {formatSize(message.file_size)}</small></span>
     <span className="doc-download">{message.pending ? <span className="spinner" /> : <Download size={18} />}</span>
   </>;
-  if (message.pending || !message.file_path) return <div className="doc-card">{content}</div>;
-  return <a className="doc-card" href={`${chatFileUrl(message.file_path)}?download=${encodeURIComponent(message.file_name ?? '')}`} target="_blank" rel="noopener noreferrer"
+  if (!href) return <div className="doc-card">{content}</div>;
+  return <a className="doc-card" href={href} target="_blank" rel="noopener noreferrer"
     onClick={e => e.stopPropagation()} aria-label={`Baixar ${message.file_name}`}>{content}</a>;
 }

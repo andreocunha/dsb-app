@@ -1,6 +1,5 @@
 'use client';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { ArrowLeft, Ban, ChevronDown, Copy, EllipsisVertical, Flag, LogIn, Pencil, Pin, Reply as ReplyIcon, Trash2, UserX } from 'lucide-react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -8,17 +7,18 @@ import { dayLabel } from '@/lib/chat-format';
 import { makeThumbnail, MAX_FILE_SIZE, storageName } from '@/lib/media';
 import { shortName } from '@/lib/names';
 import { supabase, errorMessage } from '@/lib/supabase';
-import { lastReadId, useApp, useChatUnread, useOnline } from '../app-shell';
+import { lastReadId, useApp, useChatUnread, useOnline, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
-import { Sheet } from '../ui';
+import { Avatar, Sheet } from '../ui';
 import { Compose, type ComposeContext } from './compose';
 import { EmojiPicker } from './emoji-picker';
-import { GroupInfo } from './group-info';
+import { bucketFor } from './files';
+import { InfoPanel } from './group-info';
 import { MediaSend, type Pick } from './media-send';
 import { Bubble, MessageRow, type MenuRequest } from './message';
 import { MessageMenu, type MenuAction } from './message-menu';
 import { Reactors } from './reactors';
-import { canEdit, isImage, toReply, type Message, type Reaction, type Reply, type Row } from './types';
+import { canEdit, isImage, targetKey, toReply, type Message, type Person, type Reaction, type Reply, type Row, type Target } from './types';
 import { Viewer } from './viewer';
 
 const PAGE = 50;
@@ -27,8 +27,8 @@ const TYPING_TTL = 5000;
 const MAX_JUMP_PAGES = 10;
 type Confirm = { title: string; text: string; label: string; run: () => void };
 
-async function fetchPage(before?: number) {
-  const { data, error } = await supabase.rpc('chat_messages', { p_before: before, p_limit: PAGE });
+async function fetchPage(conversationId: string | null, before?: number) {
+  const { data, error } = await supabase.rpc('chat_messages', { p_before: before, p_limit: PAGE, p_conversation_id: conversationId ?? undefined });
   return error ? null : (data as unknown as Message[]).reverse();
 }
 
@@ -38,19 +38,31 @@ const sorted = (list: Message[]) => [...list].sort((a, b) => order(a) - order(b)
 const wiped = (m: Message, by: string | null): Message =>
   ({ ...m, deleted_at: new Date().toISOString(), deleted_by: by, body: null, file_path: null, thumb_path: null, file_name: null, file_type: null, reactions: [] });
 
-export function Community() {
-  const router = useRouter();
+/**
+ * Uma conversa, como no WhatsApp: o grupo geral (fotos e nomes de quem escreve, moderação)
+ * ou uma conversa particular (tiques azuis quando a outra pessoa lê, "online", bloqueio).
+ */
+export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSeen }: {
+  target: Target; blocked: string[];
+  onBlock: (person: Person, messageId?: number) => void; onUnblock: (id: string) => void;
+  onBack: () => void; onSeen: (key: string) => void;
+}) {
   const { userId, profile, requireLogin } = useAuth();
-  // Moderação: a organização pode remover qualquer mensagem.
-  const moderador = profile?.role === 'moderator';
+  const group = target.kind === 'group';
+  const conversationId = target.kind === 'direct' ? target.id : null;
+  const other = target.kind === 'direct' ? target.other : null;
+  const otherId = other?.id ?? null;
+  const key = targetKey(target);
+  // Moderação: a organização pode remover qualquer mensagem do grupo.
+  const moderador = group && profile?.role === 'moderator';
   const { notify } = useApp();
-  const { markRead } = useChatUnread();
+  const { markRead, refreshDm } = useChatUnread();
   const online = useOnline();
+  const onlineUsers = useOnlineUsers();
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [blocked, setBlocked] = useState<string[]>([]);
   const [text, setText] = useState('');
   const [context, setContext] = useState<ComposeContext>(null);
   const [pick, setPick] = useState<Pick | null>(null);
@@ -63,9 +75,11 @@ export function Community() {
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [typers, setTypers] = useState<Record<string, string>>({});
   const [flash, setFlash] = useState<number | null>(null);
-  // Faixa "N mensagens não lidas": o que chegou entre a última visita e a abertura do chat.
-  const [readAtOpen] = useState(lastReadId);
+  // Faixa "N mensagens não lidas": o que chegou entre a última visita e a abertura da conversa.
+  const [readAtOpen, setReadAtOpen] = useState(() => group ? lastReadId() : 0);
   const [unreadUpTo, setUnreadUpTo] = useState(0);
+  // Conversa particular: até onde a outra pessoa leu (tiques azuis).
+  const [otherRead, setOtherRead] = useState(0);
   // Quando a pessoa está lendo mensagens antigas, as novas viram um contador no botão de descer.
   const [newCount, setNewCount] = useState(0);
   const [atBottom, setAtBottom] = useState(true);
@@ -77,8 +91,17 @@ export function Community() {
   const jumpTarget = useRef<number | null>(null);
   const channel = useRef<RealtimeChannel | null>(null);
   const lastTyping = useRef(0);
+  const lastSeen = useRef(0);
   const draft = useRef('');
   const known = useRef(new Set<number>());
+
+  /** Marca como lida: no aparelho para o grupo, no banco para as particulares (é o que acende o azul do outro lado). */
+  const markSeen = useCallback((lastId: number) => {
+    if (lastId <= 0 || lastId <= lastSeen.current) return;
+    lastSeen.current = lastId;
+    if (!conversationId) { markRead(lastId); return; }
+    void supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId, p_last_id: lastId }).then(() => { refreshDm(); onSeen(key); });
+  }, [conversationId, key, markRead, refreshDm, onSeen]);
 
   const applyPage = useCallback((page: Message[] | null, before?: number) => {
     if (!page) { if (before) notify('Não foi possível carregar as mensagens anteriores.'); else setStatus('error'); return; }
@@ -88,15 +111,28 @@ export function Community() {
     setStatus('ready');
     if (!before && page.length) {
       setUnreadUpTo(page[page.length - 1].id);
-      markRead(page[page.length - 1].id);
+      markSeen(page[page.length - 1].id);
     }
-  }, [markRead, notify]);
+  }, [markSeen, notify]);
 
   useEffect(() => { known.current = new Set(messages.map(m => m.id)); }, [messages]);
 
-  // Carga inicial + tempo real (mensagens, reações e quem está digitando).
+  // Carga inicial + tempo real (mensagens, reações, leituras e quem está digitando).
   useEffect(() => {
-    void fetchPage().then(page => applyPage(page));
+    let alive = true;
+    if (conversationId && otherId) {
+      // Na particular, a faixa de não lidas e os tiques vêm das leituras salvas no banco.
+      void Promise.all([
+        fetchPage(conversationId),
+        supabase.from('conversation_reads').select('user_id, last_read_id').eq('conversation_id', conversationId),
+      ]).then(([page, reads]) => {
+        if (!alive) return;
+        setReadAtOpen(reads.data?.find(r => r.user_id !== otherId)?.last_read_id ?? 0);
+        setOtherRead(reads.data?.find(r => r.user_id === otherId)?.last_read_id ?? 0);
+        applyPage(page);
+      });
+    } else void fetchPage(null).then(page => { if (alive) applyPage(page); });
+
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const stopTyping = (id: string) => {
       clearTimeout(timers.get(id));
@@ -105,9 +141,13 @@ export function Community() {
     };
     const upsertReaction = (reaction: Reaction & { message_id: number }) => setMessages(current => current.map(m => m.id !== reaction.message_id ? m
       : { ...m, reactions: [...m.reactions.filter(r => r.user_id !== reaction.user_id), { user_id: reaction.user_id, emoji: reaction.emoji }] }));
-    const realtime = supabase.channel('chat', { config: { broadcast: { self: false } } })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: payload }) => {
+    // O Realtime só entrega a cada pessoa o que ela pode ler (RLS); aqui separamos a conversa aberta.
+    const filter = conversationId ? { filter: `conversation_id=eq.${conversationId}` } : {};
+    const mine = (row: { conversation_id?: string | null }) => (row.conversation_id ?? null) === conversationId;
+    let realtime = supabase.channel(`chat:${key}`, { config: { broadcast: { self: false } } })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', ...filter }, ({ new: payload }) => {
         const row = payload as Row;
+        if (!mine(row)) return;
         stopTyping(row.user_id);
         setMessages(current => {
           // O envio em andamento deste aparelho troca a própria prévia pela mensagem salva.
@@ -119,11 +159,12 @@ export function Community() {
         if (row.reply_to && !known.current.has(row.reply_to)) void supabase.from('messages')
           .select('id, user_id, author_name, body, file_type, file_name, thumb_path, deleted_at').eq('id', row.reply_to).maybeSingle()
           .then(({ data }) => { if (data) setMessages(current => current.map(m => m.id === row.id ? { ...m, reply: { ...data, deleted: !!data.deleted_at } } : m)); });
-        if (stickToBottom.current) markRead(row.id); else setNewCount(count => count + 1);
+        if (stickToBottom.current) markSeen(row.id); else setNewCount(count => count + 1);
       })
       // Edições, e a pessoa que trocou o nome e teve as mensagens antigas atualizadas.
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, ({ new: row }) =>
-        setMessages(current => current.map(m => m.id === row.id ? { ...m, ...(row as Row) } : m)))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', ...filter }, ({ new: row }) => {
+        if (mine(row)) setMessages(current => current.map(m => m.id === row.id ? { ...m, ...(row as Row) } : m));
+      })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, ({ old }) =>
         setMessages(current => current.filter(m => m.id !== old.id)))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' }, ({ new: row }) => upsertReaction(row as Reaction & { message_id: number }))
@@ -136,16 +177,17 @@ export function Community() {
         setTypers(current => current[id] === name ? current : { ...current, [id]: name.slice(0, 40) });
         clearTimeout(timers.get(id));
         timers.set(id, setTimeout(() => stopTyping(id), TYPING_TTL));
-      })
-      .subscribe();
+      });
+    if (conversationId && otherId) {
+      const onRead = ({ new: row }: { new: Record<string, unknown> }) => { if (row.user_id === otherId) setOtherRead(read => Math.max(read, Number(row.last_read_id) || 0)); };
+      realtime = realtime
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_reads', filter: `conversation_id=eq.${conversationId}` }, onRead)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_reads', filter: `conversation_id=eq.${conversationId}` }, onRead);
+    }
+    realtime.subscribe();
     channel.current = realtime;
-    return () => { channel.current = null; timers.forEach(clearTimeout); void supabase.removeChannel(realtime); };
-  }, [applyPage, markRead]);
-
-  useEffect(() => {
-    if (!userId) return;
-    void supabase.from('user_blocks').select('blocked_id').then(({ data }) => setBlocked((data ?? []).map(b => b.blocked_id)));
-  }, [userId]);
+    return () => { alive = false; channel.current = null; timers.forEach(clearTimeout); void supabase.removeChannel(realtime); };
+  }, [applyPage, markSeen, conversationId, otherId, key]);
 
   // Abre na faixa de não lidas (ou no fim), mantém a conversa no fim quando chegam mensagens
   // e a posição ao carregar as antigas.
@@ -187,7 +229,7 @@ export function Community() {
   function goToBottom() {
     setNewCount(0);
     const lastId = messages.findLast(m => !m.pending)?.id;
-    if (lastId) markRead(lastId);
+    if (lastId) markSeen(lastId);
   }
 
   function scrollToBottom() {
@@ -202,7 +244,7 @@ export function Community() {
     const oldest = messages.find(m => !m.pending)?.id;
     if (!oldest) return;
     setLoadingOlder(true);
-    applyPage(await fetchPage(oldest), oldest);
+    applyPage(await fetchPage(conversationId, oldest), oldest);
     setLoadingOlder(false);
   }
 
@@ -212,7 +254,7 @@ export function Community() {
     let oldest = messages.find(m => !m.pending)?.id;
     let more = hasMore;
     for (let i = 0; !found && more && oldest && i < MAX_JUMP_PAGES; i++) {
-      const page = await fetchPage(oldest);
+      const page = await fetchPage(conversationId, oldest);
       if (!page) break;
       applyPage(page, oldest);
       found = page.some(m => m.id === id);
@@ -236,6 +278,7 @@ export function Community() {
     if (!userId || !profile) { requireLogin('Entre para conversar com a torcida.'); return; }
     const tempId = -Date.now();
     const reply = replyTo ? toReply(replyTo) : null;
+    const bucket = bucketFor(conversationId);
     stickToBottom.current = true;
     lastTyping.current = 0;
     setNewCount(0);
@@ -244,33 +287,35 @@ export function Community() {
       id: tempId, user_id: userId, author_name: profile.name, author_avatar: profile.avatar_url, body: body || null,
       file_path: file ? 'pending' : null, file_name: file?.name ?? null, file_type: file ? file.type || 'application/octet-stream' : null,
       file_size: file?.size ?? null, thumb_path: null, width: null, height: null, created_at: new Date().toISOString(),
-      deleted_at: null, deleted_by: null, reply_to: replyTo?.id ?? null, edited_at: null, reactions: [], reply, pending: true, localUrl,
+      deleted_at: null, deleted_by: null, reply_to: replyTo?.id ?? null, edited_at: null, conversation_id: conversationId,
+      reactions: [], reply, pending: true, localUrl,
     }]);
     const uploaded: string[] = [];
     try {
-      const args: Database['public']['Functions']['send_message']['Args'] = { p_body: body || undefined, p_reply_to: replyTo?.id };
+      const args: Database['public']['Functions']['send_message']['Args'] = { p_body: body || undefined, p_reply_to: replyTo?.id, p_conversation_id: conversationId ?? undefined };
       if (file) {
-        const folder = `${userId}/${crypto.randomUUID()}`;
+        // Grupo: pasta da pessoa no bucket público. Particular: pasta da conversa no bucket privado.
+        const folder = `${conversationId ? `${conversationId}/` : ''}${userId}/${crypto.randomUUID()}`;
         const path = `${folder}/${storageName(file.name)}`;
         const [thumb, upload] = await Promise.all([
           makeThumbnail(file),
-          supabase.storage.from('chat').upload(path, file, { contentType: file.type || 'application/octet-stream', cacheControl: '31536000' }),
+          supabase.storage.from(bucket).upload(path, file, { contentType: file.type || 'application/octet-stream', cacheControl: '31536000' }),
         ]);
         if (upload.error) throw upload.error;
         uploaded.push(path);
         Object.assign(args, { p_file_path: path, p_file_name: file.name });
         if (thumb) {
           const thumbPath = `${folder}/.thumb.jpg`;
-          const { error } = await supabase.storage.from('chat').upload(thumbPath, thumb.blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
+          const { error } = await supabase.storage.from(bucket).upload(thumbPath, thumb.blob, { contentType: 'image/jpeg', cacheControl: '31536000' });
           if (!error) { uploaded.push(thumbPath); Object.assign(args, { p_thumb_path: thumbPath, p_width: thumb.width, p_height: thumb.height }); }
         }
       }
       const { data, error } = await supabase.rpc('send_message', args);
       if (error) throw error;
       setMessages(current => sorted(current.filter(m => m.id !== data.id).map(m => m.id === tempId ? { ...data, reactions: [], reply, localUrl } : m)));
-      markRead(data.id);
+      markSeen(data.id);
     } catch (error) {
-      if (uploaded.length) void supabase.storage.from('chat').remove(uploaded);
+      if (uploaded.length) void supabase.storage.from(bucket).remove(uploaded);
       setMessages(current => current.filter(m => m.id !== tempId));
       // Falhou: o texto volta para o campo, para não se perder.
       if (!file && body) setText(current => current || body);
@@ -368,7 +413,7 @@ export function Community() {
     const { data, error } = await supabase.rpc('delete_message', { p_id: message.id });
     if (error) { notify(errorMessage(error)); return; }
     setMessages(current => current.map(m => m.id !== message.id ? m : wiped(m, userId)));
-    if (data?.length) void supabase.storage.from('chat').remove(data);
+    if (data?.length) void supabase.storage.from(bucketFor(conversationId)).remove(data);
   }
 
   async function report(message: Message) {
@@ -376,26 +421,22 @@ export function Community() {
     notify(error ? errorMessage(error) : 'Denúncia enviada. Obrigado por ajudar a manter o chat saudável.');
   }
 
-  async function block(message: Message) {
-    const { error } = await supabase.from('user_blocks').insert({ blocked_id: message.user_id });
-    if (error && error.code !== '23505') { notify(errorMessage(error)); return; }
-    // A App Store exige que bloquear também avise a organização sobre o conteúdo.
-    void supabase.rpc('report_message', { p_message_id: message.id, p_reason: 'bloqueio' });
-    setBlocked(current => [...current, message.user_id]);
-    notify(`Você não verá mais mensagens de ${shortName(message.author_name)}. A organização foi avisada.`);
-  }
-
-  async function unblock(id: string) {
-    const { error } = await supabase.from('user_blocks').delete().eq('blocked_id', id);
-    if (error) { notify(errorMessage(error)); return; }
-    setBlocked(current => current.filter(b => b !== id));
-  }
-
   async function ban(message: Message) {
     const { error } = await supabase.rpc('ban_user', { p_user_id: message.user_id });
     if (error) { notify(errorMessage(error)); return; }
     setMessages(current => current.map(m => m.user_id !== message.user_id || m.deleted_at ? m : wiped(m, userId)));
     notify(`${shortName(message.author_name)} foi banido do chat e as mensagens saíram do ar.`);
+  }
+
+  function askBlock(person: Person, messageId?: number) {
+    const name = shortName(person.name);
+    setConfirm({
+      title: `Bloquear ${name}?`,
+      text: group ? 'Você não verá mais as mensagens desta pessoa, e a organização será avisada. Dá para desbloquear nos dados do grupo.'
+        : 'Vocês não poderão mais trocar mensagens, e a organização será avisada. Dá para desbloquear quando quiser.',
+      label: 'Bloquear',
+      run: () => onBlock(person, messageId),
+    });
   }
 
   /** Ações do menu como dados; quem executa é runAction, no toque. */
@@ -410,7 +451,7 @@ export function Community() {
     if (canEdit(message, userId)) actions.push({ id: 'edit', label: 'Editar', icon: <Pencil size={20} /> });
     if (message.user_id === userId) return [...actions, { id: 'delete', label: 'Apagar', icon: <Trash2 size={20} />, danger: true }];
     actions.push({ id: 'report', label: 'Denunciar', icon: <Flag size={20} />, danger: true });
-    actions.push({ id: 'block', label: `Bloquear ${name}`, icon: <Ban size={20} />, danger: true });
+    if (!blocked.includes(message.user_id)) actions.push({ id: 'block', label: `Bloquear ${name}`, icon: <Ban size={20} />, danger: true });
     if (moderador) {
       actions.push({ id: 'remove', label: 'Remover (moderação)', icon: <Trash2 size={20} />, danger: true });
       actions.push({ id: 'ban', label: `Banir ${name}`, icon: <UserX size={20} />, danger: true });
@@ -426,9 +467,9 @@ export function Community() {
       case 'reply': startReply(message); break;
       case 'copy': void copy(message); break;
       case 'edit': startEdit(message); break;
-      case 'delete': setConfirm({ title: 'Apagar mensagem?', text: 'A mensagem será apagada para todas as pessoas do grupo.', label: 'Apagar para todos', run: () => void remove(message) }); break;
+      case 'delete': setConfirm({ title: 'Apagar mensagem?', text: group ? 'A mensagem será apagada para todas as pessoas do grupo.' : `A mensagem será apagada para você e para ${other ? shortName(other.name) : 'a outra pessoa'}.`, label: 'Apagar para todos', run: () => void remove(message) }); break;
       case 'report': setConfirm({ title: `Denunciar ${name}?`, text: 'A organização vai analisar esta mensagem em até 24 horas. Quem mandou não fica sabendo.', label: 'Denunciar', run: () => void report(message) }); break;
-      case 'block': setConfirm({ title: `Bloquear ${name}?`, text: 'Você não verá mais as mensagens desta pessoa, e a organização será avisada. Dá para desbloquear nos dados do grupo.', label: 'Bloquear', run: () => void block(message) }); break;
+      case 'block': askBlock({ id: message.user_id, name: message.author_name, avatar_url: message.author_avatar }, message.id); break;
       case 'remove': setConfirm({ title: `Remover a mensagem de ${name}?`, text: 'A mensagem sai do ar para todas as pessoas.', label: 'Remover', run: () => void remove(message) }); break;
       case 'ban': setConfirm({ title: `Banir ${name} do chat?`, text: 'A conta não poderá mais mandar mensagens, e todas as mensagens dela saem do ar.', label: 'Banir', run: () => void ban(message) }); break;
     }
@@ -441,7 +482,8 @@ export function Community() {
     chooseFile(file);
   }
 
-  const visible = messages.filter(m => !blocked.includes(m.user_id));
+  // No grupo some quem a pessoa bloqueou; na particular a conversa continua visível, mas travada.
+  const visible = group ? messages.filter(m => !blocked.includes(m.user_id)) : messages;
   const byId = new Map(messages.map(m => [m.id, m]));
   const replyOf = (m: Message): Reply | null => {
     if (!m.reply_to) return null;
@@ -452,27 +494,31 @@ export function Community() {
   const unreadCount = firstUnread ? visible.filter(m => m.id >= firstUnread && m.id <= unreadUpTo && m.user_id !== userId).length : 0;
   const days: { key: string; label: string; items: Message[] }[] = [];
   for (const m of visible) {
-    const key = new Date(m.created_at).toDateString();
+    const day = new Date(m.created_at).toDateString();
     const last = days[days.length - 1];
-    if (last?.key === key) last.items.push(m); else days.push({ key, label: dayLabel(m.created_at), items: [m] });
+    if (last?.key === day) last.items.push(m); else days.push({ key: day, label: dayLabel(m.created_at), items: [m] });
   }
   const typing = Object.entries(typers).filter(([id]) => !blocked.includes(id)).map(([, name]) => name);
-  const subtitle = typing.length === 1 ? `${typing[0]} está digitando…`
+  const otherBlocked = !!other && blocked.includes(other.id);
+  const subtitle = other
+    ? (typing.length ? 'digitando…' : onlineUsers.has(other.id) ? 'online' : 'clique para ver os dados do contato')
+    : typing.length === 1 ? `${typing[0]} está digitando…`
     : typing.length === 2 ? `${typing[0]} e ${typing[1]} estão digitando…`
     : typing.length > 2 ? `${typing.length} pessoas estão digitando…`
-    : online > 0 ? `${online} ${online === 1 ? 'pessoa' : 'pessoas'} no app agora` : 'toque para ver os dados do grupo';
+    : online > 0 ? `${online} ${online === 1 ? 'pessoa' : 'pessoas'} no app agora` : 'clique para ver os dados do grupo';
   const menuMessage = menu ? byId.get(menu.message.id) ?? menu.message : null;
+  const readUpTo = group ? null : otherRead;
 
-  return <section className={`chat fill ${info ? 'with-info' : ''}`} aria-label="Chat da comunidade">
+  return <section className={`chat ${group ? 'group' : 'direct'} ${info ? 'with-info' : ''}`} aria-label={other ? `Conversa com ${other.name}` : 'Chat da comunidade'}>
     <div className="chat-main" onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={onDrop}>
       {/* Atrás de tudo, inclusive da barra de digitar, que flutua sobre ele. */}
       <div className="chat-wallpaper" aria-hidden />
       <header className="chat-header">
-        <button className="icon-button chat-back only-mobile" onClick={() => router.replace('/')} aria-label="Voltar para o início"><ArrowLeft size={22} /></button>
-        <button className="chat-title" onClick={() => setInfo('info')} aria-label="Dados do grupo">
-          <img src="/images/logo.png" alt="" className="chat-avatar" />
+        <button className="icon-button chat-back only-mobile" onClick={onBack} aria-label="Voltar para as conversas"><ArrowLeft size={22} /></button>
+        <button className="chat-title" onClick={() => setInfo('info')} aria-label={other ? 'Dados do contato' : 'Dados do grupo'}>
+          {other ? <Avatar id={other.id} name={other.name} url={other.avatar_url} /> : <img src="/images/logo.png" alt="" className="chat-avatar" />}
           <span>
-            <h1>Torcida Solar</h1>
+            <h1>{other ? other.name : 'Torcida Solar'}</h1>
             <small className={typing.length ? 'typing' : ''} aria-live="polite">{subtitle}</small>
           </span>
         </button>
@@ -480,20 +526,24 @@ export function Community() {
       </header>
       {headerMenu && <div className="menu-layer" onClick={() => setHeaderMenu(false)}>
         <div className="menu-list header-menu" role="menu">
-          <button role="menuitem" onClick={() => { setHeaderMenu(false); setInfo('info'); }}><span>Dados do grupo</span></button>
-          <button role="menuitem" onClick={() => { setHeaderMenu(false); setInfo('blocked'); }}><span>Pessoas bloqueadas</span></button>
+          <button role="menuitem" onClick={() => { setHeaderMenu(false); setInfo('info'); }}><span>{other ? 'Dados do contato' : 'Dados do grupo'}</span></button>
+          {other
+            ? <button role="menuitem" className="danger" onClick={() => { setHeaderMenu(false); if (otherBlocked) onUnblock(other.id); else askBlock(other); }}><span>{otherBlocked ? 'Desbloquear' : 'Bloquear'}</span></button>
+            : <button role="menuitem" onClick={() => { setHeaderMenu(false); setInfo('blocked'); }}><span>Pessoas bloqueadas</span></button>}
+          <button role="menuitem" onClick={() => { setHeaderMenu(false); onBack(); }}><span>Fechar conversa</span></button>
         </div>
       </div>}
-      <button className="chat-pinned" onClick={() => setInfo('info')}>
+      {group && <button className="chat-pinned" onClick={() => setInfo('info')}>
         <span className="pinned-text"><small>Mensagem fixada</small><span>Respeito é a nossa principal regra. Boa torcida!</span></span><Pin size={18} />
-      </button>
+      </button>}
 
       <div className="chat-body">
-        <div className="chat-messages" ref={list} onScroll={onScroll} role="log" aria-label="Mensagens da comunidade" aria-live="polite">
+        <div className="chat-messages" ref={list} onScroll={onScroll} role="log" aria-label="Mensagens" aria-live="polite">
           {loadingOlder && <p className="chat-notice"><span className="spinner" /></p>}
+          {!group && status === 'ready' && !hasMore && <p className="chat-notice notice-private">🔒 Só você e {other && shortName(other.name)} veem as mensagens desta conversa. Denúncias continuam indo para a organização.</p>}
           {status === 'loading' && <p className="chat-notice">Carregando conversa…</p>}
-          {status === 'error' && <p className="chat-notice">Não foi possível carregar o chat. Verifique sua conexão.</p>}
-          {status === 'ready' && visible.length === 0 && <p className="chat-notice">Ninguém falou nada ainda. Puxe o assunto! ☀️</p>}
+          {status === 'error' && <p className="chat-notice">Não foi possível carregar a conversa. Verifique sua conexão.</p>}
+          {status === 'ready' && group && visible.length === 0 && <p className="chat-notice">Ninguém falou nada ainda. Puxe o assunto! ☀️</p>}
           {days.map(day => <section key={day.key} className="chat-day-group">
             <div className="chat-day"><span>{day.label}</span></div>
             {day.items.map((message, index) => {
@@ -501,7 +551,7 @@ export function Community() {
               const first = unread || index === 0 || day.items[index - 1].user_id !== message.user_id;
               return <div key={message.id} className="msg-slot">
                 {unread && <div className="unread-divider"><span>{unreadCount} {unreadCount === 1 ? 'mensagem não lida' : 'mensagens não lidas'}</span></div>}
-                <MessageRow message={message} first={first} userId={userId} reply={replyOf(message)} flash={flash === message.id}
+                <MessageRow message={message} first={first} userId={userId} reply={replyOf(message)} flash={flash === message.id} group={group} readUpTo={readUpTo}
                   onMenu={setMenu} onReply={startReply} onOpen={setViewer} onJump={id => void jumpTo(id)} onReactors={setReactorsOf} />
               </div>;
             })}
@@ -513,22 +563,27 @@ export function Community() {
         </button>}
       </div>
 
-      {userId ? <Compose text={text} setText={setText} context={context} userId={userId} inputRef={input}
-        onCancelContext={cancelContext} onSubmit={submit} onFile={chooseFile} onTyping={sendTyping} />
-        : <div className="chat-login">
+      {!userId ? <div className="chat-login">
           <p>Entre para mandar mensagens, fotos e reagir.</p>
           <button className="button primary" onClick={() => requireLogin('Entre para conversar com a torcida.')}><LogIn size={16} /> Entrar</button>
-        </div>}
+        </div>
+        : otherBlocked ? <button className="chat-login blocked-bar" onClick={() => onUnblock(other.id)}>
+          Você bloqueou este contato. Toque para desbloquear.
+        </button>
+        : <Compose text={text} setText={setText} context={context} userId={userId} inputRef={input}
+          onCancelContext={cancelContext} onSubmit={submit} onFile={chooseFile} onTyping={sendTyping} />}
     </div>
 
-    <GroupInfo key={info ?? 'fechado'} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online} blocked={blocked}
-      onUnblock={id => void unblock(id)} onOpenMedia={setViewer} onClose={() => setInfo(null)} />
+    <InfoPanel key={info ?? 'fechado'} target={target} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online}
+      contactOnline={!!other && onlineUsers.has(other.id)} blocked={blocked} onUnblock={onUnblock}
+      onBlock={person => askBlock(person, messages.findLast(m => m.user_id === person.id && !m.deleted_at)?.id)}
+      onOpenMedia={setViewer} onClose={() => setInfo(null)} />
 
     {menu && menuMessage && <MessageMenu request={menu} own={menuMessage.user_id === userId}
       myReaction={menuMessage.reactions.find(r => r.user_id === userId)?.emoji ?? null} actions={actionsFor(menuMessage)} onAction={id => runAction(menuMessage, id)}
       onReact={emoji => void react(menuMessage, emoji)} onMoreReactions={() => { setMenu(null); setReactPicker(menuMessage); }} onClose={() => setMenu(null)}>
       <div className={`msg ${menuMessage.user_id === userId ? 'own' : 'in'} ${menu.first ? 'first' : ''}`}>
-        <Bubble message={menuMessage} first={menu.first} userId={userId} reply={replyOf(menuMessage)} />
+        <Bubble message={menuMessage} first={menu.first} userId={userId} reply={replyOf(menuMessage)} group={group} readUpTo={readUpTo} />
       </div>
     </MessageMenu>}
     <Sheet open={!!reactPicker} onClose={() => setReactPicker(null)} title="Reagir">

@@ -141,3 +141,27 @@
   --wa-name-4: #a791ff; --wa-name-5: #42c7b8; --wa-name-6: #ffbc38; --wa-name-7: #e87fd4;
   --wa-name-8: #8fd16a; --wa-name-9: #8b9aff; --wa-name-10: #ff8f6b; --wa-name-11: #e6c34c;
 }
+
+/* Lista de conversas e tiques (mesma paleta do WhatsApp). */
+:root {
+  --wa-title: #1daa61;
+  --wa-tick: #53bdeb;
+  --wa-on-badge: #ffffff;
+  --wa-chip-on: #d9fdd3;
+  --wa-chip-on-text: #008069;
+  --wa-row-active: #f0f2f5;
+  --wa-intro: #f0f2f5;
+  --wa-notice: #ffeecd;
+  --wa-notice-text: #54656f;
+}
+[data-theme="dark"] {
+  --wa-title: #21c063;
+  --wa-tick: #53bdeb;
+  --wa-on-badge: #111b21;
+  --wa-chip-on: #103529;
+  --wa-chip-on-text: #d9fdd3;
+  --wa-row-active: #2a3942;
+  --wa-intro: #222e35;
+  --wa-notice: #182229;
+  --wa-notice-text: #ffd279;
+}

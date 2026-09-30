@@ -2,6 +2,11 @@ import type { Database } from '@/lib/database.types';
 import { shortName } from '@/lib/names';
 
 export type Reaction = { user_id: string; emoji: string };
+export type Person = { id: string; name: string; avatar_url: string | null };
+/** A conversa aberta: o grupo geral ou uma conversa particular com outra pessoa. */
+export type Target = { kind: 'group' } | { kind: 'direct'; id: string; other: Person };
+export const GROUP_KEY = 'geral';
+export const targetKey = (target: Target) => target.kind === 'group' ? GROUP_KEY : target.id;
 export type Row = Database['public']['Tables']['messages']['Row'];
 /** Resumo da mensagem citada, como vem de chat_messages. */
 export type Reply = { id: number; user_id: string; author_name: string; body: string | null; file_type: string | null; file_name: string | null; thumb_path: string | null; deleted: boolean };

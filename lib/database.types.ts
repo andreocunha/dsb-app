@@ -31,6 +31,7 @@ export type Database = {
           author_avatar: string | null
           author_name: string
           body: string | null
+          conversation_id: string | null
           created_at: string
           deleted_at: string | null
           deleted_by: string | null
@@ -46,6 +47,18 @@ export type Database = {
           user_id: string
           width: number | null
         }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      conversations: {
+        Row: { created_at: string; id: string; user_a: string; user_b: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      conversation_reads: {
+        Row: { conversation_id: string; last_read_id: number; updated_at: string; user_id: string }
         Insert: never
         Update: never
         Relationships: []
@@ -147,11 +160,12 @@ export type Database = {
       accept_terms: { Args: { p_accepted_at?: string }; Returns: undefined }
       ban_user: { Args: { p_user_id: string }; Returns: undefined }
       chat_messages: {
-        Args: { p_before?: number; p_limit?: number }
+        Args: { p_before?: number; p_conversation_id?: string; p_limit?: number }
         Returns: {
           author_avatar: string
           author_name: string
           body: string
+          conversation_id: string
           created_at: string
           deleted_at: string
           deleted_by: string
@@ -173,6 +187,13 @@ export type Database = {
       copy_lineup_forward: { Args: { p_race_id: string }; Returns: undefined }
       delete_account: { Args: never; Returns: undefined }
       delete_message: { Args: { p_id: number }; Returns: string[] }
+      dm_unread_count: { Args: never; Returns: number }
+      mark_conversation_read: { Args: { p_conversation_id: string; p_last_id: number }; Returns: undefined }
+      my_conversations: {
+        Args: never
+        Returns: { id: string; last: Json; other_avatar: string; other_id: string; other_name: string; other_read_id: number; unread: number }[]
+      }
+      start_conversation: { Args: { p_user: string }; Returns: string }
       edit_message: { Args: { p_body: string; p_id: number }; Returns: Database["public"]["Tables"]["messages"]["Row"] }
       fantasy_ranking: {
         Args: { p_limit?: number }
@@ -191,6 +212,7 @@ export type Database = {
       send_message: {
         Args: {
           p_body?: string
+          p_conversation_id?: string
           p_file_name?: string
           p_file_path?: string
           p_height?: number

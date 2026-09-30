@@ -5,38 +5,42 @@ import { ArrowLeft, Ban, ChevronRight, FileText, Images, Link2, LogOut, Moon, Pa
 import { formatSize } from '@/lib/media';
 import { shortName } from '@/lib/names';
 import { registerOverlay } from '@/lib/overlays';
-import { chatFileUrl, supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { useApp } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar } from '../ui';
-import { isVideo, type Message } from './types';
+import { useFileUrl } from './files';
+import { isVideo, type Message, type Person, type Target } from './types';
 
 type View = 'info' | 'media' | 'rules' | 'blocked';
-type Person = { id: string; name: string; avatar_url: string | null };
 
 const contato = 'andreoliveiracunha20@gmail.com';
-const COLUMNS = 'id, user_id, author_name, author_avatar, body, file_path, file_name, file_type, file_size, thumb_path, width, height, created_at, deleted_at, deleted_by';
+const COLUMNS = 'id, user_id, author_name, author_avatar, body, file_path, file_name, file_type, file_size, thumb_path, width, height, created_at, deleted_at, deleted_by, reply_to, edited_at, conversation_id';
 // Valores com ":" e "." vão entre aspas dentro do or() do PostgREST.
 const LINKS = 'body.ilike."*http://*",body.ilike."*https://*",body.ilike."*www.*"';
-const TITLES: Record<View, string> = { info: 'Dados do grupo', media: 'Mídia, links e docs', rules: 'Regras do chat', blocked: 'Pessoas bloqueadas' };
 const date = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: number) {
-  let query = supabase.from('messages').select(COLUMNS).is('deleted_at', null).order('id', { ascending: false }).limit(limit);
+// Sempre de uma conversa só: o grupo (conversation_id nulo) ou a conversa particular aberta.
+function inConversation<Q extends { is: (column: string, value: null) => Q; eq: (column: string, value: string) => Q }>(query: Q, conversationId: string | null) {
+  return conversationId ? query.eq('conversation_id', conversationId) : query.is('conversation_id', null);
+}
+
+async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: number, conversationId: string | null) {
+  let query = inConversation(supabase.from('messages').select(COLUMNS).is('deleted_at', null).order('id', { ascending: false }).limit(limit), conversationId);
   if (kind === 'media') query = query.not('file_path', 'is', null).or('file_type.like.image/*,file_type.like.video/*');
   if (kind === 'docs') query = query.not('file_path', 'is', null).not('file_type', 'like', 'image/*').not('file_type', 'like', 'video/*');
   if (kind === 'links') query = query.or(LINKS);
   const { data } = await query;
-  return (data ?? []).map(row => ({ ...row, reply_to: null, edited_at: null, reactions: [], reply: null })) as Message[];
+  return (data ?? []).map(row => ({ ...row, reactions: [], reply: null })) as Message[];
 }
 
 /**
- * Dados do grupo, no formato do WhatsApp: tela cheia no celular, painel à direita no desktop.
- * Cada linha faz algo de verdade no app (mídia, regras, tema, bloqueados, termos).
+ * Dados do grupo ou do contato, no formato do WhatsApp: tela cheia no celular, painel à direita no desktop.
+ * Cada linha faz algo de verdade no app (mídia, regras, tema, bloqueio, termos).
  */
-export function GroupInfo({ open, initialView, online, blocked, onUnblock, onOpenMedia, onClose }: {
-  open: boolean; initialView: View; online: number; blocked: string[];
-  onUnblock: (id: string) => void; onOpenMedia: (message: Message) => void; onClose: () => void;
+export function InfoPanel({ target, open, initialView, online, contactOnline, blocked, onUnblock, onBlock, onOpenMedia, onClose }: {
+  target: Target; open: boolean; initialView: View; online: number; contactOnline: boolean; blocked: string[];
+  onUnblock: (id: string) => void; onBlock: (person: Person) => void; onOpenMedia: (message: Message) => void; onClose: () => void;
 }) {
   const { theme, setTheme, notify } = useApp();
   const { userId, profile, signOut } = useAuth();
@@ -46,6 +50,7 @@ export function GroupInfo({ open, initialView, online, blocked, onUnblock, onOpe
   const [admins, setAdmins] = useState<Person[]>([]);
   const ref = useRef<HTMLElement>(null);
   const fechar = useRef(onClose);
+  const conversationId = target.kind === 'direct' ? target.id : null;
   useEffect(() => { fechar.current = onClose; }, [onClose]);
 
   useEffect(() => {
@@ -59,13 +64,12 @@ export function GroupInfo({ open, initialView, online, blocked, onUnblock, onOpe
 
   useEffect(() => {
     if (!open) return;
-    void fetchMessages('media', 8).then(setPreview);
-    void Promise.all([
-      supabase.from('messages').select('id', { count: 'exact', head: true }).is('deleted_at', null).not('file_path', 'is', null),
-      supabase.from('messages').select('id', { count: 'exact', head: true }).is('deleted_at', null).is('file_path', null).or(LINKS),
-    ]).then(([files, links]) => setTotal((files.count ?? 0) + (links.count ?? 0)));
-    void supabase.from('profiles').select('id, name, avatar_url').eq('role', 'moderator').order('name').then(({ data }) => setAdmins(data ?? []));
-  }, [open]);
+    void fetchMessages('media', 8, conversationId).then(setPreview);
+    const count = () => inConversation(supabase.from('messages').select('id', { count: 'exact', head: true }).is('deleted_at', null), conversationId);
+    void Promise.all([count().not('file_path', 'is', null), count().is('file_path', null).or(LINKS)])
+      .then(([files, links]) => setTotal((files.count ?? 0) + (links.count ?? 0)));
+    if (!conversationId) void supabase.from('profiles').select('id, name, avatar_url').eq('role', 'moderator').order('name').then(({ data }) => setAdmins(data ?? []));
+  }, [open, conversationId]);
 
   if (!open) return null;
 
@@ -77,19 +81,61 @@ export function GroupInfo({ open, initialView, online, blocked, onUnblock, onOpe
     } catch { /* a pessoa cancelou o compartilhamento */ }
   }
 
-  const visible = preview.filter(m => !blocked.includes(m.user_id)).slice(0, 4);
+  const person = target.kind === 'direct' ? target.other : null;
+  const personBlocked = !!person && blocked.includes(person.id);
+  const visible = preview.filter(m => !blocked.includes(m.user_id) || !!person).slice(0, 4);
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+  const titles: Record<View, string> = { info: person ? 'Dados do contato' : 'Dados do grupo', media: 'Mídia, links e docs', rules: 'Regras do chat', blocked: 'Pessoas bloqueadas' };
   const back = view === 'info' ? onClose : () => setView('info');
 
-  return <aside ref={ref} className="group-info" aria-label={TITLES[view]}>
+  const mediaRow = <>
+    <button className="group-row" onClick={() => setView('media')}>
+      <Images size={22} /><span><strong>Mídia, links e docs</strong></span>
+      {total !== null && <em>{total}</em>}<ChevronRight size={20} className="only-mobile" />
+    </button>
+    {visible.length > 0 && <div className="group-media-preview">
+      {visible.map(m => <MediaTile key={m.id} message={m} onOpen={onOpenMedia} />)}
+    </div>}
+  </>;
+
+  return <aside ref={ref} className="group-info" aria-label={titles[view]}>
     <header className="group-info-header">
-      <button className="icon-button group-close" onClick={back} aria-label={view === 'info' ? 'Fechar dados do grupo' : 'Voltar'}>
+      <button className="icon-button group-close" onClick={back} aria-label={view === 'info' ? 'Fechar' : 'Voltar'}>
         {view === 'info' ? <><ArrowLeft size={22} className="only-mobile" /><X size={22} className="only-desktop" /></> : <ArrowLeft size={22} />}
       </button>
-      <h2>{TITLES[view]}</h2>
+      <h2>{titles[view]}</h2>
     </header>
 
     <div className="group-info-body">
-      {view === 'info' && <>
+      {view === 'info' && person && <>
+        <section className="group-hero">
+          <Avatar id={person.id} name={person.name} url={person.avatar_url} />
+          <h1>{person.name}</h1>
+          <p>{contactOnline ? <b>online</b> : 'Contato no DSB'}</p>
+          <div className="group-actions">
+            <button onClick={() => setView('media')}><span><Images size={22} /></span>Mídia</button>
+            <button onClick={toggleTheme}><span>{theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}</span>{theme === 'dark' ? 'Claro' : 'Escuro'}</button>
+          </div>
+        </section>
+        <hr />
+        {mediaRow}
+        <hr />
+        <button className="group-row" onClick={toggleTheme}>
+          <Palette size={22} /><span><strong>Tema do chat</strong><small>{theme === 'dark' ? 'Escuro' : 'Claro'}</small></span>
+        </button>
+        <div className="group-row static">
+          <ShieldCheck size={22} /><span><strong>Conversa particular</strong><small>Só você e {shortName(person.name)} veem estas mensagens. Denúncias são analisadas pela organização.</small></span>
+        </div>
+        <hr />
+        <button className="group-row danger" onClick={() => personBlocked ? onUnblock(person.id) : onBlock(person)}>
+          <Ban size={22} /><span><strong>{personBlocked ? 'Desbloquear' : 'Bloquear'} {shortName(person.name)}</strong></span>
+        </button>
+        <a className="group-row danger" href={`mailto:${contato}?subject=${encodeURIComponent(`Denúncia de ${person.name} no chat do DSB`)}`}>
+          <ThumbsDown size={22} /><span><strong>Denunciar {shortName(person.name)}</strong></span>
+        </a>
+      </>}
+
+      {view === 'info' && !person && <>
         <section className="group-hero">
           <img src="/images/logo.png" alt="" />
           <h1>Torcida Solar</h1>
@@ -98,25 +144,17 @@ export function GroupInfo({ open, initialView, online, blocked, onUnblock, onOpe
             <button onClick={() => void share()}><span><Share2 size={22} /></span>Compartilhar</button>
             <button onClick={() => setView('media')}><span><Images size={22} /></span>Mídia</button>
             <button onClick={() => setView('rules')}><span><ShieldCheck size={22} /></span>Regras</button>
-            <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span>{theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}</span>{theme === 'dark' ? 'Claro' : 'Escuro'}</button>
+            <button onClick={toggleTheme}><span>{theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}</span>{theme === 'dark' ? 'Claro' : 'Escuro'}</button>
           </div>
         </section>
         <p className="group-description">Este é o espaço para torcer, trocar ideias e acompanhar os bastidores do Desafio Solar Brasil.</p>
         <hr />
-
-        <button className="group-row" onClick={() => setView('media')}>
-          <Images size={22} /><span><strong>Mídia, links e docs</strong></span>
-          {total !== null && <em>{total}</em>}<ChevronRight size={20} className="only-mobile" />
-        </button>
-        {visible.length > 0 && <div className="group-media-preview">
-          {visible.map(m => <MediaTile key={m.id} message={m} onOpen={onOpenMedia} />)}
-        </div>}
+        {mediaRow}
         <hr />
-
         <button className="group-row" onClick={() => setView('rules')}>
           <ShieldCheck size={22} /><span><strong>Regras do chat</strong><small>Respeito é a nossa principal regra. Boa torcida!</small></span>
         </button>
-        <button className="group-row" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+        <button className="group-row" onClick={toggleTheme}>
           <Palette size={22} /><span><strong>Tema do chat</strong><small>{theme === 'dark' ? 'Escuro' : 'Claro'}</small></span>
         </button>
         {userId && <button className="group-row" onClick={() => setView('blocked')}>
@@ -145,7 +183,7 @@ export function GroupInfo({ open, initialView, online, blocked, onUnblock, onOpe
         <p className="group-footnote">Grupo criado pela organização do Desafio Solar Brasil.</p>
       </>}
 
-      {view === 'media' && <MediaView blocked={blocked} onOpen={onOpenMedia} />}
+      {view === 'media' && <MediaView blocked={person ? [] : blocked} conversationId={conversationId} onOpen={onOpenMedia} />}
 
       {view === 'rules' && <div className="group-text">
         <p>Este é o espaço para torcer, trocar ideias e acompanhar os bastidores do Desafio Solar Brasil.</p>
@@ -167,17 +205,25 @@ export function GroupInfo({ open, initialView, online, blocked, onUnblock, onOpe
 }
 
 function MediaTile({ message, onOpen }: { message: Message; onOpen: (message: Message) => void }) {
+  const thumb = useFileUrl(message.conversation_id, message.thumb_path);
   return <button className="media-tile" onClick={() => onOpen(message)} aria-label={`Abrir ${isVideo(message) ? 'vídeo' : 'foto'} de ${shortName(message.author_name)}`}>
-    {message.thumb_path ? <img src={chatFileUrl(message.thumb_path)} alt="" loading="lazy" /> : <span />}
+    {thumb ? <img src={thumb} alt="" loading="lazy" /> : <span />}
     {isVideo(message) && <Play size={18} fill="currentColor" />}
   </button>;
 }
 
-/** Galeria do grupo com as abas do WhatsApp: Mídia, Docs e Links. */
-function MediaView({ blocked, onOpen }: { blocked: string[]; onOpen: (message: Message) => void }) {
+function DocRow({ message }: { message: Message }) {
+  const href = useFileUrl(message.conversation_id, message.file_path, message.file_name ?? 'arquivo');
+  return <a className="group-row" href={href ?? undefined} target="_blank" rel="noopener noreferrer">
+    <FileText size={22} /><span><strong>{message.file_name}</strong><small>{[formatSize(message.file_size), date(message.created_at), shortName(message.author_name)].filter(Boolean).join(' · ')}</small></span>
+  </a>;
+}
+
+/** Galeria com as abas do WhatsApp: Mídia, Docs e Links. */
+function MediaView({ blocked, conversationId, onOpen }: { blocked: string[]; conversationId: string | null; onOpen: (message: Message) => void }) {
   const [tab, setTab] = useState<'media' | 'docs' | 'links'>('media');
   const [items, setItems] = useState<{ tab: string; list: Message[] } | null>(null);
-  useEffect(() => { void fetchMessages(tab, 90).then(list => setItems({ tab, list })); }, [tab]);
+  useEffect(() => { void fetchMessages(tab, 90, conversationId).then(list => setItems({ tab, list })); }, [tab, conversationId]);
   const list = items?.tab === tab ? items.list.filter(m => !blocked.includes(m.user_id)) : null;
 
   return <>
@@ -188,9 +234,7 @@ function MediaView({ blocked, onOpen }: { blocked: string[]; onOpen: (message: M
     {!list ? <p className="group-empty">Carregando…</p>
       : !list.length ? <p className="group-empty">{tab === 'media' ? 'Nenhuma foto ou vídeo ainda.' : tab === 'docs' ? 'Nenhum documento ainda.' : 'Nenhum link ainda.'}</p>
       : tab === 'media' ? <div className="group-media-grid">{list.map(m => <MediaTile key={m.id} message={m} onOpen={onOpen} />)}</div>
-      : tab === 'docs' ? list.map(m => <a key={m.id} className="group-row" href={`${chatFileUrl(m.file_path!)}?download=${encodeURIComponent(m.file_name ?? '')}`} target="_blank" rel="noopener noreferrer">
-          <FileText size={22} /><span><strong>{m.file_name}</strong><small>{[formatSize(m.file_size), date(m.created_at), shortName(m.author_name)].filter(Boolean).join(' · ')}</small></span>
-        </a>)
+      : tab === 'docs' ? list.map(m => <DocRow key={m.id} message={m} />)
       : list.map(m => {
           const url = m.body?.match(/(?:https?:\/\/|www\.)[^\s<]+/i)?.[0].replace(/[.,!?;:)\]'"]+$/, '') ?? '';
           return <a key={m.id} className="group-row" href={/^https?:/i.test(url) ? url : `https://${url}`} target="_blank" rel="noopener noreferrer nofollow">

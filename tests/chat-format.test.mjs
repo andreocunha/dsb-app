@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayLabel, formatMessage, jumboEmoji, nameColor, NAME_COLORS, preview, whenLabel } from '../lib/chat-format.ts';
+import { dayLabel, formatMessage, jumboEmoji, listTime, nameColor, NAME_COLORS, preview, whenLabel } from '../lib/chat-format.ts';
 
 const text = t => ({ type: 'text', text: t });
 
@@ -59,4 +59,11 @@ test('cor do nome é estável e dentro da paleta', () => {
   const id = '6f1c2d6e-8a61-4c1f-9d7e-1b2a3c4d5e6f';
   assert.equal(nameColor(id), nameColor(id));
   assert.ok(nameColor(id) >= 0 && nameColor(id) < NAME_COLORS);
+});
+
+test('horário da lista de conversas: hora hoje, depois ontem e datas', () => {
+  const now = new Date(2026, 8, 30, 18, 0);
+  assert.equal(listTime(new Date(2026, 8, 30, 14, 31).toISOString(), now), '14:31');
+  assert.equal(listTime(new Date(2026, 8, 29, 9, 8).toISOString(), now), 'Ontem');
+  assert.equal(listTime(new Date(2026, 8, 20, 9, 8).toISOString(), now), '20/09/2026');
 });
