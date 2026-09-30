@@ -25,7 +25,7 @@ function inConversation<Q extends { is: (column: string, value: null) => Q; eq: 
   return conversationId ? query.eq('conversation_id', conversationId) : query.is('conversation_id', null);
 }
 
-async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: number, conversationId: string | null) {
+export async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: number, conversationId: string | null) {
   let query = inConversation(supabase.from('messages').select(COLUMNS).is('deleted_at', null).order('id', { ascending: false }).limit(limit), conversationId);
   if (kind === 'media') query = query.not('file_path', 'is', null).or('file_type.like.image/*,file_type.like.video/*');
   if (kind === 'docs') query = query.not('file_path', 'is', null).not('file_type', 'like', 'image/*').not('file_type', 'like', 'video/*');

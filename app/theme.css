@@ -165,3 +165,7 @@
   --wa-notice: #182229;
   --wa-notice-text: #ffd279;
 }
+
+/* Visualizador de mídia no desktop (WhatsApp Web). */
+:root { --wa-viewer: #ffffff; --wa-viewer-nav: #54656f; }
+[data-theme="dark"] { --wa-viewer: #111b21; --wa-viewer-nav: #3b4a54; }
