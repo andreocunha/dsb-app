@@ -52,14 +52,21 @@ function useUnread(userId: string | null) {
     let alive = true;
     void supabase.rpc('unread_count', { p_after: lastRead() }).then(({ data }) => { if (alive) setUnread(data ?? 0); });
     if (userId) void supabase.rpc('dm_unread_count').then(({ data }) => { if (alive) setDm({ user: userId, count: data ?? 0 }); });
+    // ✓✓ cinza do outro lado: o que chegou enquanto o app estava fechado conta como entregue ao abrir.
+    const delivered = () => { if (userId) void supabase.rpc('mark_delivered', {}); };
+    delivered();
+    const onVisible = () => { if (document.visibilityState === 'visible') delivered(); };
+    document.addEventListener('visibilitychange', onVisible);
     const channel = supabase.channel('chat-badge')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: row }) => {
         if (row.user_id === userId) return;
-        if (row.conversation_id) setDm(current => ({ ...current, count: current.count + 1 }));
-        else if (row.id > lastRead()) setUnread(count => count + 1);
+        if (row.conversation_id) {
+          setDm(current => ({ ...current, count: current.count + 1 }));
+          void supabase.rpc('mark_delivered', { p_conversation_id: row.conversation_id });
+        } else if (row.id > lastRead()) setUnread(count => count + 1);
       })
       .subscribe();
-    return () => { alive = false; void supabase.removeChannel(channel); };
+    return () => { alive = false; document.removeEventListener('visibilitychange', onVisible); void supabase.removeChannel(channel); };
   }, [userId]);
   const markRead = useCallback((lastId: number) => {
     if (lastId <= lastRead()) return;

@@ -15,7 +15,7 @@ import { EmojiPicker } from './emoji-picker';
 import { bucketFor } from './files';
 import { InfoPanel } from './group-info';
 import { MediaSend, type Pick } from './media-send';
-import { Bubble, MessageRow, type MenuRequest } from './message';
+import { Bubble, MessageRow, type MenuRequest, type Receipts } from './message';
 import { MessageMenu, type MenuAction } from './message-menu';
 import { Reactors } from './reactors';
 import { canEdit, isImage, targetKey, toReply, type Message, type Person, type Reaction, type Reply, type Row, type Target } from './types';
@@ -79,8 +79,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   // Faixa "N mensagens não lidas": o que chegou entre a última visita e a abertura da conversa.
   const [readAtOpen, setReadAtOpen] = useState(() => group ? lastReadId() : 0);
   const [unreadUpTo, setUnreadUpTo] = useState(0);
-  // Conversa particular: até onde a outra pessoa leu (tiques azuis).
-  const [otherRead, setOtherRead] = useState(0);
+  // Conversa particular: até onde a outra pessoa recebeu (✓✓) e leu (✓✓ azul).
+  const [receipts, setReceipts] = useState<Receipts>({ read: 0, delivered: 0 });
   // Quando a pessoa está lendo mensagens antigas, as novas viram um contador no botão de descer.
   const [newCount, setNewCount] = useState(0);
   const [atBottom, setAtBottom] = useState(true);
@@ -95,10 +95,14 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const lastSeen = useRef(0);
   const draft = useRef('');
   const known = useRef(new Set<number>());
+  const latestId = useRef(0);
 
-  /** Marca como lida: no aparelho para o grupo, no banco para as particulares (é o que acende o azul do outro lado). */
+  /**
+   * Marca como lida: no aparelho para o grupo, no banco para as particulares (é o que acende o azul do outro lado).
+   * Só com a tela visível: conversa aberta numa aba escondida não conta como lida, como no WhatsApp.
+   */
   const markSeen = useCallback((lastId: number) => {
-    if (lastId <= 0 || lastId <= lastSeen.current) return;
+    if (lastId <= 0 || lastId <= lastSeen.current || document.visibilityState !== 'visible') return;
     lastSeen.current = lastId;
     if (!conversationId) { markRead(lastId); return; }
     void supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId, p_last_id: lastId }).then(() => { refreshDm(); onSeen(key); });
@@ -116,7 +120,17 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     }
   }, [markSeen, notify]);
 
-  useEffect(() => { known.current = new Set(messages.map(m => m.id)); }, [messages]);
+  useEffect(() => {
+    known.current = new Set(messages.map(m => m.id));
+    latestId.current = messages.findLast(m => !m.pending)?.id ?? 0;
+  }, [messages]);
+
+  // Voltou para a aba ou para o app com a conversa no fim: agora sim, lida.
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible' && stickToBottom.current) markSeen(latestId.current); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [markSeen]);
 
   // Carga inicial + tempo real (mensagens, reações, leituras e quem está digitando).
   useEffect(() => {
@@ -125,11 +139,12 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       // Na particular, a faixa de não lidas e os tiques vêm das leituras salvas no banco.
       void Promise.all([
         fetchPage(conversationId),
-        supabase.from('conversation_reads').select('user_id, last_read_id').eq('conversation_id', conversationId),
+        supabase.from('conversation_reads').select('user_id, last_read_id, last_delivered_id').eq('conversation_id', conversationId),
       ]).then(([page, reads]) => {
         if (!alive) return;
         setReadAtOpen(reads.data?.find(r => r.user_id !== otherId)?.last_read_id ?? 0);
-        setOtherRead(reads.data?.find(r => r.user_id === otherId)?.last_read_id ?? 0);
+        const theirs = reads.data?.find(r => r.user_id === otherId);
+        setReceipts({ read: theirs?.last_read_id ?? 0, delivered: Math.max(theirs?.last_delivered_id ?? 0, theirs?.last_read_id ?? 0) });
         applyPage(page);
       });
     } else void fetchPage(null).then(page => { if (alive) applyPage(page); });
@@ -180,7 +195,11 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
         timers.set(id, setTimeout(() => stopTyping(id), TYPING_TTL));
       });
     if (conversationId && otherId) {
-      const onRead = ({ new: row }: { new: Record<string, unknown> }) => { if (row.user_id === otherId) setOtherRead(read => Math.max(read, Number(row.last_read_id) || 0)); };
+      const onRead = ({ new: row }: { new: Record<string, unknown> }) => {
+        if (row.user_id !== otherId) return;
+        const read = Number(row.last_read_id) || 0, delivered = Number(row.last_delivered_id) || 0;
+        setReceipts(current => ({ read: Math.max(current.read, read), delivered: Math.max(current.delivered, delivered, read) }));
+      };
       realtime = realtime
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_reads', filter: `conversation_id=eq.${conversationId}` }, onRead)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_reads', filter: `conversation_id=eq.${conversationId}` }, onRead);
@@ -508,7 +527,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     : typing.length > 2 ? `${typing.length} pessoas estão digitando…`
     : online > 0 ? `${online} ${online === 1 ? 'pessoa' : 'pessoas'} no app agora` : 'clique para ver os dados do grupo';
   const menuMessage = menu ? byId.get(menu.message.id) ?? menu.message : null;
-  const readUpTo = group ? null : otherRead;
+  const tickState = group ? null : receipts;
 
   return <section className={`chat ${group ? 'group' : 'direct'} ${info ? 'with-info' : ''}`} aria-label={other ? `Conversa com ${other.name}` : 'Chat da comunidade'}>
     <div className="chat-main" onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={onDrop}>
@@ -552,7 +571,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
               const first = unread || index === 0 || day.items[index - 1].user_id !== message.user_id;
               return <div key={message.id} className="msg-slot">
                 {unread && <div className="unread-divider"><span>{unreadCount} {unreadCount === 1 ? 'mensagem não lida' : 'mensagens não lidas'}</span></div>}
-                <MessageRow message={message} first={first} userId={userId} reply={replyOf(message)} flash={flash === message.id} group={group} readUpTo={readUpTo}
+                <MessageRow message={message} first={first} userId={userId} reply={replyOf(message)} flash={flash === message.id} group={group} receipts={tickState}
                   onMenu={setMenu} onReply={startReply} onOpen={setViewer} onJump={id => void jumpTo(id)} onReactors={setReactorsOf} />
               </div>;
             })}
@@ -575,7 +594,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
           onCancelContext={cancelContext} onSubmit={submit} onFile={chooseFile} onTyping={sendTyping} />}
     </div>
 
-    <InfoPanel key={info ?? 'fechado'} target={target} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online}
+    <InfoPanel key={`info-${info ?? 'fechado'}`} target={target} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online}
       contactOnline={!!other && onlineUsers.has(other.id)} blocked={blocked} onUnblock={onUnblock}
       onBlock={person => askBlock(person, messages.findLast(m => m.user_id === person.id && !m.deleted_at)?.id)}
       onOpenMedia={setViewer} onClose={() => setInfo(null)} />
@@ -584,7 +603,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       myReaction={menuMessage.reactions.find(r => r.user_id === userId)?.emoji ?? null} actions={actionsFor(menuMessage)} onAction={id => runAction(menuMessage, id)}
       onReact={emoji => void react(menuMessage, emoji)} onMoreReactions={() => { setMenu(null); setReactPicker(menuMessage); }} onClose={() => setMenu(null)}>
       <div className={`msg ${menuMessage.user_id === userId ? 'own' : 'in'} ${menu.first ? 'first' : ''}`}>
-        <Bubble message={menuMessage} first={menu.first} userId={userId} reply={replyOf(menuMessage)} group={group} readUpTo={readUpTo} />
+        <Bubble message={menuMessage} first={menu.first} userId={userId} reply={replyOf(menuMessage)} group={group} receipts={tickState} />
       </div>
     </MessageMenu>}
     <Sheet open={!!reactPicker} onClose={() => setReactPicker(null)} title="Reagir">
@@ -598,12 +617,12 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       </div>}
     </Sheet>
     <Reactors message={reactorsOf} userId={userId} onClose={() => setReactorsOf(null)} onRemove={message => { setReactorsOf(null); void react(message, message.reactions.find(r => r.user_id === userId)!.emoji); }} />
-    <Viewer key={viewer?.id ?? 'fechado'} message={viewer} userId={userId} blocked={group ? blocked : NOBODY}
+    <Viewer key={`viewer-${viewer?.id ?? 'fechado'}`} message={viewer} userId={userId} blocked={group ? blocked : NOBODY}
       myReaction={id => byId.get(id)?.reactions.find(r => r.user_id === userId)?.emoji ?? null}
       onClose={() => setViewer(null)}
       onJump={m => { setViewer(null); setInfo(null); void jumpTo(m.id); }}
       onReply={m => { setViewer(null); setInfo(null); startReply(byId.get(m.id) ?? m); }}
       onReact={(m, emoji) => void react(byId.get(m.id) ?? m, emoji)} />
-    <MediaSend key={pick?.url} pick={pick} onClose={closePick} onSend={sendPick} />
+    <MediaSend key={`media-${pick?.url ?? 'fechado'}`} pick={pick} onClose={closePick} onSend={sendPick} />
   </section>;
 }

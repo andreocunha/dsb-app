@@ -58,7 +58,7 @@ export type Database = {
         Relationships: []
       }
       conversation_reads: {
-        Row: { conversation_id: string; last_read_id: number; updated_at: string; user_id: string }
+        Row: { conversation_id: string; last_delivered_id: number; last_read_id: number; updated_at: string; user_id: string }
         Insert: never
         Update: never
         Relationships: []
@@ -188,10 +188,11 @@ export type Database = {
       delete_account: { Args: never; Returns: undefined }
       delete_message: { Args: { p_id: number }; Returns: string[] }
       dm_unread_count: { Args: never; Returns: number }
+      mark_delivered: { Args: { p_conversation_id?: string }; Returns: undefined }
       mark_conversation_read: { Args: { p_conversation_id: string; p_last_id: number }; Returns: undefined }
       my_conversations: {
         Args: never
-        Returns: { id: string; last: Json; other_avatar: string; other_id: string; other_name: string; other_read_id: number; unread: number }[]
+        Returns: { id: string; last: Json; other_avatar: string; other_delivered_id: number; other_id: string; other_name: string; other_read_id: number; unread: number }[]
       }
       start_conversation: { Args: { p_user: string }; Returns: string }
       edit_message: { Args: { p_body: string; p_id: number }; Returns: Database["public"]["Tables"]["messages"]["Row"] }
