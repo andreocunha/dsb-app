@@ -575,7 +575,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
           onCancelContext={cancelContext} onSubmit={submit} onFile={chooseFile} onTyping={sendTyping} />}
     </div>
 
-    <InfoPanel key={info ?? 'fechado'} target={target} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online}
+    <InfoPanel key={`info-${info ?? 'fechado'}`} target={target} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online}
       contactOnline={!!other && onlineUsers.has(other.id)} blocked={blocked} onUnblock={onUnblock}
       onBlock={person => askBlock(person, messages.findLast(m => m.user_id === person.id && !m.deleted_at)?.id)}
       onOpenMedia={setViewer} onClose={() => setInfo(null)} />
@@ -598,12 +598,12 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       </div>}
     </Sheet>
     <Reactors message={reactorsOf} userId={userId} onClose={() => setReactorsOf(null)} onRemove={message => { setReactorsOf(null); void react(message, message.reactions.find(r => r.user_id === userId)!.emoji); }} />
-    <Viewer key={viewer?.id ?? 'fechado'} message={viewer} userId={userId} blocked={group ? blocked : NOBODY}
+    <Viewer key={`viewer-${viewer?.id ?? 'fechado'}`} message={viewer} userId={userId} blocked={group ? blocked : NOBODY}
       myReaction={id => byId.get(id)?.reactions.find(r => r.user_id === userId)?.emoji ?? null}
       onClose={() => setViewer(null)}
       onJump={m => { setViewer(null); setInfo(null); void jumpTo(m.id); }}
       onReply={m => { setViewer(null); setInfo(null); startReply(byId.get(m.id) ?? m); }}
       onReact={(m, emoji) => void react(byId.get(m.id) ?? m, emoji)} />
-    <MediaSend key={pick?.url} pick={pick} onClose={closePick} onSend={sendPick} />
+    <MediaSend key={`media-${pick?.url ?? 'fechado'}`} pick={pick} onClose={closePick} onSend={sendPick} />
   </section>;
 }
