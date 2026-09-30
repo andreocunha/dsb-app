@@ -4,6 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import { AppShell } from "@/components/app-shell";
 import { AuthProvider } from "@/components/auth";
 import "./globals.css";
+import "./chat.css";
 export const metadata: Metadata = {
   title: { default: "DSB • Desafio Solar Brasil", template: "%s • DSB" },
   description: "A energia do sol. A emoção da competição. Acompanhe o Desafio Solar Brasil, encontre a comunidade e monte seu fantasy.",

@@ -17,8 +17,10 @@ type AppValue = { theme: string; setTheme: (theme: string) => void; notify: (mes
 const AppContext = createContext<AppValue>({ theme: 'light', setTheme: () => {}, notify: () => {} });
 export const useApp = () => useContext(AppContext);
 // Contexto separado: só quem mostra o contador re-renderiza quando alguém entra ou sai.
-const OnlineContext = createContext(0);
-export const useOnline = () => useContext(OnlineContext);
+const OnlineContext = createContext<{ count: number; users: Set<string> }>({ count: 0, users: new Set() });
+export const useOnline = () => useContext(OnlineContext).count;
+/** Quem está com o app aberto agora, por id da conta (para o "online" das conversas). */
+export const useOnlineUsers = () => useContext(OnlineContext).users;
 const navigation = [{ href: '/', label: 'Home', icon: House }, { href: '/comunidade/', label: 'Chat', icon: MessageCircle }, { href: '/fantasy/', label: 'Fantasy', icon: Trophy }];
 
 function ThemeSwitch({ theme, setTheme }: { theme: string; setTheme: (theme: string) => void }) {
@@ -33,18 +35,28 @@ const noopSubscribe = () => () => {};
 // Mensagens não lidas: o último id lido fica no aparelho e o total aparece no menu.
 const READ_KEY = 'dsb-chat-read';
 const lastRead = () => { try { return Number(localStorage.getItem(READ_KEY)) || 0; } catch { return 0; } };
-type UnreadValue = { unread: number; markRead: (lastId: number) => void };
-const UnreadContext = createContext<UnreadValue>({ unread: 0, markRead: () => {} });
+export const lastReadId = lastRead;
+// unread: grupo geral (último lido fica no aparelho). dmUnread: conversas particulares (no banco).
+type UnreadValue = { unread: number; markRead: (lastId: number) => void; dmUnread: number; refreshDm: () => void };
+const UnreadContext = createContext<UnreadValue>({ unread: 0, markRead: () => {}, dmUnread: 0, refreshDm: () => {} });
 export const useChatUnread = () => useContext(UnreadContext);
 
 function useUnread(userId: string | null) {
   const [unread, setUnread] = useState(0);
+  const [dm, setDm] = useState({ user: null as string | null, count: 0 });
+  const refreshDm = useCallback(() => {
+    if (!userId) return;
+    void supabase.rpc('dm_unread_count').then(({ data }) => setDm({ user: userId, count: data ?? 0 }));
+  }, [userId]);
   useEffect(() => {
     let alive = true;
     void supabase.rpc('unread_count', { p_after: lastRead() }).then(({ data }) => { if (alive) setUnread(data ?? 0); });
+    if (userId) void supabase.rpc('dm_unread_count').then(({ data }) => { if (alive) setDm({ user: userId, count: data ?? 0 }); });
     const channel = supabase.channel('chat-badge')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: row }) => {
-        if (row.user_id !== userId && row.id > lastRead()) setUnread(count => count + 1);
+        if (row.user_id === userId) return;
+        if (row.conversation_id) setDm(current => ({ ...current, count: current.count + 1 }));
+        else if (row.id > lastRead()) setUnread(count => count + 1);
       })
       .subscribe();
     return () => { alive = false; void supabase.removeChannel(channel); };
@@ -54,20 +66,26 @@ function useUnread(userId: string | null) {
     try { localStorage.setItem(READ_KEY, String(lastId)); } catch { /* sem localStorage: só nesta sessão */ }
     setUnread(0);
   }, []);
-  return { unread, markRead };
+  return { unread, markRead, dmUnread: dm.user === userId ? dm.count : 0, refreshDm };
 }
 
-/** Quantas pessoas estão com o app aberto agora (Realtime Presence, sem login). */
-function useOnlineCount() {
-  const [count, setCount] = useState(0);
+/**
+ * Quem está com o app aberto agora (Realtime Presence). Com login, a chave é o id da conta:
+ * é assim que a conversa particular mostra "online", como no WhatsApp.
+ */
+function useOnlinePresence(userId: string | null) {
+  const [online, setOnline] = useState<{ count: number; users: Set<string> }>({ count: 0, users: new Set() });
   useEffect(() => {
-    const channel = supabase.channel('online', { config: { presence: { key: crypto.randomUUID() } } });
+    const channel = supabase.channel('online', { config: { presence: { key: userId ?? crypto.randomUUID() } } });
     channel
-      .on('presence', { event: 'sync' }, () => setCount(Object.keys(channel.presenceState()).length))
+      .on('presence', { event: 'sync' }, () => {
+        const keys = Object.keys(channel.presenceState());
+        setOnline({ count: keys.length, users: new Set(keys) });
+      })
       .subscribe(status => { if (status === 'SUBSCRIBED') void channel.track({}); });
     return () => { void supabase.removeChannel(channel); };
-  }, []);
-  return count;
+  }, [userId]);
+  return online;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -80,16 +98,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
   const [toast, setToast] = useState('');
   const [offline, setOffline] = useState(false);
-  const online = useOnlineCount();
-  const { unread, markRead } = useUnread(userId);
+  const online = useOnlinePresence(userId);
+  const { unread, markRead, dmUnread, refreshDm } = useUnread(userId);
+  const badge = unread + dmUnread;
   // No HTML estático é sempre web; no app nativo corrige após hidratar.
   const native = useSyncExternalStore(noopSubscribe, () => Capacitor.isNativePlatform(), () => false);
   const active = (href: string) => href === '/' ? pathname === '/' : pathname.startsWith(href.slice(0, -1));
+  // As conversas vão até a borda de cima (os topos do chat já descontam o notch); ver chat.css.
+  const immersive = active('/comunidade/');
   useEffect(() => { document.documentElement.dataset.theme = theme; void paintStatusBar(theme); }, [theme]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4200); return () => clearTimeout(id); }, [toast]);
   // Voltar do Android: fecha a camada aberta, senão vai para a home, senão sai do app.
   useEffect(() => listenBackButton(async () => {
     if (closeTopOverlay()) return;
+    // Numa conversa, voltar leva para a lista de conversas (como no WhatsApp).
+    if (window.location.pathname.startsWith('/comunidade') && window.location.search) { router.replace('/comunidade/'); return; }
     if (window.location.pathname !== '/') { router.replace('/'); return; }
     const { App } = await import('@capacitor/app');
     await App.exitApp();
@@ -118,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   const settingsActive = pathname.startsWith('/configuracoes');
 
-  return <AppContext.Provider value={{ theme, setTheme, notify: setToast }}><OnlineContext.Provider value={online}><UnreadContext.Provider value={{ unread, markRead }}>
+  return <AppContext.Provider value={{ theme, setTheme, notify: setToast }}><OnlineContext.Provider value={online}><UnreadContext.Provider value={{ unread, markRead, dmUnread, refreshDm }}>
     <a href="#main-content" className="skip-link">Pular para o conteúdo</a>
     <aside className="sidebar">
       <Link replace href="/" aria-label="Solar Brasil — início"><Brand /></Link>
@@ -126,7 +149,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {navigation.map(item => (
           <Link key={item.href} replace href={item.href} className={active(item.href) ? 'active' : ''} aria-current={active(item.href) ? 'page' : undefined}>
             <item.icon size={19} /><span>{item.label}</span>
-            {item.href === '/comunidade/' && unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
+            {item.href === '/comunidade/' && badge > 0 && <span className="badge">{badge > 99 ? '99+' : badge}</span>}
           </Link>
         ))}
         <Link replace href="/configuracoes/" className={settingsActive ? 'active' : ''} aria-current={settingsActive ? 'page' : undefined}><Settings size={19} /><span>Configurações</span></Link>
@@ -141,7 +164,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div> : <button className="button primary sidebar-login" onClick={() => requireLogin()}><LogIn size={16} /> Entrar</button>}
       </div>
     </aside>
-    <main id="main-content" className="main">
+    <main id="main-content" className={`main ${immersive ? 'immersive' : ''}`}>
       {offline && <div className="offline-banner"><WifiOff size={15} /> Você está offline. Mapa e live precisam de conexão.</div>}
       {children}
     </main>
@@ -149,7 +172,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {navigation.map(item => (
         <Link key={item.href} replace href={item.href} className={active(item.href) && !menu ? 'active' : ''} aria-current={active(item.href) ? 'page' : undefined}>
           <item.icon size={22} /><span>{item.label}</span>
-          {item.href === '/comunidade/' && unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
+          {item.href === '/comunidade/' && badge > 0 && <span className="badge">{badge > 99 ? '99+' : badge}</span>}
         </Link>
       ))}
       <button className={menu || settingsActive ? 'active' : ''} onClick={() => setMenu(true)} aria-haspopup="dialog"><Menu size={22} /><span>Menu</span></button>
