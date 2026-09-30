@@ -25,6 +25,7 @@ const PAGE = 50;
 const TYPING_EVERY = 3000;
 const TYPING_TTL = 5000;
 const MAX_JUMP_PAGES = 10;
+const NOBODY: string[] = [];
 type Confirm = { title: string; text: string; label: string; run: () => void };
 
 async function fetchPage(conversationId: string | null, before?: number) {
@@ -597,7 +598,12 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       </div>}
     </Sheet>
     <Reactors message={reactorsOf} userId={userId} onClose={() => setReactorsOf(null)} onRemove={message => { setReactorsOf(null); void react(message, message.reactions.find(r => r.user_id === userId)!.emoji); }} />
-    <Viewer message={viewer} userId={userId} onClose={() => setViewer(null)} />
+    <Viewer key={viewer?.id ?? 'fechado'} message={viewer} userId={userId} blocked={group ? blocked : NOBODY}
+      myReaction={id => byId.get(id)?.reactions.find(r => r.user_id === userId)?.emoji ?? null}
+      onClose={() => setViewer(null)}
+      onJump={m => { setViewer(null); setInfo(null); void jumpTo(m.id); }}
+      onReply={m => { setViewer(null); setInfo(null); startReply(byId.get(m.id) ?? m); }}
+      onReact={(m, emoji) => void react(byId.get(m.id) ?? m, emoji)} />
     <MediaSend key={pick?.url} pick={pick} onClose={closePick} onSend={sendPick} />
   </section>;
 }
