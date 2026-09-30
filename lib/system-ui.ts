@@ -4,11 +4,11 @@ import { Capacitor } from '@capacitor/core';
  * Deixa a barra de status com a mesma cor do app e os ícones legíveis.
  * A cor vem dos tokens de theme.css, para não existir um segundo lugar com as cores.
  */
-export async function paintStatusBar(theme: string) {
+export async function paintStatusBar(theme: string, token = '--surface') {
   if (!Capacitor.isNativePlatform()) return;
   const { StatusBar, Style } = await import('@capacitor/status-bar');
   const escuro = theme === 'dark';
-  const cor = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || (escuro ? '#211b2a' : '#ffffff');
+  const cor = getComputedStyle(document.documentElement).getPropertyValue(token).trim() || (escuro ? '#211b2a' : '#ffffff');
   try {
     await StatusBar.setOverlaysWebView({ overlay: false });
     // Style.Light = fundo claro, ícones escuros. Era isso que faltava no tema claro.

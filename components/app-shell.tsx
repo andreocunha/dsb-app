@@ -33,6 +33,7 @@ const noopSubscribe = () => () => {};
 // Mensagens não lidas: o último id lido fica no aparelho e o total aparece no menu.
 const READ_KEY = 'dsb-chat-read';
 const lastRead = () => { try { return Number(localStorage.getItem(READ_KEY)) || 0; } catch { return 0; } };
+export const lastReadId = lastRead;
 type UnreadValue = { unread: number; markRead: (lastId: number) => void };
 const UnreadContext = createContext<UnreadValue>({ unread: 0, markRead: () => {} });
 export const useChatUnread = () => useContext(UnreadContext);
@@ -85,7 +86,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // No HTML estático é sempre web; no app nativo corrige após hidratar.
   const native = useSyncExternalStore(noopSubscribe, () => Capacitor.isNativePlatform(), () => false);
   const active = (href: string) => href === '/' ? pathname === '/' : pathname.startsWith(href.slice(0, -1));
-  useEffect(() => { document.documentElement.dataset.theme = theme; void paintStatusBar(theme); }, [theme]);
+  // O chat ocupa a tela toda no celular, como uma conversa do WhatsApp (sem a barra de navegação).
+  const immersive = active('/comunidade/');
+  useEffect(() => { document.documentElement.dataset.theme = theme; void paintStatusBar(theme, immersive ? '--wa-header' : '--surface'); }, [theme, immersive]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4200); return () => clearTimeout(id); }, [toast]);
   // Voltar do Android: fecha a camada aberta, senão vai para a home, senão sai do app.
   useEffect(() => listenBackButton(async () => {
@@ -141,7 +144,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div> : <button className="button primary sidebar-login" onClick={() => requireLogin()}><LogIn size={16} /> Entrar</button>}
       </div>
     </aside>
-    <main id="main-content" className="main">
+    <main id="main-content" className={`main ${immersive ? 'immersive' : ''}`}>
       {offline && <div className="offline-banner"><WifiOff size={15} /> Você está offline. Mapa e live precisam de conexão.</div>}
       {children}
     </main>

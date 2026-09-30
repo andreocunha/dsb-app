@@ -67,3 +67,77 @@
   --team-purple: #c0a0e5; --team-purple-bg: #392b49;
   --team-cyan: #8fc8cf; --team-cyan-bg: #253b3e;
 }
+
+/*
+ * CHAT — paleta do WhatsApp (claro e escuro), usada só dentro de .chat (ver chat.css).
+ * --wa-header: topo no celular; --wa-panel: topo e barra de digitar no desktop (WhatsApp Web).
+ * --wa-name-0…11: cor do nome de cada pessoa no grupo (lib/chat-format.ts → nameColor).
+ */
+:root {
+  --wa-bg: #efeae2;
+  --wa-doodle: #d6cdbd;
+  --wa-in: #ffffff;
+  --wa-out: #d9fdd3;
+  --wa-text: #111b21;
+  --wa-text-2: #667781;
+  --wa-meta-out: #667781;
+  --wa-icon: #54656f;
+  --wa-header: #ffffff;
+  --wa-panel: #f0f2f5;
+  --wa-input: #ffffff;
+  --wa-drawer: #ffffff;
+  --wa-drawer-bg: #f0f2f5;
+  --wa-hover: #f5f6f6;
+  --wa-divider: #e9edef;
+  --wa-green: #00a884;
+  --wa-green-strong: #008069;
+  --wa-on-green: #ffffff;
+  --wa-badge: #25d366;
+  --wa-chip: #ffffff;
+  --wa-chip-text: #54656f;
+  --wa-link: #027eb5;
+  --wa-deleted: #8696a0;
+  --wa-quote-in: #f5f6f6;
+  --wa-quote-out: #d1f4cc;
+  --wa-unread: #ffffffc0;
+  --wa-flash: #0b141a1f;
+  --wa-shadow: 0 1px .5px #0b141a21;
+  --wa-menu-shadow: 0 2px 5px #0b141a42, 0 2px 10px #0b141a29;
+  --wa-name-0: #1f7aec; --wa-name-1: #d3396d; --wa-name-2: #06845b; --wa-name-3: #c4532d;
+  --wa-name-4: #7f66ff; --wa-name-5: #007a87; --wa-name-6: #b4531f; --wa-name-7: #a5347e;
+  --wa-name-8: #3a7d1a; --wa-name-9: #5e47de; --wa-name-10: #c13018; --wa-name-11: #8a6200;
+}
+[data-theme="dark"] {
+  --wa-bg: #0b141a;
+  --wa-doodle: #17232a;
+  --wa-in: #202c33;
+  --wa-out: #005c4b;
+  --wa-text: #e9edef;
+  --wa-text-2: #8696a0;
+  --wa-meta-out: #ffffff99;
+  --wa-icon: #aebac1;
+  --wa-header: #0b141a;
+  --wa-panel: #202c33;
+  --wa-input: #2a3942;
+  --wa-drawer: #111b21;
+  --wa-drawer-bg: #0b141a;
+  --wa-hover: #202c33;
+  --wa-divider: #222d34;
+  --wa-green: #00a884;
+  --wa-green-strong: #00a884;
+  --wa-on-green: #111b21;
+  --wa-badge: #00a884;
+  --wa-chip: #182229;
+  --wa-chip-text: #8696a0;
+  --wa-link: #53bdeb;
+  --wa-deleted: #8696a0;
+  --wa-quote-in: #1d282f;
+  --wa-quote-out: #025144;
+  --wa-unread: #182229c0;
+  --wa-flash: #ffffff1f;
+  --wa-shadow: 0 1px .5px #0b141a80;
+  --wa-menu-shadow: 0 2px 5px #0b141a80, 0 2px 10px #0b141a60;
+  --wa-name-0: #53bdeb; --wa-name-1: #ff72a1; --wa-name-2: #25d366; --wa-name-3: #fc9775;
+  --wa-name-4: #a791ff; --wa-name-5: #42c7b8; --wa-name-6: #ffbc38; --wa-name-7: #e87fd4;
+  --wa-name-8: #8fd16a; --wa-name-9: #8b9aff; --wa-name-10: #ff8f6b; --wa-name-11: #e6c34c;
+}
