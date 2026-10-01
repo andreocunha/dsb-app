@@ -16,7 +16,7 @@ export default function Page() {
         <li><strong>Seu perfil:</strong> nome e foto vindos da conta Google ou Apple que você escolher, e seu e-mail, usado apenas para identificar a conta.</li>
         <li><strong>Chat:</strong> as mensagens e os arquivos que você enviar, com data e hora, além das suas reações, denúncias e bloqueios.</li>
         <li><strong>Fantasy:</strong> os barcos escolhidos em cada prova e a sua pontuação.</li>
-        <li><strong>Notificações:</strong> no aplicativo das lojas, um identificador do aparelho, para enviar avisos do evento.</li>
+        <li><strong>Notificações:</strong> no aplicativo das lojas, um identificador do aparelho, para enviar avisos do evento e de mensagens novas no chat.</li>
       </ul>
       <p>Não usamos publicidade, não rastreamos você em outros aplicativos e não vendemos seus dados.</p>
 

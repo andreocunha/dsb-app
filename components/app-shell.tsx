@@ -126,7 +126,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }), [router]);
 
   // Registra de novo ao entrar/sair, para associar o aparelho à conta.
-  useEffect(() => { void registerPush(setToast); }, [userId]);
+  // Tocar numa notificação de mensagem abre a conversa dela; o voltar leva à lista, como em qualquer conversa.
+  useEffect(() => {
+    void registerPush(setToast, conversa => router.push(`/comunidade/?c=${encodeURIComponent(conversa)}`));
+  }, [userId, router]);
   useEffect(() => {
     const updateOnline = () => setOffline(!navigator.onLine);
     const beforeInstall = (e: Event) => { e.preventDefault(); setInstallEvent(e as InstallEvent); };

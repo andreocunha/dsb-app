@@ -58,7 +58,7 @@ Dados coletados, todos **vinculados à identidade** do usuário:
 | Nome e foto do perfil | Identificar quem fala no chat | Só para quem faz login |
 | E-mail | Identificar a conta | Só para quem faz login |
 | Mensagens e arquivos do chat | Funcionalidade do app | Só o que a pessoa envia |
-| Identificador do aparelho (token de push) | Enviar os avisos das provas | Não |
+| Identificador do aparelho (token de push) | Enviar os avisos das provas e de mensagens novas | Não |
 
 - Não há publicidade, rastreamento entre apps nem venda de dados.
 - Dados em trânsito são criptografados (HTTPS).

@@ -118,3 +118,10 @@ entrega notificação nenhuma, por mais certo que esteja o Firebase.
 
 Para mandar um recado manual para todo mundo, chame a função com
 `{"modo":"aviso","titulo":"...","texto":"..."}` e o cabeçalho `x-cron-secret`.
+
+Mensagens do chat: o gatilho `messages_push` chama a mesma função com `{"modo":"mensagem","id":...}`
+(usando o mesmo `cron_secret` do Vault) a cada mensagem particular e a cada resposta no grupo. Só
+recebe quem a mensagem é para — a outra pessoa da conversa, ou o autor da mensagem respondida —,
+em aparelhos com a conta logada e desde que não tenha bloqueado quem escreveu. Mensagem comum no
+grupo não gera notificação. No Android elas saem no canal "Mensagens" (o das provas é "Avisos das
+provas"), e tocar abre a conversa.
