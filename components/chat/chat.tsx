@@ -6,6 +6,7 @@ import type { Database } from '@/lib/database.types';
 import { dayLabel } from '@/lib/chat-format';
 import { makeThumbnail, MAX_FILE_SIZE, storageName } from '@/lib/media';
 import { shortName } from '@/lib/names';
+import { clearChatNotifications } from '@/lib/push';
 import { supabase, errorMessage } from '@/lib/supabase';
 import type { Recording } from '@/lib/voice';
 import { lastReadId, useApp, useChatUnread, useOnline, useOnlineUsers } from '../app-shell';
@@ -106,6 +107,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const markSeen = useCallback((lastId: number) => {
     if (lastId <= 0 || lastId <= lastSeen.current || document.visibilityState !== 'visible') return;
     lastSeen.current = lastId;
+    void clearChatNotifications(key);
     if (!conversationId) { markRead(lastId); return; }
     void supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId, p_last_id: lastId }).then(() => { refreshDm(); onSeen(key); });
   }, [conversationId, key, markRead, refreshDm, onSeen]);
