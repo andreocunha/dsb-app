@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, MessageSquareText, Play, Reply as ReplyIcon, SmilePlus, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, MessageSquareText, Play, Reply as ReplyIcon, SmilePlus, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { whenLabel } from '@/lib/chat-format';
+import { canSaveToGallery, isNativeApp, saveToGallery, shareNativeFile } from '@/lib/native-share';
 import { registerOverlay } from '@/lib/overlays';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
@@ -34,6 +35,7 @@ export function Viewer({ message, userId, blocked, myReaction, onClose, onJump, 
   const stageApi = useRef<StageApi>(null);
   const [scale, setScale] = useState(1);
   const [reacting, setReacting] = useState(false);
+  const [saved, setSaved] = useState<number | string | null>(null);
   useEffect(() => { fechar.current = onClose; }, [onClose]);
 
   useEffect(() => {
@@ -90,6 +92,17 @@ export function Viewer({ message, userId, blocked, myReaction, onClose, onJump, 
   const video = !!current && isVideo(current);
   const mine = current ? myReaction(current.id) : null;
 
+  // No app o link não baixa: foto e vídeo vão direto para a galeria (como no WhatsApp) e o
+  // ícone vira um ✓, porque o aviso geral do app fica por baixo desta janela.
+  async function saveNative(url: string, item: Message) {
+    const name = item.file_name ?? 'arquivo';
+    try {
+      if (canSaveToGallery()) await saveToGallery({ url, name }, isVideo(item) ? 'video' : 'photo');
+      else await shareNativeFile({ url, name });
+      setSaved(item.id);
+    } catch (error) { console.warn('Não foi possível baixar:', error); }
+  }
+
   return <dialog ref={ref} className="viewer" onCancel={e => { e.preventDefault(); onClose(); }} aria-label="Visualizar mídia">
     {current && <>
       <header className="viewer-bar">
@@ -109,7 +122,9 @@ export function Viewer({ message, userId, blocked, myReaction, onClose, onJump, 
               {REACTIONS.map(emoji => <button key={emoji} className={emoji === mine ? 'mine' : ''} onClick={() => { setReacting(false); onReact(current, emoji); }} aria-label={`Reagir com ${emoji}`}>{emoji}</button>)}
             </div>}
           </span>}
-          <a className="icon-button" href={download} aria-label="Baixar" title="Baixar"><Download size={22} /></a>
+          <a className="icon-button" href={download} aria-label={saved === current.id ? 'Salvo na galeria' : 'Baixar'} title="Baixar"
+            onClick={e => { if (download && isNativeApp()) { e.preventDefault(); void saveNative(download, current); } }}>
+            {saved === current.id ? <Check size={22} /> : <Download size={22} />}</a>
           <button className="icon-button only-desktop" onClick={onClose} aria-label="Fechar" title="Fechar"><X size={24} /></button>
         </div>
       </header>

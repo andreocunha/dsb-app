@@ -12,7 +12,8 @@ const config: CapacitorConfig = {
   backgroundColor: '#422378',
   server: {
     url: site,
-    cleartext: false,
+    // Só um build de teste apontando para o computador (http://IP:3000) precisa de http puro.
+    cleartext: site.startsWith('http://'),
     // Navegação permitida dentro do app; o resto abre no navegador do sistema.
     allowNavigation: [new URL(site).hostname, 'ztzmvdmggxyokfbakajq.supabase.co'],
     errorPath: '/offline.html',

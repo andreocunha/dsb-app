@@ -4,6 +4,7 @@ import { Ban, Camera, Check, CheckCheck, ChevronDown, Clock3, Download, FileText
 import { formatMessage, jumboEmoji, nameColor, preview, type Token } from '@/lib/chat-format';
 import { formatSize } from '@/lib/media';
 import { shortName } from '@/lib/names';
+import { isNativeApp, shareNativeFile } from '@/lib/native-share';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
 import { MentionPeople, type MentionContext } from './mentions';
@@ -246,5 +247,9 @@ function DocAttachment({ message }: { message: Message }) {
   </>;
   if (!href) return <div className="doc-card">{content}</div>;
   return <a className="doc-card" href={href} target="_blank" rel="noopener noreferrer"
-    onClick={e => e.stopPropagation()} aria-label={`Baixar ${message.file_name}`}>{content}</a>;
+    onClick={e => {
+      e.stopPropagation();
+      // No app o link não baixa: o documento vai para a folha do sistema (abrir, salvar em Arquivos, enviar).
+      if (isNativeApp()) { e.preventDefault(); void shareNativeFile({ url: href, name: message.file_name ?? 'arquivo' }).catch(error => console.warn('Não foi possível baixar:', error)); }
+    }} aria-label={`Baixar ${message.file_name}`}>{content}</a>;
 }

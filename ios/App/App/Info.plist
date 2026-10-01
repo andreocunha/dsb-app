@@ -71,6 +71,8 @@
 	<string>Para você tirar uma foto ou gravar um vídeo e enviar no chat do evento.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Para você escolher fotos e vídeos do seu celular e enviar no chat do evento.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Para salvar no seu celular as imagens de resultados e as fotos do chat do evento.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Para gravar mensagens de voz e o som dos vídeos que você enviar no chat do evento.</string>
 	<!-- O app não usa criptografia própria: evita o questionário de exportação a cada envio. -->

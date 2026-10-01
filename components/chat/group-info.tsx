@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, Ban, ChevronRight, FileText, Images, Link2, LogOut, Moon, Palette, Play, Settings, Share2, ShieldCheck, Sun, ThumbsDown, X } from 'lucide-react';
 import { formatSize } from '@/lib/media';
 import { shortName } from '@/lib/names';
+import { shareLink } from '@/lib/native-share';
 import { registerOverlay } from '@/lib/overlays';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '../app-shell';
@@ -80,10 +81,8 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
 
   async function share() {
     const url = `${window.location.origin}/comunidade/`;
-    try {
-      if (navigator.share) await navigator.share({ title: 'Torcida Solar', text: 'Vem torcer com a gente no chat do Desafio Solar Brasil!', url });
-      else { await navigator.clipboard.writeText(url); notify('Link do chat copiado.'); }
-    } catch { /* a pessoa cancelou o compartilhamento */ }
+    const shared = await shareLink({ title: 'Torcida Solar', text: 'Vem torcer com a gente no chat do Desafio Solar Brasil!', url });
+    if (!shared) { await navigator.clipboard.writeText(url).catch(() => {}); notify('Link do chat copiado.'); }
   }
 
   const person = target.kind === 'direct' ? target.other : null;
