@@ -27,6 +27,7 @@ test('contagem até a largada', () => {
   assert.equal(closesIn(12 * min), '12 min');
   assert.equal(closesIn(60 * min), '1h');
   assert.equal(closesIn(200 * min), '3h 20min');
-  assert.equal(closesIn((2 * 1440 + 4 * 60 + 30) * min), '2d 4h');
-  assert.equal(closesIn(3 * 1440 * min), '3d');
+  assert.equal(closesIn((1440 + 4 * 60 + 30) * min), '1d 4h');
+  assert.equal(closesIn(1440 * min), '1 dia');
+  assert.equal(closesIn((11 * 1440 + 23 * 60) * min), '11 dias');
 });

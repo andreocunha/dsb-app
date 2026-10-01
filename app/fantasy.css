@@ -11,13 +11,14 @@
 .fx-tabs button[aria-selected="true"]::after { content: ''; position: absolute; inset: auto 0 -1px; height: 2px; border-radius: 2px; background: var(--brand); }
 
 /* Prova: setas dos lados, nome no meio (abre a lista de provas). */
-.fx-round { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; align-items: center; gap: 8px; margin: 24px 0 28px; }
+.fx-round { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; align-items: center; gap: 4px; margin: 24px 0 28px; }
 .fx-arrow { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--text-secondary); }
 .fx-arrow:disabled { opacity: .25; }
-.fx-round-title { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
+.fx-round-title { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; text-align: center; }
 .fx-round-title strong { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; font-size: 20px; font-weight: 700; letter-spacing: -.5px; line-height: 1.2; }
 .fx-round-title strong svg { color: var(--text-tertiary); }
-.fx-round-title span { color: var(--text-tertiary); font-size: 12px; }
+.fx-round-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 10px; color: var(--text-tertiary); font-size: 12px; }
+.fx-round-meta > * { white-space: nowrap; }
 .fx-round-title em { font-style: normal; }
 .fx-round-title em.open { color: var(--brand); font-weight: 500; }
 .fx-round-title em.scored { color: var(--success); font-weight: 500; }

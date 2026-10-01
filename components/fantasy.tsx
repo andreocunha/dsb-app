@@ -123,7 +123,8 @@ export function Fantasy() {
         <button className="fx-arrow" disabled={index === 0} onClick={() => selectRace(races[index - 1].id)} aria-label="Prova anterior"><ChevronLeft size={20} /></button>
         <button className="fx-round-title" onClick={() => setRaceList(true)} aria-haspopup="dialog">
           <strong>{race.name}<ChevronDown size={15} /></strong>
-          <span>Prova {race.number} · {raceDate(race)}, {raceTime(race)} · <em className={state.key}>{state.label}</em></span>
+          {/* Cada pedaço quebra inteiro: nunca "Fecha em" numa linha e o prazo na outra. */}
+          <span className="fx-round-meta"><span>{raceDate(race).replace(' de ', ' ')} · {raceTime(race)}</span><em className={state.key}>{state.label}</em></span>
         </button>
         <button className="fx-arrow" disabled={index === races.length - 1} onClick={() => selectRace(races[index + 1].id)} aria-label="Próxima prova"><ChevronRight size={20} /></button>
       </div>
