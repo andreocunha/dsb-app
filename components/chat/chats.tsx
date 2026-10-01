@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Ban, Camera, Check, CheckCheck, EllipsisVertical, FileText, Lock, LogIn, MessageSquarePlus, Mic, Pin, Search, Video, X } from 'lucide-react';
+import { ArrowLeft, Ban, Camera, Check, CheckCheck, EllipsisVertical, FileText, Lock, LogIn, MessageSquarePlus, Mic, Pin, Search, Users, Video, X } from 'lucide-react';
 import { formatDuration } from '@/lib/voice';
 import { listTime } from '@/lib/chat-format';
 import { shortName } from '@/lib/names';
@@ -10,23 +10,33 @@ import { useApp, useChatUnread, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar } from '../ui';
 import { Conversation } from './chat';
-import { GROUP_KEY, targetKey, type Person, type Target } from './types';
+import { GroupAvatar, NewGroup } from './groups';
+import { eventText, GROUP_KEY, targetKey, type GroupEvent, type GroupInfo, type Person, type Target } from './types';
 import { useWide, WIDE } from './use-wide';
 
-type Last = { id: number; user_id: string; author_name?: string; body: string | null; file_type: string | null; file_name: string | null; created_at: string; deleted: boolean; duration_ms?: number | null; played?: boolean };
-type Chat = { id: string; other: Person; last: Last | null; unread: number; otherRead: number; otherDelivered: number };
+type Last = { id: number; user_id: string; author_name?: string; body: string | null; file_type: string | null; file_name: string | null; created_at: string; deleted: boolean; duration_ms?: number | null; played?: boolean; event?: GroupEvent | null };
+/** Conversa da lista: particular (other) ou grupo criado pelas pessoas (group). */
+type Chat = { id: string; other: Person | null; group: GroupInfo | null; last: Last | null; unread: number; mentions: number; otherRead: number; otherDelivered: number };
 type Filter = 'all' | 'unread' | 'groups';
 
-const GROUP: Target = { kind: 'group' };
+const GENERAL: Target = { kind: 'general' };
+const chatName = (c: Chat) => c.group?.name ?? c.other?.name ?? '';
 const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
  * Tela de conversas, como no WhatsApp: no celular, a lista e depois a conversa em tela cheia;
  * no desktop, a lista à esquerda e a conversa à direita (WhatsApp Web).
- * O grupo geral fica sempre fixado no topo; dá para conversar em particular com qualquer pessoa que entrou no app.
+ * O grupo geral fica sempre fixado no topo; dá para conversar em particular com qualquer pessoa que entrou no app
+ * e criar grupos com quem quiser.
  */
 export function Chats() {
+  // Trocar de conta (ou sair) começa a tela do zero: nada da conta anterior fica na lista ou aberto.
+  const { userId } = useAuth();
+  return <ChatsScreen key={userId ?? 'visitante'} />;
+}
+
+function ChatsScreen() {
   const router = useRouter();
   const params = useSearchParams();
   const open = params.get('c');
@@ -38,6 +48,7 @@ export function Chats() {
   const [extra, setExtra] = useState<Target | null>(null);
   const [blocked, setBlocked] = useState<string[]>([]);
   const [newChat, setNewChat] = useState(false);
+  const [newGroup, setNewGroup] = useState(false);
   // A conversa foi aberta a partir da lista neste celular: fechar é voltar no histórico.
   const pushed = useRef(false);
   const openRef = useRef(open);
@@ -47,8 +58,11 @@ export function Chats() {
   const loadChats = useCallback(() => {
     if (!userId) return;
     void supabase.rpc('my_conversations').then(({ data }) => setChats((data ?? []).map(row => ({
-      id: row.id, other: { id: row.other_id, name: row.other_name, avatar_url: row.other_avatar },
-      last: row.last as unknown as Last | null, unread: row.unread, otherRead: row.other_read_id, otherDelivered: row.other_delivered_id,
+      id: row.id,
+      other: !row.is_group && row.other_id ? { id: row.other_id, name: row.other_name ?? '', avatar_url: row.other_avatar } : null,
+      group: row.is_group ? { name: row.name ?? '', photo_path: row.photo_path, description: row.description } : null,
+      last: row.last as unknown as Last | null, unread: row.unread, mentions: row.mentions ?? 0,
+      otherRead: row.other_read_id, otherDelivered: row.other_delivered_id,
     }))));
   }, [userId]);
 
@@ -65,13 +79,14 @@ export function Chats() {
   useEffect(() => {
     const channel = supabase.channel('chats-list')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: row }) => {
-        const last: Last = { id: row.id, user_id: row.user_id, author_name: row.author_name, body: row.body, file_type: row.file_type, file_name: row.file_name, created_at: row.created_at, deleted: false, duration_ms: row.duration_ms, played: false };
+        const last: Last = { id: row.id, user_id: row.user_id, author_name: row.author_name, body: row.body, file_type: row.file_type, file_name: row.file_name, created_at: row.created_at, deleted: false, duration_ms: row.duration_ms, played: false, event: row.event };
         if (!row.conversation_id) { setGroupLast(last); return; }
         // Conversa nova (a outra pessoa acabou de puxar papo): recarrega a lista.
         if (!chatsRef.current?.some(c => c.id === row.conversation_id)) { loadChats(); return; }
         const viewing = openRef.current === row.conversation_id;
+        const counts = row.user_id !== userId && !viewing;
         setChats(current => current?.map(c => c.id !== row.conversation_id ? c
-          : { ...c, last, unread: row.user_id !== userId && !viewing ? c.unread + 1 : c.unread }) ?? current);
+          : { ...c, last, unread: counts ? c.unread + 1 : c.unread, mentions: counts && (row.mentions as string[] | undefined)?.includes(userId ?? '') ? c.mentions + 1 : c.mentions }) ?? current);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, ({ new: row }) => {
         const patch = (last: Last | null): Last | null => last && last.id === row.id ? { ...last, body: row.body, file_type: row.file_type, file_name: row.file_name, deleted: !!row.deleted_at } : last;
@@ -89,21 +104,45 @@ export function Chats() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_reads' }, ({ new: row }) => {
         const read = row as { conversation_id?: string; user_id?: string; last_read_id?: number; last_delivered_id?: number };
         if (!read.conversation_id || read.user_id === userId) return;
+        // No grupo o tique azul depende de todo mundo: quem sabe calcular é o banco (e só importa se a última é sua).
+        const chat = chatsRef.current?.find(c => c.id === read.conversation_id);
+        if (chat?.group) { if (chat.last?.user_id === userId) loadChats(); return; }
         setChats(current => current?.map(c => c.id !== read.conversation_id ? c : {
           ...c, otherRead: Math.max(c.otherRead, read.last_read_id ?? 0),
           otherDelivered: Math.max(c.otherDelivered, read.last_delivered_id ?? 0, read.last_read_id ?? 0),
         }) ?? current);
       })
-      .subscribe();
+      // Nome, foto ou descrição do grupo mudaram.
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations' }, ({ new: row }) => {
+        if (!row.is_group) return;
+        const group: GroupInfo = { name: row.name, photo_path: row.photo_path, description: row.description };
+        setChats(current => current?.map(c => c.id === row.id ? { ...c, group } : c) ?? current);
+        setExtra(current => current?.kind === 'group' && current.id === row.id ? { ...current, group } : current);
+      });
+    // Você saiu ou foi removido de um grupo (em outro aparelho ou por um admin): ele some da lista.
+    if (userId) channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_members', filter: `user_id=eq.${userId}` }, ({ new: row }) => {
+      if (!row.left_at) return;
+      const gone = chatsRef.current?.find(c => c.id === row.conversation_id);
+      setChats(current => current?.filter(c => c.id !== row.conversation_id) ?? current);
+      if (gone && openRef.current === row.conversation_id) {
+        notify(`Você não faz mais parte do grupo "${gone.group?.name ?? ''}".`);
+        router.replace('/comunidade/');
+      }
+    });
+    channel.subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [userId, loadChats]);
+  }, [userId, loadChats, notify, router]);
 
   // Conversa aberta pelo endereço que ainda não está na lista (acabou de ser criada ou não tem mensagens).
   const known = open === GROUP_KEY || chats?.some(c => c.id === open) || (extra && targetKey(extra) === open);
   useEffect(() => {
     if (!open || known || !userId || !UUID.test(open) || chats === null) return;
     let alive = true;
-    void supabase.from('conversations').select('user_a, user_b').eq('id', open).maybeSingle().then(async ({ data }) => {
+    void supabase.from('conversations').select('user_a, user_b, is_group, name, photo_path, description').eq('id', open).maybeSingle().then(async ({ data }) => {
+      if (data?.is_group) {
+        if (alive) setExtra({ kind: 'group', id: open, group: { name: data.name ?? '', photo_path: data.photo_path, description: data.description } });
+        return;
+      }
       const otherId = data ? (data.user_a === userId ? data.user_b : data.user_a) : null;
       const person = otherId ? (await supabase.from('profiles').select('id, name, avatar_url').eq('id', otherId).maybeSingle()).data : null;
       if (!alive) return;
@@ -121,18 +160,34 @@ export function Chats() {
   }, [router]);
 
   const onSeen = useCallback((key: string) => {
-    setChats(current => current?.map(c => c.id === key ? { ...c, unread: 0 } : c) ?? current);
+    setChats(current => current?.map(c => c.id === key ? { ...c, unread: 0, mentions: 0 } : c) ?? current);
   }, []);
 
   async function openPerson(person: Person) {
     if (!userId) { requireLogin('Entre para conversar em particular.'); return; }
     setNewChat(false);
-    const existing = chats?.find(c => c.other.id === person.id);
+    setNewGroup(false);
+    const existing = chats?.find(c => c.other?.id === person.id);
     if (existing) { go(existing.id); return; }
     const { data, error } = await supabase.rpc('start_conversation', { p_user: person.id });
     if (error || !data) { notify(errorMessage(error)); return; }
     setExtra({ kind: 'direct', id: data, other: person });
     go(data);
+  }
+
+  function groupCreated(id: string, group: GroupInfo) {
+    setNewGroup(false);
+    setNewChat(false);
+    setExtra({ kind: 'group', id, group });
+    loadChats();
+    go(id);
+  }
+
+  /** Você saiu do grupo por aqui: some da lista na hora, sem esperar o tempo real. */
+  function leftGroup(id: string) {
+    setChats(current => current?.filter(c => c.id !== id) ?? current);
+    if (extra && targetKey(extra) === id) setExtra(null);
+    if (openRef.current === id) go(null);
   }
 
   async function block(person: Person, messageId?: number) {
@@ -151,23 +206,27 @@ export function Chats() {
   }
 
   const chat = chats?.find(c => c.id === open);
-  const target: Target | null = open === GROUP_KEY ? GROUP
-    : chat ? { kind: 'direct', id: chat.id, other: chat.other }
+  const target: Target | null = open === GROUP_KEY ? GENERAL
+    : chat?.group ? { kind: 'group', id: chat.id, group: chat.group }
+    : chat?.other ? { kind: 'direct', id: chat.id, other: chat.other }
     : extra && targetKey(extra) === open ? extra : null;
+  const startGroup = () => { if (userId) { setNewChat(false); setNewGroup(true); } else requireLogin('Entre para criar grupos.'); };
 
   return <section className={`chats fill ${open ? 'open' : ''}`} aria-label="Conversas">
     <div className="chats-list">
-      {newChat
-        ? <NewChat userId={userId} onClose={() => setNewChat(false)} onPick={person => void openPerson(person)} />
+      {newGroup
+        ? <NewGroup blocked={blocked} onClose={() => setNewGroup(false)} onCreated={groupCreated} />
+        : newChat
+        ? <NewChat userId={userId} onClose={() => setNewChat(false)} onPick={person => void openPerson(person)} onGroup={startGroup} />
         : <ChatList userId={userId} chats={chats} groupLast={groupLast} groupUnread={groupUnread} groupMentions={groupMentions} open={open} blocked={blocked}
-          onOpen={go} onNew={() => { if (userId) setNewChat(true); else requireLogin('Entre para conversar em particular.'); }}
+          onOpen={go} onNew={() => { if (userId) setNewChat(true); else requireLogin('Entre para conversar em particular.'); }} onNewGroup={startGroup}
           onPerson={person => void openPerson(person)} />}
     </div>
     <div className="chats-pane">
       {target
         ? <Conversation key={targetKey(target)} target={target} blocked={blocked} onBlock={(person, id) => void block(person, id)} onUnblock={id => void unblock(id)}
-          onBack={() => go(null)} onSeen={onSeen} onOpenPerson={person => void openPerson(person)} />
-        : open ? <div className="chats-intro"><span className="spinner" /></div>
+          onBack={() => go(null)} onSeen={onSeen} onOpenPerson={person => void openPerson(person)} onLeft={() => leftGroup(targetKey(target))} />
+        : open && userId ? <div className="chats-intro"><span className="spinner" /></div>
         : <Intro onGroup={() => go(GROUP_KEY)} />}
     </div>
   </section>;
@@ -177,6 +236,8 @@ export function Chats() {
 function LastPreview({ last, userId, group, receipts }: { last: Last | null; userId: string | null; group: boolean; receipts: { read: number; delivered: number } | null }) {
   if (!last) return <span className="chat-row-preview">{group ? 'Toque para conversar com a torcida' : 'Nenhuma mensagem ainda'}</span>;
   const own = last.user_id === userId;
+  // Aviso do grupo ("Ana adicionou você"): o texto já diz quem foi.
+  if (last.event && !last.deleted) return <span className="chat-row-preview"><span>{eventText(last.event, { user_id: last.user_id, author_name: last.author_name ?? '' }, userId)}</span></span>;
   const who = group && !own && last.author_name ? `${shortName(last.author_name)}: ` : '';
   const tick = own && !last.deleted && (receipts && last.id <= receipts.read ? <CheckCheck size={16} className="tick-read" aria-label="Lida" />
     : receipts && last.id <= receipts.delivered ? <CheckCheck size={16} aria-label="Entregue" /> : <Check size={16} aria-label="Enviada" />);
@@ -190,9 +251,9 @@ function LastPreview({ last, userId, group, receipts }: { last: Last | null; use
   return <span className={`chat-row-preview ${last.deleted ? 'deleted' : ''}`}>{tick}{own && group && !last.deleted ? 'Você: ' : who}{icon}<span>{text}</span></span>;
 }
 
-function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, blocked, onOpen, onNew, onPerson }: {
+function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, blocked, onOpen, onNew, onNewGroup, onPerson }: {
   userId: string | null; chats: Chat[] | null; groupLast: Last | null; groupUnread: number; groupMentions: number; open: string | null; blocked: string[];
-  onOpen: (key: string) => void; onNew: () => void; onPerson: (person: Person) => void;
+  onOpen: (key: string) => void; onNew: () => void; onNewGroup: () => void; onPerson: (person: Person) => void;
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -204,8 +265,8 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
   const sortedChats = [...(chats ?? [])].sort((a, b) => (b.last?.id ?? 0) - (a.last?.id ?? 0));
   const showGroup = filter !== 'unread' || groupUnread > 0;
   const groupMatches = !term || normalize('Torcida Solar').includes(term);
-  const visibleChats = filter === 'groups' ? [] : sortedChats.filter(c => (filter !== 'unread' || c.unread > 0) && (!term || normalize(c.other.name).includes(term)));
-  const contacts = term ? (people ?? []).filter(p => normalize(p.name).includes(term) && !visibleChats.some(c => c.other.id === p.id)) : [];
+  const visibleChats = sortedChats.filter(c => (filter !== 'unread' || c.unread > 0) && (filter !== 'groups' || !!c.group) && (!term || normalize(chatName(c)).includes(term)));
+  const contacts = term ? (people ?? []).filter(p => normalize(p.name).includes(term) && !visibleChats.some(c => c.other?.id === p.id)) : [];
 
   return <>
     <header className="chats-header">
@@ -216,6 +277,7 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
     {menu && <div className="menu-layer" onClick={() => setMenu(false)}>
       <div className="menu-list chats-menu" role="menu">
         <button role="menuitem" onClick={onNew}><span>Nova conversa</span></button>
+        <button role="menuitem" onClick={onNewGroup}><span>Novo grupo</span></button>
         <button role="menuitem" onClick={() => onOpen(GROUP_KEY)}><span>Abrir o grupo geral</span></button>
       </div>
     </div>}
@@ -245,13 +307,14 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
 
       {visibleChats.map(c => <button key={c.id} className={`chat-row ${open === c.id ? 'active' : ''}`} onClick={() => onOpen(c.id)}>
         <span className="chat-row-avatar-wrap">
-          <Avatar id={c.other.id} name={c.other.name} url={c.other.avatar_url} />
+          {c.group ? <GroupAvatar id={c.id} group={c.group} /> : c.other && <Avatar id={c.other.id} name={c.other.name} url={c.other.avatar_url} />}
         </span>
         <span className="chat-row-main">
-          <span className="chat-row-top"><strong>{c.other.name}</strong>{c.last && <time className={c.unread ? 'unread' : ''}>{listTime(c.last.created_at)}</time>}</span>
+          <span className="chat-row-top"><strong>{chatName(c)}</strong>{c.last && <time className={c.unread ? 'unread' : ''}>{listTime(c.last.created_at)}</time>}</span>
           <span className="chat-row-bottom">
-            <LastPreview last={c.last} userId={userId} group={false} receipts={{ read: c.otherRead, delivered: c.otherDelivered }} />
-            {blocked.includes(c.other.id) && <Ban size={15} className="chat-row-pin" aria-label="Bloqueado" />}
+            <LastPreview last={c.last} userId={userId} group={!!c.group} receipts={{ read: c.otherRead, delivered: c.otherDelivered }} />
+            {c.other && blocked.includes(c.other.id) && <Ban size={15} className="chat-row-pin" aria-label="Bloqueado" />}
+            {c.mentions > 0 && <b className="chat-row-badge chat-row-mention" aria-label="Você foi mencionado">@</b>}
             {c.unread > 0 && <b className="chat-row-badge">{c.unread > 99 ? '99+' : c.unread}</b>}
           </span>
         </span>
@@ -266,10 +329,17 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
         <p>Entre para conversar em particular com qualquer pessoa que usa o app.</p>
       </div>}
       {userId && chats !== null && !visibleChats.length && !term && filter === 'all' && <div className="chats-empty">
-        <p>Suas conversas particulares aparecem aqui. Toque em <MessageSquarePlus size={15} /> para começar uma.</p>
+        <p>Suas conversas particulares e grupos aparecem aqui. Toque em <MessageSquarePlus size={15} /> para começar uma.</p>
       </div>}
+      {userId && chats !== null && !visibleChats.length && !term && filter === 'groups' && <div className="chats-empty">
+        <p>Crie um grupo para conversar com a sua turma, a sua equipe ou quem quiser.</p>
+      </div>}
+      {filter === 'groups' && !term && <button className="chat-row person" onClick={onNewGroup}>
+        <span className="chat-row-avatar-wrap"><span className="avatar new-group-icon"><Users size={22} /></span></span>
+        <span className="chat-row-main"><span className="chat-row-top"><strong>Novo grupo</strong></span></span>
+      </button>}
       {term && !groupMatches && !visibleChats.length && !contacts.length && people !== null && <p className="chats-empty">Nenhuma conversa ou pessoa encontrada.</p>}
-      <p className="chats-footnote"><Lock size={12} /> Suas conversas particulares só aparecem para quem participa delas.</p>
+      <p className="chats-footnote"><Lock size={12} /> Suas conversas particulares e grupos só aparecem para quem participa deles.</p>
     </div>
     <button className="new-chat-fab only-mobile" onClick={onNew} aria-label="Nova conversa"><MessageSquarePlus size={24} /></button>
   </>;
@@ -299,7 +369,7 @@ function PersonRow({ person, online, onPick }: { person: Person; online: boolean
 }
 
 /** "Nova conversa": todas as pessoas que entraram no app, em ordem alfabética, com as letras separando. */
-function NewChat({ userId, onClose, onPick }: { userId: string | null; onClose: () => void; onPick: (person: Person) => void }) {
+function NewChat({ userId, onClose, onPick, onGroup }: { userId: string | null; onClose: () => void; onPick: (person: Person) => void; onGroup: () => void }) {
   const [query, setQuery] = useState('');
   const people = usePeople(userId, true);
   const onlineUsers = useOnlineUsers();
@@ -327,6 +397,10 @@ function NewChat({ userId, onClose, onPick }: { userId: string | null; onClose: 
       <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Pesquisar nome" aria-label="Pesquisar pessoas" autoFocus />
     </label>
     <div className="chats-scroll">
+      {!term && <button className="chat-row person" onClick={onGroup}>
+        <span className="chat-row-avatar-wrap"><span className="avatar new-group-icon"><Users size={22} /></span></span>
+        <span className="chat-row-main"><span className="chat-row-top"><strong>Novo grupo</strong></span></span>
+      </button>}
       <p className="chats-label">Contatos no DSB{people ? ` · ${people.length}` : ''}</p>
       {people === null ? <p className="chats-empty"><span className="spinner" /></p>
         : !list.length ? <p className="chats-empty">Ninguém encontrado com esse nome.</p>
@@ -344,11 +418,11 @@ function Intro({ onGroup }: { onGroup: () => void }) {
   return <div className="chats-intro">
     <img src="/images/logo.png" alt="" />
     <h2>Conversas do DSB</h2>
-    <p>Converse com a torcida no grupo geral ou mande mensagem para qualquer pessoa que usa o app. Tudo em tempo real, no celular e no computador.</p>
+    <p>Converse com a torcida no grupo geral, mande mensagem para qualquer pessoa que usa o app ou crie grupos com quem quiser. Tudo em tempo real, no celular e no computador.</p>
     <div>
       <button className="button primary" onClick={onGroup}>Abrir o grupo geral</button>
       {!userId && <button className="button" onClick={() => requireLogin('Entre para conversar em particular.')}><LogIn size={16} /> Entrar</button>}
     </div>
-    <small><Lock size={12} /> Suas conversas particulares só aparecem para quem participa delas.</small>
+    <small><Lock size={12} /> Suas conversas particulares e grupos só aparecem para quem participa deles.</small>
   </div>;
 }

@@ -24,7 +24,7 @@ export async function registerPush(avisar?: (mensagem: string) => void, abrir?: 
     }
     // No Android cada canal vira um interruptor separado nas configurações do app.
     if (Capacitor.getPlatform() === 'android') {
-      await PushNotifications.createChannel({ id: 'mensagens', name: 'Mensagens', description: 'Conversas particulares, respostas e menções no grupo', importance: 5, visibility: 0, vibration: true });
+      await PushNotifications.createChannel({ id: 'mensagens', name: 'Mensagens', description: 'Conversas particulares, grupos, respostas e menções', importance: 5, visibility: 0, vibration: true });
       await PushNotifications.createChannel({ id: 'dsb', name: 'Avisos das provas', description: 'Largadas e lembretes do fantasy', importance: 4, visibility: 1 });
     }
     await PushNotifications.removeAllListeners();

@@ -3,7 +3,7 @@
 // Três modos:
 //   { "modo": "provas" }                      → avisos automáticos das provas
 //   { "modo": "aviso", "titulo": "...", "texto": "..." } → recado para todo mundo
-//   { "modo": "mensagem", "id": 123 }         → mensagem nova do chat: particular, resposta ou menção no grupo (chamado pelo gatilho do banco)
+//   { "modo": "mensagem", "id": 123 }         → mensagem nova do chat: particular, grupo, resposta ou menção no grupo geral (chamado pelo gatilho do banco)
 //
 // Segredos necessários (Supabase → Edge Functions → Secrets):
 //   FCM_SERVICE_ACCOUNT  JSON da conta de serviço do Firebase
@@ -108,7 +108,7 @@ const duracao = (ms: number) => {
 type Mensagem = {
   id: number; user_id: string; author_name: string; body: string | null; file_type: string | null;
   file_name: string | null; duration_ms: number | null; conversation_id: string | null; reply_to: number | null; deleted_at: string | null;
-  mentions: string[] | null;
+  mentions: string[] | null; event: { type: string; users?: { id: string }[] } | null;
 };
 
 /** O que aparece na notificação, igual à prévia da lista de conversas do WhatsApp. */
@@ -124,25 +124,48 @@ function previa(m: Mensagem) {
 
 /**
  * Mensagem nova do chat: avisa só quem ela é para. Conversa particular → a outra pessoa;
- * no grupo → quem foi marcado com @ e quem escreveu a mensagem respondida (um aviso só por pessoa).
+ * grupo criado pelas pessoas → todo mundo que participa (e quem acabou de ser adicionado, no aviso de entrada);
+ * grupo geral → quem foi marcado com @ e quem escreveu a mensagem respondida (um aviso só por pessoa).
  * Quem bloqueou o autor não recebe.
  */
 // deno-lint-ignore no-explicit-any
 async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
   const { data: m } = await supabase
     .from('messages')
-    .select('id, user_id, author_name, body, file_type, file_name, duration_ms, conversation_id, reply_to, deleted_at, mentions')
+    .select('id, user_id, author_name, body, file_type, file_name, duration_ms, conversation_id, reply_to, deleted_at, mentions, event')
     .eq('id', id)
     .maybeSingle() as { data: Mensagem | null };
   if (!m || m.deleted_at) return { enviados: 0, motivo: 'mensagem não encontrada' };
 
   // Cada pessoa com o texto que vai receber; resposta vence menção, como no WhatsApp.
   const destinos = new Map<string, Notificacao>();
-  if (m.conversation_id) {
-    const { data: c } = await supabase.from('conversations').select('user_a, user_b').eq('id', m.conversation_id).maybeSingle();
-    const outra = c ? (c.user_a === m.user_id ? c.user_b : c.user_a) : null;
-    if (outra) destinos.set(outra, { titulo: nomeCurto(m.author_name), texto: previa(m), grupo: m.conversation_id });
-  } else {
+  const { data: c } = m.conversation_id
+    ? await supabase.from('conversations').select('user_a, user_b, is_group, name').eq('id', m.conversation_id).maybeSingle()
+    : { data: null };
+  if (c?.is_group) {
+    const conversa = m.conversation_id!;
+    const autor = nomeCurto(m.author_name);
+    if (m.event) {
+      // Só quem entrou é avisado: "Fulano adicionou você".
+      const texto = m.event.type === 'created' ? `${autor} criou o grupo e adicionou você` : `${autor} adicionou você`;
+      for (const u of m.event.users ?? []) destinos.set(u.id, { titulo: c.name, texto, grupo: conversa });
+    } else {
+      const { data: participantes } = await supabase
+        .from('conversation_members').select('user_id').eq('conversation_id', conversa).is('left_at', null);
+      const { data: original } = m.reply_to
+        ? await supabase.from('messages').select('user_id, deleted_at').eq('id', m.reply_to).maybeSingle()
+        : { data: null };
+      for (const p of participantes ?? []) {
+        const texto = (m.mentions ?? []).includes(p.user_id) ? `${autor} mencionou você: ${previa(m)}`
+          : original && !original.deleted_at && original.user_id === p.user_id ? `${autor} respondeu: ${previa(m)}`
+          : `${autor}: ${previa(m)}`;
+        destinos.set(p.user_id, { titulo: c.name, texto, grupo: conversa });
+      }
+    }
+  } else if (c) {
+    const outra = c.user_a === m.user_id ? c.user_b : c.user_a;
+    if (outra) destinos.set(outra, { titulo: nomeCurto(m.author_name), texto: previa(m), grupo: m.conversation_id! });
+  } else if (!m.conversation_id) {
     for (const uid of m.mentions ?? []) {
       destinos.set(uid, { titulo: 'Torcida Solar', texto: `${nomeCurto(m.author_name)} mencionou você: ${previa(m)}`, grupo: 'geral' });
     }
