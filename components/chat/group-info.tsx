@@ -10,18 +10,19 @@ import { useApp } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
-import { isVideo, type Message, type Person, type Target } from './types';
+import { AddMembers, GroupDetails } from './groups';
+import { isVideo, type Member, type Message, type Person, type Target } from './types';
 import { PhotoViewer, type Photo } from './viewer';
 
-type View = 'info' | 'media' | 'rules' | 'blocked';
+type View = 'info' | 'media' | 'rules' | 'blocked' | 'add';
 
 const contato = 'andreoliveiracunha20@gmail.com';
-const COLUMNS = 'id, user_id, author_name, author_avatar, body, file_path, file_name, file_type, file_size, thumb_path, width, height, created_at, deleted_at, deleted_by, reply_to, edited_at, conversation_id, duration_ms, waveform';
+const COLUMNS = 'id, user_id, author_name, author_avatar, body, file_path, file_name, file_type, file_size, thumb_path, width, height, created_at, deleted_at, deleted_by, reply_to, edited_at, conversation_id, duration_ms, waveform, event';
 // Valores com ":" e "." vão entre aspas dentro do or() do PostgREST.
 const LINKS = 'body.ilike."*http://*",body.ilike."*https://*",body.ilike."*www.*"';
 const date = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-// Sempre de uma conversa só: o grupo (conversation_id nulo) ou a conversa particular aberta.
+// Sempre de uma conversa só: o grupo geral (conversation_id nulo), a particular ou o grupo aberto.
 function inConversation<Q extends { is: (column: string, value: null) => Q; eq: (column: string, value: string) => Q }>(query: Q, conversationId: string | null) {
   return conversationId ? query.eq('conversation_id', conversationId) : query.is('conversation_id', null);
 }
@@ -38,10 +39,12 @@ export async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: num
 /**
  * Dados do grupo ou do contato, no formato do WhatsApp: tela cheia no celular, painel à direita no desktop.
  * Cada linha faz algo de verdade no app (mídia, regras, tema, bloqueio, termos).
+ * members: participantes do grupo criado pelas pessoas (nulo enquanto carrega ou fora de um grupo).
  */
-export function InfoPanel({ target, open, initialView, online, contactOnline, blocked, onUnblock, onBlock, onOpenMedia, onClose }: {
-  target: Target; open: boolean; initialView: View; online: number; contactOnline: boolean; blocked: string[];
-  onUnblock: (id: string) => void; onBlock: (person: Person) => void; onOpenMedia: (message: Message) => void; onClose: () => void;
+export function InfoPanel({ target, open, initialView, online, contactOnline, blocked, members, onUnblock, onBlock, onOpenMedia, onOpenPerson, onLeft, onMembersChanged, onClose }: {
+  target: Target; open: boolean; initialView: View; online: number; contactOnline: boolean; blocked: string[]; members: Member[] | null;
+  onUnblock: (id: string) => void; onBlock: (person: Person) => void; onOpenMedia: (message: Message) => void;
+  onOpenPerson: (person: Person) => void; onLeft: () => void; onMembersChanged: () => void; onClose: () => void;
 }) {
   const { theme, setTheme, notify } = useApp();
   const { userId, profile, signOut } = useAuth();
@@ -52,7 +55,7 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
   const [photo, setPhoto] = useState<Photo | null>(null);
   const ref = useRef<HTMLElement>(null);
   const fechar = useRef(onClose);
-  const conversationId = target.kind === 'direct' ? target.id : null;
+  const conversationId = target.kind === 'general' ? null : target.id;
   useEffect(() => { fechar.current = onClose; }, [onClose]);
 
   useEffect(() => {
@@ -87,7 +90,7 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
   const personBlocked = !!person && blocked.includes(person.id);
   const visible = preview.filter(m => !blocked.includes(m.user_id) || !!person).slice(0, 4);
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
-  const titles: Record<View, string> = { info: person ? 'Dados do contato' : 'Dados do grupo', media: 'Mídia, links e docs', rules: 'Regras do chat', blocked: 'Pessoas bloqueadas' };
+  const titles: Record<View, string> = { info: person ? 'Dados do contato' : 'Dados do grupo', media: 'Mídia, links e docs', rules: 'Regras do chat', blocked: 'Pessoas bloqueadas', add: 'Adicionar participantes' };
   const back = view === 'info' ? onClose : () => setView('info');
 
   const mediaRow = <>
@@ -137,7 +140,14 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
         </a>
       </>}
 
-      {view === 'info' && !person && <>
+      {view === 'info' && target.kind === 'group' && <GroupDetails id={target.id} group={target.group} members={members} mediaRow={mediaRow}
+        onPhoto={setPhoto} onAdd={() => setView('add')} onMedia={() => setView('media')} onChanged={onMembersChanged}
+        onOpenPerson={p => { onClose(); onOpenPerson(p); }} onLeft={() => { onClose(); onLeft(); }} />}
+
+      {view === 'add' && target.kind === 'group' && members && <AddMembers id={target.id} members={members} blocked={blocked}
+        onDone={() => { onMembersChanged(); setView('info'); }} />}
+
+      {view === 'info' && target.kind === 'general' && <>
         <section className="group-hero">
           <button className="hero-photo" onClick={() => setPhoto({ id: 'grupo', name: 'Torcida Solar', url: '/images/logo.png', subtitle: 'Foto do grupo' })} aria-label="Ver a foto do grupo">
             <img src="/images/logo.png" alt="" />

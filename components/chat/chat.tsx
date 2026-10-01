@@ -16,12 +16,13 @@ import { Compose, type ComposeContext } from './compose';
 import { EmojiPicker } from './emoji-picker';
 import { bucketFor } from './files';
 import { InfoPanel } from './group-info';
+import { GroupAvatar, useGroupMembers } from './groups';
 import { MediaSend, type Pick } from './media-send';
 import { MentionPeople, useMentionables, usePeople, type MentionContext } from './mentions';
 import { Bubble, MessageRow, type MenuRequest, type Receipts, type VoiceInfo } from './message';
 import { MessageMenu, type MenuAction } from './message-menu';
 import { Reactors } from './reactors';
-import { canEdit, isAudio, isImage, targetKey, toReply, type Message, type Person, type Reaction, type Reply, type Row, type Target } from './types';
+import { canEdit, eventText, isAudio, isImage, targetKey, toReply, type GroupEvent, type Message, type Person, type Reaction, type Reply, type Row, type Target } from './types';
 import { Viewer } from './viewer';
 
 const PAGE = 50;
@@ -29,6 +30,7 @@ const TYPING_EVERY = 3000;
 const TYPING_TTL = 5000;
 const MAX_JUMP_PAGES = 10;
 const NOBODY: string[] = [];
+const NO_PEOPLE: Person[] = [];
 type Confirm = { title: string; text: string; label: string; run: () => void };
 
 async function fetchPage(conversationId: string | null, before?: number) {
@@ -43,28 +45,33 @@ const wiped = (m: Message, by: string | null): Message =>
   ({ ...m, deleted_at: new Date().toISOString(), deleted_by: by, body: null, file_path: null, thumb_path: null, file_name: null, file_type: null, reactions: [] });
 
 /**
- * Uma conversa, como no WhatsApp: o grupo geral (fotos e nomes de quem escreve, moderação)
- * ou uma conversa particular (tiques azuis quando a outra pessoa lê, "online", bloqueio).
+ * Uma conversa, como no WhatsApp: o grupo geral (fotos e nomes de quem escreve, moderação),
+ * uma conversa particular (tiques azuis quando a outra pessoa lê, "online", bloqueio)
+ * ou um grupo criado pelas pessoas (participantes, admins e tiques azuis quando todos leem).
  */
-export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSeen, onOpenPerson }: {
+export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSeen, onOpenPerson, onLeft }: {
   target: Target; blocked: string[];
   onBlock: (person: Person, messageId?: number) => void; onUnblock: (id: string) => void;
-  onBack: () => void; onSeen: (key: string) => void; onOpenPerson: (person: Person) => void;
+  onBack: () => void; onSeen: (key: string) => void; onOpenPerson: (person: Person) => void; onLeft: () => void;
 }) {
   const { userId, profile, requireLogin } = useAuth();
-  const group = target.kind === 'group';
-  const conversationId = target.kind === 'direct' ? target.id : null;
+  const general = target.kind === 'general';
+  const group = target.kind === 'group' ? target.group : null;
+  // Várias pessoas (grupo geral ou criado): foto e nome de quem escreve, menções, e quem você bloqueou some.
+  const multi = target.kind !== 'direct';
+  const conversationId = target.kind === 'general' ? null : target.id;
   const other = target.kind === 'direct' ? target.other : null;
-  const otherId = other?.id ?? null;
   const key = targetKey(target);
-  // Moderação: a organização pode remover qualquer mensagem do grupo.
-  const moderador = group && profile?.role === 'moderator';
+  // Moderação: a organização pode remover qualquer mensagem do grupo geral.
+  const moderador = general && profile?.role === 'moderator';
   const { notify } = useApp();
   const { markRead, refreshDm } = useChatUnread();
   const online = useOnline();
   const onlineUsers = useOnlineUsers();
-  // Só no grupo dá para marcar pessoas com @.
-  const people = usePeople(group);
+  // Só nos grupos dá para marcar pessoas com @: no geral, qualquer pessoa do app; nos outros, quem participa.
+  const everyone = usePeople(general);
+  const { members, reload: reloadMembers } = useGroupMembers(group ? conversationId : null);
+  const people = general ? everyone : group ? members ?? NO_PEOPLE : NO_PEOPLE;
   const mentionables = useMentionables(people);
   const mentionContext: MentionContext = { people: mentionables, me: userId, onOpen: id => { const person = people.find(p => p.id === id); if (person) onOpenPerson(person); } };
   // Menções a você que ainda não foram vistas: o botão @ acima do "descer" leva a cada uma, como no WhatsApp.
@@ -89,10 +96,10 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const [typers, setTypers] = useState<Record<string, { name: string; audio: boolean }>>({});
   const [flash, setFlash] = useState<number | null>(null);
   // Faixa "N mensagens não lidas": o que chegou entre a última visita e a abertura da conversa.
-  const [readAtOpen, setReadAtOpen] = useState(() => group ? lastReadId() : 0);
+  const [readAtOpen, setReadAtOpen] = useState(() => general ? lastReadId() : 0);
   const [unreadUpTo, setUnreadUpTo] = useState(0);
-  // Conversa particular: até onde a outra pessoa recebeu (✓✓) e leu (✓✓ azul).
-  const [receipts, setReceipts] = useState<Receipts>({ read: 0, delivered: 0 });
+  // Até onde cada outra pessoa da conversa recebeu (✓✓) e leu (✓✓ azul).
+  const [reads, setReads] = useState<Record<string, Receipts>>({});
   // Quando a pessoa está lendo mensagens antigas, as novas viram um contador no botão de descer.
   const [newCount, setNewCount] = useState(0);
   const [atBottom, setAtBottom] = useState(true);
@@ -148,16 +155,19 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   // Carga inicial + tempo real (mensagens, reações, leituras e quem está digitando).
   useEffect(() => {
     let alive = true;
-    if (conversationId && otherId) {
-      // Na particular, a faixa de não lidas e os tiques vêm das leituras salvas no banco.
+    if (conversationId) {
+      // Na particular e nos grupos, a faixa de não lidas e os tiques vêm das leituras salvas no banco.
       void Promise.all([
         fetchPage(conversationId),
         supabase.from('conversation_reads').select('user_id, last_read_id, last_delivered_id').eq('conversation_id', conversationId),
-      ]).then(([page, reads]) => {
+      ]).then(([page, saved]) => {
         if (!alive) return;
-        setReadAtOpen(reads.data?.find(r => r.user_id !== otherId)?.last_read_id ?? 0);
-        const theirs = reads.data?.find(r => r.user_id === otherId);
-        setReceipts({ read: theirs?.last_read_id ?? 0, delivered: Math.max(theirs?.last_delivered_id ?? 0, theirs?.last_read_id ?? 0) });
+        const myRead = saved.data?.find(r => r.user_id === userId)?.last_read_id ?? 0;
+        setReadAtOpen(myRead);
+        setReads(Object.fromEntries((saved.data ?? []).filter(r => r.user_id !== userId)
+          .map(r => [r.user_id, { read: r.last_read_id, delivered: Math.max(r.last_delivered_id, r.last_read_id) }])));
+        // Menções a você no grupo que chegaram desde a última leitura: o botão @ leva a cada uma.
+        if (userId && page) setMentionedMe(page.filter(m => m.id > myRead && !m.deleted_at && m.mentions?.includes(userId)).map(m => m.id));
         applyPage(page);
       });
     } else {
@@ -181,6 +191,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
         const row = payload as Row;
         if (!mine(row)) return;
         stopTyping(row.user_id);
+        // Alguém entrou ou saiu do grupo: a lista de participantes muda.
+        if (row.event) reloadMembers();
         setMessages(current => {
           // O envio em andamento deste aparelho troca a própria prévia pela mensagem salva.
           if (current.some(m => m.id === row.id || (m.pending && m.user_id === row.user_id))) return current;
@@ -221,20 +233,23 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
         clearTimeout(timers.get(id));
         timers.set(id, setTimeout(() => stopTyping(id), TYPING_TTL));
       });
-    if (conversationId && otherId) {
+    if (conversationId) {
       const onRead = ({ new: row }: { new: Record<string, unknown> }) => {
-        if (row.user_id !== otherId) return;
+        const id = row.user_id;
+        if (typeof id !== 'string' || id === userId) return;
         const read = Number(row.last_read_id) || 0, delivered = Number(row.last_delivered_id) || 0;
-        setReceipts(current => ({ read: Math.max(current.read, read), delivered: Math.max(current.delivered, delivered, read) }));
+        setReads(current => ({ ...current, [id]: { read: Math.max(current[id]?.read ?? 0, read), delivered: Math.max(current[id]?.delivered ?? 0, delivered, read) } }));
       };
       realtime = realtime
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_reads', filter: `conversation_id=eq.${conversationId}` }, onRead)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_reads', filter: `conversation_id=eq.${conversationId}` }, onRead);
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_reads', filter: `conversation_id=eq.${conversationId}` }, onRead)
+        // Grupo: alguém virou admin, saiu ou foi removido (inclusive você).
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members', filter: `conversation_id=eq.${conversationId}` }, () => reloadMembers());
     }
     realtime.subscribe();
     channel.current = realtime;
     return () => { alive = false; channel.current = null; timers.forEach(clearTimeout); void supabase.removeChannel(realtime); };
-  }, [applyPage, markSeen, conversationId, otherId, key, userId]);
+  }, [applyPage, markSeen, reloadMembers, conversationId, key, userId]);
 
   // Abre na faixa de não lidas (ou no fim), mantém a conversa no fim quando chegam mensagens
   // e a posição ao carregar as antigas.
@@ -355,7 +370,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     const tempId = -Date.now();
     const reply = replyTo ? toReply(replyTo) : null;
     const bucket = bucketFor(conversationId);
-    const mentions = group && body ? whoIsMentioned(body) : [];
+    const mentions = multi && body ? whoIsMentioned(body) : [];
     stickToBottom.current = true;
     lastTyping.current = 0;
     setNewCount(0);
@@ -365,7 +380,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       file_path: file ? 'pending' : null, file_name: file?.name ?? null, file_type: file ? file.type || 'application/octet-stream' : null,
       file_size: file?.size ?? null, thumb_path: null, width: null, height: null, created_at: new Date().toISOString(),
       deleted_at: null, deleted_by: null, reply_to: replyTo?.id ?? null, edited_at: null, conversation_id: conversationId,
-      duration_ms: voice?.durationMs ?? null, waveform: voice?.waveform ?? null, mentions,
+      duration_ms: voice?.durationMs ?? null, waveform: voice?.waveform ?? null, mentions, event: null,
       reactions: [], reply, pending: true, localUrl,
     }]);
     const uploaded: string[] = [];
@@ -531,10 +546,21 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     const name = shortName(person.name);
     setConfirm({
       title: `Bloquear ${name}?`,
-      text: group ? 'Você não verá mais as mensagens desta pessoa, e a organização será avisada. Dá para desbloquear nos dados do grupo.'
+      text: multi ? 'Você não verá mais as mensagens desta pessoa nos grupos, e a organização será avisada. Dá para desbloquear nos dados do grupo geral.'
         : 'Vocês não poderão mais trocar mensagens, e a organização será avisada. Dá para desbloquear quando quiser.',
       label: 'Bloquear',
       run: () => onBlock(person, messageId),
+    });
+  }
+
+  function askLeave() {
+    if (!group || !conversationId) return;
+    setConfirm({
+      title: `Sair do grupo "${group.name}"?`,
+      text: othersInGroup.length ? 'Você deixa de receber as mensagens deste grupo. Para voltar, um admin precisa adicionar você.'
+        : 'Você é a última pessoa do grupo: ao sair, ele e as mensagens são apagados.',
+      label: 'Sair do grupo',
+      run: () => void supabase.rpc('leave_group', { p_conversation: conversationId }).then(({ error }) => { if (error) notify(errorMessage(error)); else onLeft(); }),
     });
   }
 
@@ -566,7 +592,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       case 'reply': startReply(message); break;
       case 'copy': void copy(message); break;
       case 'edit': startEdit(message); break;
-      case 'delete': setConfirm({ title: 'Apagar mensagem?', text: group ? 'A mensagem será apagada para todas as pessoas do grupo.' : `A mensagem será apagada para você e para ${other ? shortName(other.name) : 'a outra pessoa'}.`, label: 'Apagar para todos', run: () => void remove(message) }); break;
+      case 'delete': setConfirm({ title: 'Apagar mensagem?', text: multi ? 'A mensagem será apagada para todas as pessoas do grupo.' : `A mensagem será apagada para você e para ${other ? shortName(other.name) : 'a outra pessoa'}.`, label: 'Apagar para todos', run: () => void remove(message) }); break;
       case 'report': setConfirm({ title: `Denunciar ${name}?`, text: 'A organização vai analisar esta mensagem em até 24 horas. Quem mandou não fica sabendo.', label: 'Denunciar', run: () => void report(message) }); break;
       case 'block': askBlock({ id: message.user_id, name: message.author_name, avatar_url: message.author_avatar }, message.id); break;
       case 'remove': setConfirm({ title: `Remover a mensagem de ${name}?`, text: 'A mensagem sai do ar para todas as pessoas.', label: 'Remover', run: () => void remove(message) }); break;
@@ -581,8 +607,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     chooseFile(file);
   }
 
-  // No grupo some quem a pessoa bloqueou; na particular a conversa continua visível, mas travada.
-  const visible = group ? messages.filter(m => !blocked.includes(m.user_id)) : messages;
+  // Nos grupos some quem a pessoa bloqueou (menos os avisos); na particular a conversa continua visível, mas travada.
+  const visible = multi ? messages.filter(m => m.event || !blocked.includes(m.user_id)) : messages;
   const byId = new Map(messages.map(m => [m.id, m]));
   const replyOf = (m: Message): Reply | null => {
     if (!m.reply_to) return null;
@@ -601,37 +627,47 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const typing = typingNow.map(t => t.name);
   const recordingNow = typingNow.length > 0 && typingNow.every(t => t.audio);
   const otherBlocked = !!other && blocked.includes(other.id);
-  const subtitle = other
+  // Grupo: quem está nele (você por último, como no WhatsApp). Saiu ou foi removido: não dá mais para escrever.
+  const othersInGroup = members?.filter(m => m.id !== userId) ?? [];
+  const leftGroup = !!group && !!userId && members !== null && !members.some(m => m.id === userId);
+  const subtitle = group && !typing.length
+    ? (members ? [...othersInGroup.map(m => shortName(m.name)), ...(leftGroup ? [] : ['Você'])].join(', ') : 'clique para ver os dados do grupo')
+    : other
     ? (typing.length ? (recordingNow ? 'gravando áudio…' : 'digitando…') : onlineUsers.has(other.id) ? 'online' : 'clique para ver os dados do contato')
     : typing.length === 1 ? `${typing[0]} está ${recordingNow ? 'gravando áudio' : 'digitando'}…`
     : typing.length === 2 ? `${typing[0]} e ${typing[1]} estão digitando…`
     : typing.length > 2 ? `${typing.length} pessoas estão digitando…`
     : online > 0 ? `${online} ${online === 1 ? 'pessoa' : 'pessoas'} no app agora` : 'clique para ver os dados do grupo';
   const menuMessage = menu ? byId.get(menu.message.id) ?? menu.message : null;
-  const tickState = group ? null : receipts;
+  // Tiques: na particular, os da outra pessoa; no grupo, o menor de todos (azul só quando todo mundo leu).
+  const receiptsOf = (ids: string[]): Receipts | null => ids.length
+    ? { read: Math.min(...ids.map(id => reads[id]?.read ?? 0)), delivered: Math.min(...ids.map(id => reads[id]?.delivered ?? 0)) } : null;
+  const tickState = other ? receiptsOf([other.id]) : group ? receiptsOf(othersInGroup.map(m => m.id)) : null;
   /** Microfone: verde (você não ouviu), azul (ouvido) ou cinza (seu, ainda não ouvido; no grupo aberto fica cinza). */
   const voiceOf = (m: Message, index: number): VoiceInfo | undefined => {
     if (!isAudio(m) || m.deleted_at) return undefined;
     const own = m.user_id === userId;
     const next = visible[index + 1];
     return {
-      played: own ? (!group && m.played_by_others ? 'played' : 'sent') : m.played_by_me ? 'played' : 'new',
+      played: own ? (!general && m.played_by_others ? 'played' : 'sent') : m.played_by_me ? 'played' : 'new',
       nextId: next && isAudio(next) && !next.deleted_at ? next.id : null,
       onPlayed: markPlayed,
     };
   };
   const indexOf = new Map(visible.map((m, i) => [m.id, i]));
 
-  return <MentionPeople value={mentionContext}><section className={`chat ${group ? 'group' : 'direct'} ${info ? 'with-info' : ''}`} aria-label={other ? `Conversa com ${other.name}` : 'Chat da comunidade'}>
+  return <MentionPeople value={mentionContext}><section className={`chat ${multi ? 'group' : 'direct'} ${info ? 'with-info' : ''}`} aria-label={other ? `Conversa com ${other.name}` : group ? `Grupo ${group.name}` : 'Chat da comunidade'}>
     <div className="chat-main" onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={onDrop}>
       {/* Atrás de tudo, inclusive da barra de digitar, que flutua sobre ele. */}
       <div className="chat-wallpaper" aria-hidden />
       <header className="chat-header">
         <button className="icon-button chat-back only-mobile" onClick={onBack} aria-label="Voltar para as conversas"><ArrowLeft size={22} /></button>
         <button className="chat-title" onClick={() => setInfo('info')} aria-label={other ? 'Dados do contato' : 'Dados do grupo'}>
-          {other ? <Avatar id={other.id} name={other.name} url={other.avatar_url} /> : <img src="/images/logo.png" alt="" className="chat-avatar" />}
+          {other ? <Avatar id={other.id} name={other.name} url={other.avatar_url} />
+            : group ? <GroupAvatar id={key} group={group} />
+            : <img src="/images/logo.png" alt="" className="chat-avatar" />}
           <span>
-            <h1>{other ? other.name : 'Torcida Solar'}</h1>
+            <h1>{other ? other.name : group ? group.name : 'Torcida Solar'}</h1>
             <small className={typing.length ? 'typing' : ''} aria-live="polite">{subtitle}</small>
           </span>
         </button>
@@ -642,31 +678,35 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
           <button role="menuitem" onClick={() => { setHeaderMenu(false); setInfo('info'); }}><span>{other ? 'Dados do contato' : 'Dados do grupo'}</span></button>
           {other
             ? <button role="menuitem" className="danger" onClick={() => { setHeaderMenu(false); if (otherBlocked) onUnblock(other.id); else askBlock(other); }}><span>{otherBlocked ? 'Desbloquear' : 'Bloquear'}</span></button>
+            : group ? !leftGroup && <button role="menuitem" className="danger" onClick={() => { setHeaderMenu(false); askLeave(); }}><span>Sair do grupo</span></button>
             : <button role="menuitem" onClick={() => { setHeaderMenu(false); setInfo('blocked'); }}><span>Pessoas bloqueadas</span></button>}
           <button role="menuitem" onClick={() => { setHeaderMenu(false); onBack(); }}><span>Fechar conversa</span></button>
         </div>
       </div>}
-      {group && <button className="chat-pinned" onClick={() => setInfo('info')}>
+      {general && <button className="chat-pinned" onClick={() => setInfo('info')}>
         <span className="pinned-text"><small>Mensagem fixada</small><span>Respeito é a nossa principal regra. Boa torcida!</span></span><Pin size={18} />
       </button>}
 
       <div className="chat-body">
         <div className="chat-messages" ref={list} onScroll={onScroll} role="log" aria-label="Mensagens" aria-live="polite">
           {loadingOlder && <p className="chat-notice"><span className="spinner" /></p>}
-          {!group && status === 'ready' && !hasMore && <p className="chat-notice notice-private">🔒 Só você e {other && shortName(other.name)} veem as mensagens desta conversa. Denúncias continuam indo para a organização.</p>}
+          {other && status === 'ready' && !hasMore && <p className="chat-notice notice-private">🔒 Só você e {shortName(other.name)} veem as mensagens desta conversa. Denúncias continuam indo para a organização.</p>}
+          {group && status === 'ready' && !hasMore && <p className="chat-notice notice-private">🔒 Só quem participa deste grupo vê as mensagens, e só as que chegaram depois de entrar. Denúncias continuam indo para a organização.</p>}
           {status === 'loading' && <p className="chat-notice">Carregando conversa…</p>}
           {status === 'error' && <p className="chat-notice">Não foi possível carregar a conversa. Verifique sua conexão.</p>}
-          {status === 'ready' && group && visible.length === 0 && <p className="chat-notice">Ninguém falou nada ainda. Puxe o assunto! ☀️</p>}
+          {status === 'ready' && general && visible.length === 0 && <p className="chat-notice">Ninguém falou nada ainda. Puxe o assunto! ☀️</p>}
           {days.map(day => <section key={day.key} className="chat-day-group">
             <div className="chat-day"><span>{day.label}</span></div>
             {day.items.map((message, index) => {
               const unread = message.id === firstUnread;
-              const first = unread || index === 0 || day.items[index - 1].user_id !== message.user_id;
+              const previous = day.items[index - 1];
+              const first = unread || !previous || previous.user_id !== message.user_id || !!previous.event;
               return <div key={message.id} className="msg-slot">
                 {unread && <div className="unread-divider"><span>{unreadCount} {unreadCount === 1 ? 'mensagem não lida' : 'mensagens não lidas'}</span></div>}
-                <MessageRow message={message} first={first} userId={userId} reply={replyOf(message)} flash={flash === message.id} group={group} receipts={tickState}
+                {message.event ? <p id={`m-${message.id}`} className="chat-notice chat-event">{eventText(message.event as GroupEvent, message, userId)}</p>
+                : <MessageRow message={message} first={first} userId={userId} reply={replyOf(message)} flash={flash === message.id} group={multi} receipts={tickState}
                   voice={voiceOf(message, indexOf.get(message.id) ?? -1)}
-                  onMenu={setMenu} onReply={startReply} onOpen={setViewer} onJump={id => void jumpTo(id)} onReactors={setReactorsOf} />
+                  onMenu={setMenu} onReply={startReply} onOpen={setViewer} onJump={id => void jumpTo(id)} onReactors={setReactorsOf} />}
               </div>;
             })}
           </section>)}
@@ -688,21 +728,22 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
         : otherBlocked ? <button className="chat-login blocked-bar" onClick={() => onUnblock(other.id)}>
           Você bloqueou este contato. Toque para desbloquear.
         </button>
-        : <Compose text={text} setText={setText} context={context} userId={userId} people={group ? people : undefined} onMention={person => { picked.current = [...picked.current, person]; }} inputRef={input}
+        : leftGroup ? <p className="chat-login blocked-bar">Você não faz mais parte deste grupo.</p>
+        : <Compose text={text} setText={setText} context={context} userId={userId} people={multi ? people : undefined} onMention={person => { picked.current = [...picked.current, person]; }} inputRef={input}
           onCancelContext={cancelContext} onSubmit={submit} onFile={chooseFile} onTyping={() => sendTyping()}
           onVoice={sendVoice} onRecording={sendRecording} onError={notify} />}
     </div>
 
     <InfoPanel key={`info-${info ?? 'fechado'}`} target={target} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online}
-      contactOnline={!!other && onlineUsers.has(other.id)} blocked={blocked} onUnblock={onUnblock}
+      contactOnline={!!other && onlineUsers.has(other.id)} blocked={blocked} members={members} onUnblock={onUnblock}
       onBlock={person => askBlock(person, messages.findLast(m => m.user_id === person.id && !m.deleted_at)?.id)}
-      onOpenMedia={setViewer} onClose={() => setInfo(null)} />
+      onOpenMedia={setViewer} onOpenPerson={onOpenPerson} onLeft={onLeft} onMembersChanged={reloadMembers} onClose={() => setInfo(null)} />
 
     {menu && menuMessage && <MessageMenu request={menu} own={menuMessage.user_id === userId}
       myReaction={menuMessage.reactions.find(r => r.user_id === userId)?.emoji ?? null} actions={actionsFor(menuMessage)} onAction={id => runAction(menuMessage, id)}
       onReact={emoji => void react(menuMessage, emoji)} onMoreReactions={() => { setMenu(null); setReactPicker(menuMessage); }} onClose={() => setMenu(null)}>
       <div className={`msg ${menuMessage.user_id === userId ? 'own' : 'in'} ${menu.first ? 'first' : ''}`}>
-        <Bubble message={menuMessage} first={menu.first} userId={userId} reply={replyOf(menuMessage)} group={group} receipts={tickState} />
+        <Bubble message={menuMessage} first={menu.first} userId={userId} reply={replyOf(menuMessage)} group={multi} receipts={tickState} />
       </div>
     </MessageMenu>}
     <Sheet open={!!reactPicker} onClose={() => setReactPicker(null)} title="Reagir">
@@ -716,7 +757,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       </div>}
     </Sheet>
     <Reactors message={reactorsOf} userId={userId} onClose={() => setReactorsOf(null)} onRemove={message => { setReactorsOf(null); void react(message, message.reactions.find(r => r.user_id === userId)!.emoji); }} />
-    <Viewer key={`viewer-${viewer?.id ?? 'fechado'}`} message={viewer} userId={userId} blocked={group ? blocked : NOBODY}
+    <Viewer key={`viewer-${viewer?.id ?? 'fechado'}`} message={viewer} userId={userId} blocked={multi ? blocked : NOBODY}
       myReaction={id => byId.get(id)?.reactions.find(r => r.user_id === userId)?.emoji ?? null}
       onClose={() => setViewer(null)}
       onJump={m => { setViewer(null); setInfo(null); void jumpTo(m.id); }}

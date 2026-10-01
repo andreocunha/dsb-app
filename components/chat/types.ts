@@ -4,11 +4,18 @@ import { formatDuration } from '@/lib/voice';
 
 export type Reaction = { user_id: string; emoji: string };
 export type Person = { id: string; name: string; avatar_url: string | null };
-/** A conversa aberta: o grupo geral ou uma conversa particular com outra pessoa. */
-export type Target = { kind: 'group' } | { kind: 'direct'; id: string; other: Person };
+/** Grupo criado pelas pessoas: nome, foto (no bucket privado) e descrição. */
+export type GroupInfo = { name: string; photo_path: string | null; description: string | null };
+/** A conversa aberta: o grupo geral, uma conversa particular ou um grupo criado pelas pessoas. */
+export type Target = { kind: 'general' } | { kind: 'direct'; id: string; other: Person } | { kind: 'group'; id: string; group: GroupInfo };
 export const GROUP_KEY = 'geral';
-export const targetKey = (target: Target) => target.kind === 'group' ? GROUP_KEY : target.id;
+export const targetKey = (target: Target) => target.kind === 'general' ? GROUP_KEY : target.id;
+/** Participante de um grupo, como vem de group_members. */
+export type Member = Person & { admin: boolean };
+export const MAX_GROUP = 256;
 export type Row = Database['public']['Tables']['messages']['Row'];
+/** Aviso no meio do grupo ("Fulano adicionou Ciclano"), salvo em messages.event. */
+export type GroupEvent = { type: 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'description' | 'photo'; users?: { id: string; name: string }[]; name?: string };
 /** Resumo da mensagem citada, como vem de chat_messages. */
 export type Reply = { id: number; user_id: string; author_name: string; body: string | null; file_type: string | null; file_name: string | null; thumb_path: string | null; duration_ms?: number | null; deleted: boolean };
 /** pending: ainda enviando (relógio no lugar do ✓). localUrl: prévia do arquivo que saiu deste aparelho. */
@@ -44,4 +51,28 @@ export function replySnippet(reply: Reply) {
   if (isVideo(reply)) return 'Vídeo';
   if (isAudio(reply)) return reply.duration_ms ? `Mensagem de voz (${formatDuration(reply.duration_ms)})` : reply.file_name ?? 'Áudio';
   return reply.file_name ?? 'Arquivo';
+}
+
+/** "Ana", "Ana e Bruno", "Ana, Bruno e Carla"; com muita gente, "Ana, Bruno, Carla e mais 5 pessoas". */
+export function listNames(names: string[]) {
+  if (names.length > 4) return `${names.slice(0, 3).join(', ')} e mais ${names.length - 3} pessoas`;
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`;
+}
+
+/** Texto do aviso, do jeito do WhatsApp: "Você adicionou Ana e Bruno", "Carlos saiu". */
+export function eventText(event: GroupEvent, actor: { user_id: string; author_name: string }, userId: string | null) {
+  const me = actor.user_id === userId;
+  const who = me ? 'Você' : shortName(actor.author_name);
+  // Você vem primeiro na lista, como no WhatsApp.
+  const list = event.users ?? [];
+  const users = listNames([...list.filter(u => u.id === userId).map(() => 'você'), ...list.filter(u => u.id !== userId).map(u => shortName(u.name))]);
+  switch (event.type) {
+    case 'created': return `${who} criou o grupo "${event.name ?? ''}"${!me && list.some(u => u.id === userId) ? ' e adicionou você' : ''}`;
+    case 'added': return `${who} adicionou ${users}`;
+    case 'removed': return `${who} removeu ${users}`;
+    case 'left': return `${who} saiu`;
+    case 'renamed': return `${who} mudou o nome do grupo para "${event.name ?? ''}"`;
+    case 'description': return `${who} mudou a descrição do grupo`;
+    case 'photo': return `${who} mudou a foto do grupo`;
+  }
 }
