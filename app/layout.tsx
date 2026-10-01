@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
-import { AppShell } from "@/components/app-shell";
-import { AuthProvider } from "@/components/auth";
+import { SiteChrome } from "@/components/site-chrome";
 import "./globals.css";
 import "./chat.css";
 export const metadata: Metadata = {
@@ -24,5 +23,5 @@ export const viewport: Viewport = {
   ],
 };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return <html lang="pt-BR" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}><body><AuthProvider><AppShell>{children}</AppShell></AuthProvider></body></html>;
+  return <html lang="pt-BR" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}><body><SiteChrome>{children}</SiteChrome></body></html>;
 }

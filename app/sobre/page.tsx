@@ -16,6 +16,7 @@ const lojas = {
 export default function Page() {
   return <div className="page legal">
     <div className="page-heading"><div>
+      <img className="site-logo" src="/icons/icon-192.png" alt="Logo do DSB — Desafio Solar Brasil" width={72} height={72} />
       <h1>Desafio Solar Brasil</h1>
       <p>O aplicativo para acompanhar a competição de barcos movidos a energia solar.</p>
     </div></div>
@@ -28,7 +29,7 @@ export default function Page() {
         <li><strong>Chat da torcida:</strong> conversa entre equipes e torcedores, com moderação, denúncia e bloqueio.</li>
         <li><strong>Fantasy:</strong> monte sua equipe de barcos e dispute com os amigos.</li>
       </ul>
-      <p>Navegar é livre. Para escrever no chat e jogar o fantasy, você entra com a sua conta Google ou Apple; o app usa apenas seu nome, foto e e-mail para identificar a conta.</p>
+      <p>Navegar é livre, sem conta. Escrever no chat e jogar o fantasy pedem uma conta Google ou Apple, da qual o app usa apenas nome, foto e e-mail.</p>
 
       <h2>Baixe o app</h2>
       <p><a className="text-link" href={lojas.ios}>App Store (iPhone)</a> · <a className="text-link" href={lojas.android}>Google Play (Android)</a> · <Link className="text-link" href="/">Abrir no navegador</Link></p>
