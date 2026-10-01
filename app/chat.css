@@ -443,6 +443,9 @@ a.group-member:hover, .group-member.me { background: var(--wa-hover); }
   .compose textarea { order: 2; padding: 15px 8px; font-size: 15px; line-height: 22px; }
   .compose .send-button { order: 3; width: 40px; height: 52px; border-radius: 0; background: none; color: var(--wa-icon); box-shadow: none; }
   .compose .send-button:not(.idle) { color: var(--wa-green); }
+  .compose .send-button.recording-send { width: 42px; height: 42px; margin: 5px 0 5px 4px; border-radius: 50%; background: var(--wa-green); color: var(--wa-on-green); }
+  .compose .send-button.mic { color: var(--wa-icon); }
+  .recording { min-height: 52px; }
   .attach-menu { left: calc(4.5% + 4px); right: auto; bottom: calc(100% + 4px); width: 220px; grid-template-columns: 1fr; gap: 0; padding: 8px 0; transform-origin: bottom left; }
   .attach-menu button { flex-direction: row; gap: 14px; padding: 9px 18px; color: var(--wa-text); font-size: 15px; }
   .attach-menu button:hover { background: var(--wa-hover); }
@@ -476,3 +479,58 @@ a.group-member:hover, .group-member.me { background: var(--wa-hover); }
   .group-info-header { min-height: 64px; padding: 0 16px; }
   .group-info-body { padding: 0 20px 24px; }
 }
+
+/* ---------- Mensagem de voz (balão) ---------- */
+.bubble.voice { padding: 6px 7px 22px 6px; min-width: min(320px, 76vw); }
+.voice { display: flex; align-items: center; gap: 8px; }
+.voice-side { flex-shrink: 0; display: grid; place-items: center; width: 55px; height: 55px; }
+.voice.own .voice-side { order: 3; }
+.voice-avatar { position: relative; display: block; }
+.voice-avatar .avatar { width: 55px; height: 55px; font-size: 18px; }
+.voice-mic { position: absolute; left: -4px; bottom: -2px; display: grid; place-items: center; color: var(--wa-text-2); filter: drop-shadow(0 0 1.5px var(--wa-in)) drop-shadow(0 0 1.5px var(--wa-in)); }
+.msg.own .voice-mic { left: auto; right: -4px; filter: drop-shadow(0 0 1.5px var(--wa-out)) drop-shadow(0 0 1.5px var(--wa-out)); }
+.voice-mic.new { color: var(--wa-title); }
+.voice-mic.played { color: var(--wa-tick); }
+.voice-file { display: grid; place-items: center; width: 55px; height: 55px; border-radius: 50%; background: #ff9f43; color: #fff; }
+.voice-speed { min-width: 44px; height: 26px; padding: 0 8px; border-radius: 13px; background: var(--wa-speed); color: #fff; font-size: 14px; font-weight: 600; }
+.voice-play { flex-shrink: 0; display: grid; place-items: center; width: 34px; height: 40px; color: var(--wa-icon); }
+.voice-play:disabled { opacity: .5; }
+.voice-play .spinner { width: 20px; height: 20px; }
+.voice-track { position: relative; flex: 1; min-width: 0; padding-top: 6px; }
+.voice-wave { position: relative; display: flex; align-items: center; gap: 1.5px; height: 28px; }
+.voice-wave i { flex: 1; min-width: 2px; max-width: 3px; border-radius: 2px; background: var(--wa-wave); }
+.voice-wave i.on { background: var(--wa-wave-on); }
+.voice-dot { position: absolute; top: 50%; width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px; border-radius: 50%; background: var(--wa-text-2); transition: left .08s linear; }
+.voice.new .voice-dot { background: var(--wa-title); }
+.voice.played .voice-dot { background: var(--wa-tick); }
+.voice-seek { position: absolute; inset: 0 -6px auto; width: calc(100% + 12px); height: 40px; margin: 0; opacity: 0; cursor: pointer; touch-action: none; }
+.voice-time { position: absolute; left: 0; bottom: -17px; color: var(--wa-text-2); font-size: 11px; }
+.list-mic.new { color: var(--wa-title); }
+.list-mic.played { color: var(--wa-tick); }
+
+/* ---------- Gravando mensagem de voz (barra de digitar) ---------- */
+.compose .send-button.mic { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.compose .send-button.mic.holding { position: relative; z-index: 3; transform: scale(1.55); transition: transform .15s; }
+.recording-lock { position: absolute; bottom: calc(100% + 34px); left: 50%; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 30px; margin-left: -15px; padding: 8px 0 6px; border-radius: 15px; background: var(--wa-drawer); color: var(--wa-icon); box-shadow: var(--wa-menu-shadow); transform-origin: bottom; }
+.recording-lock svg { width: 13px; height: 13px; }
+.recording-field { flex-wrap: nowrap !important; }
+.recording { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 8px; }
+.recording-time { flex-shrink: 0; display: flex; align-items: center; gap: 8px; color: var(--wa-text); font-size: 16px; font-variant-numeric: tabular-nums; }
+/* O "deslize para cancelar" passa por trás do tempo, como no WhatsApp. */
+.recording.hold { overflow: hidden; }
+.recording.hold .recording-time { position: relative; z-index: 1; padding-right: 10px; background: var(--wa-input); }
+.recording-time.quiet { color: var(--wa-text-2); font-size: 14px; }
+.recording-dot { color: #f15c6d; animation: rec-blink 1s ease-in-out infinite; }
+.recording-red { width: 10px; height: 10px; border-radius: 50%; background: #f15c6d; animation: rec-blink 1s ease-in-out infinite; }
+@keyframes rec-blink { 50% { opacity: .2; } }
+.recording-slide { flex: 1; display: flex; align-items: center; justify-content: center; gap: 2px; overflow: hidden; color: var(--wa-text-2); font-size: 15px; white-space: nowrap; animation: rec-nudge 1.4s ease-in-out infinite; }
+@keyframes rec-nudge { 50% { translate: -6px 0; } }
+.recording.locked .compose-icon { width: 40px; }
+.recording-trash { color: var(--wa-icon); }
+.recording-pause { color: #f15c6d; }
+.recording-pause.resume { color: #f15c6d; }
+.recording-wave { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 30px; overflow: hidden; }
+.recording-wave.paused { justify-content: flex-start; }
+.recording-wave i { flex: 0 0 3px; border-radius: 2px; background: var(--wa-wave-on); }
+.recording-wave.paused i { flex: 1 1 3px; max-width: 3px; background: var(--wa-wave); }
+.compose .send-button.recording-send { background: var(--wa-green); color: var(--wa-on-green); }

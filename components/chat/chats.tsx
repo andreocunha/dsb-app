@@ -1,7 +1,8 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Ban, Camera, Check, CheckCheck, EllipsisVertical, FileText, Lock, LogIn, MessageSquarePlus, Pin, Search, Video, X } from 'lucide-react';
+import { ArrowLeft, Ban, Camera, Check, CheckCheck, EllipsisVertical, FileText, Lock, LogIn, MessageSquarePlus, Mic, Pin, Search, Video, X } from 'lucide-react';
+import { formatDuration } from '@/lib/voice';
 import { listTime } from '@/lib/chat-format';
 import { shortName } from '@/lib/names';
 import { supabase, errorMessage } from '@/lib/supabase';
@@ -12,7 +13,7 @@ import { Conversation } from './chat';
 import { GROUP_KEY, targetKey, type Person, type Target } from './types';
 import { useWide, WIDE } from './use-wide';
 
-type Last = { id: number; user_id: string; author_name?: string; body: string | null; file_type: string | null; file_name: string | null; created_at: string; deleted: boolean };
+type Last = { id: number; user_id: string; author_name?: string; body: string | null; file_type: string | null; file_name: string | null; created_at: string; deleted: boolean; duration_ms?: number | null; played?: boolean };
 type Chat = { id: string; other: Person; last: Last | null; unread: number; otherRead: number; otherDelivered: number };
 type Filter = 'all' | 'unread' | 'groups';
 
@@ -55,7 +56,7 @@ export function Chats() {
     loadChats();
     void supabase.rpc('chat_messages', { p_limit: 1 }).then(({ data }) => {
       const m = data?.[0];
-      if (m) setGroupLast({ id: m.id, user_id: m.user_id, author_name: m.author_name, body: m.body, file_type: m.file_type, file_name: m.file_name, created_at: m.created_at, deleted: !!m.deleted_at });
+      if (m) setGroupLast({ id: m.id, user_id: m.user_id, author_name: m.author_name, body: m.body, file_type: m.file_type, file_name: m.file_name, created_at: m.created_at, deleted: !!m.deleted_at, duration_ms: m.duration_ms, played: m.played_by_me });
     });
     if (userId) void supabase.from('user_blocks').select('blocked_id').then(({ data }) => setBlocked((data ?? []).map(b => b.blocked_id)));
   }, [userId, loadChats]);
@@ -64,7 +65,7 @@ export function Chats() {
   useEffect(() => {
     const channel = supabase.channel('chats-list')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: row }) => {
-        const last: Last = { id: row.id, user_id: row.user_id, author_name: row.author_name, body: row.body, file_type: row.file_type, file_name: row.file_name, created_at: row.created_at, deleted: false };
+        const last: Last = { id: row.id, user_id: row.user_id, author_name: row.author_name, body: row.body, file_type: row.file_type, file_name: row.file_name, created_at: row.created_at, deleted: false, duration_ms: row.duration_ms, played: false };
         if (!row.conversation_id) { setGroupLast(last); return; }
         // Conversa nova (a outra pessoa acabou de puxar papo): recarrega a lista.
         if (!chatsRef.current?.some(c => c.id === row.conversation_id)) { loadChats(); return; }
@@ -76,6 +77,14 @@ export function Chats() {
         const patch = (last: Last | null): Last | null => last && last.id === row.id ? { ...last, body: row.body, file_type: row.file_type, file_name: row.file_name, deleted: !!row.deleted_at } : last;
         if (!row.conversation_id) setGroupLast(patch);
         else setChats(current => current?.map(c => c.id === row.conversation_id ? { ...c, last: patch(c.last) } : c) ?? current);
+      })
+      // Ouviram o último áudio: o microfone da prévia fica azul.
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_plays' }, ({ new: row }) => {
+        const play = row as { message_id: number; user_id: string };
+        const mark = (last: Last | null): Last | null => last && last.id === play.message_id
+          && (last.user_id === userId ? play.user_id !== userId : play.user_id === userId) ? { ...last, played: true } : last;
+        setGroupLast(last => last && last.user_id !== userId ? mark(last) : last);
+        setChats(current => current?.map(c => c.last?.id === play.message_id ? { ...c, last: mark(c.last) } : c) ?? current);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_reads' }, ({ new: row }) => {
         const read = row as { conversation_id?: string; user_id?: string; last_read_id?: number; last_delivered_id?: number };
@@ -171,10 +180,13 @@ function LastPreview({ last, userId, group, receipts }: { last: Last | null; use
   const who = group && !own && last.author_name ? `${shortName(last.author_name)}: ` : '';
   const tick = own && !last.deleted && (receipts && last.id <= receipts.read ? <CheckCheck size={16} className="tick-read" aria-label="Lida" />
     : receipts && last.id <= receipts.delivered ? <CheckCheck size={16} aria-label="Entregue" /> : <Check size={16} aria-label="Enviada" />);
-  const icon = last.deleted ? <Ban size={15} /> : !last.body && last.file_type?.startsWith('image/') ? <Camera size={15} />
+  // Mensagem de voz: microfone verde (você não ouviu) ou azul (ouvida), como na lista do WhatsApp.
+  const voice = !last.deleted && !!last.duration_ms;
+  const icon = last.deleted ? <Ban size={15} /> : voice ? <Mic size={15} className={`list-mic ${last.played ? 'played' : own ? '' : 'new'}`} />
+    : !last.body && last.file_type?.startsWith('image/') ? <Camera size={15} />
     : !last.body && last.file_type?.startsWith('video/') ? <Video size={15} /> : !last.body && last.file_type ? <FileText size={15} /> : null;
   const text = last.deleted ? (own ? 'Você apagou esta mensagem' : 'Mensagem apagada')
-    : last.body ?? (last.file_type?.startsWith('image/') ? 'Foto' : last.file_type?.startsWith('video/') ? 'Vídeo' : last.file_name ?? 'Arquivo');
+    : voice ? formatDuration(last.duration_ms!) : last.body ?? (last.file_type?.startsWith('image/') ? 'Foto' : last.file_type?.startsWith('video/') ? 'Vídeo' : last.file_name ?? 'Arquivo');
   return <span className={`chat-row-preview ${last.deleted ? 'deleted' : ''}`}>{tick}{own && group && !last.deleted ? 'Você: ' : who}{icon}<span>{text}</span></span>;
 }
 

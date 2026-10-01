@@ -1,21 +1,25 @@
 'use client';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Camera, Check, FileText, Image as ImageIcon, Keyboard, Paperclip, SendHorizontal, Smile, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Camera, Check, FileText, Image as ImageIcon, Keyboard, Mic, Paperclip, SendHorizontal, Smile, X } from 'lucide-react';
+import { canRecord, type Recording } from '@/lib/voice';
 import { EmojiPicker } from './emoji-picker';
 import { Quote } from './message';
 import { useWide } from './use-wide';
+import { LockHint, RecordingBar, useVoiceRecorder } from './voice-recorder';
 import { toReply, type Message } from './types';
 
 export type ComposeContext = { kind: 'reply' | 'edit'; message: Message } | null;
 
 const MAX_LINES = 6;
+const noop = () => () => {};
 const hasKeyboard = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 /** Barra de digitar: pílula com emoji, texto e anexos no celular; barra inteira no desktop (WhatsApp Web). */
-export function Compose({ text, setText, context, userId, inputRef, onCancelContext, onSubmit, onFile, onTyping }: {
+export function Compose({ text, setText, context, userId, inputRef, onCancelContext, onSubmit, onFile, onTyping, onVoice, onRecording, onError }: {
   text: string; setText: (text: string) => void; context: ComposeContext; userId: string | null;
   inputRef: React.RefObject<HTMLTextAreaElement | null>; onCancelContext: () => void; onSubmit: () => void;
   onFile: (file: File) => void; onTyping: () => void;
+  onVoice: (recording: Recording) => void; onRecording: () => void; onError: (message: string) => void;
 }) {
   const [emojis, setEmojis] = useState(false);
   const [attach, setAttach] = useState(false);
@@ -26,6 +30,11 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
   const empty = !text.trim();
   const wide = useWide();
   const wrap = useRef<HTMLDivElement>(null);
+  const voice = useVoiceRecorder({ onSend: onVoice, onActivity: onRecording, onError });
+  // Campo vazio: no lugar da seta de enviar fica o microfone (como no WhatsApp).
+  const micSupported = useSyncExternalStore(noop, canRecord, () => false);
+  const showMic = empty && !editing && micSupported;
+  const recording = voice.mode !== 'idle';
 
   useEffect(() => {
     if (!attach) return;
@@ -94,8 +103,8 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
   }
 
   return <div ref={wrap} className={`compose-wrap ${emojis ? 'with-emojis' : ''}`}>
-    <form className="compose" onSubmit={submit}>
-      <div className="compose-field">
+    <form className={`compose ${recording ? `is-recording ${voice.mode}` : ''}`} onSubmit={submit}>
+      {recording ? <div className="compose-field recording-field"><RecordingBar voice={voice} /></div> : <div className="compose-field">
         {context && <div className="compose-context">
           <Quote reply={toReply(context.message)} userId={userId} conversationId={context.message.conversation_id} label={editing ? 'Editar mensagem' : undefined} />
           <button type="button" className="icon-button" onClick={onCancelContext} aria-label={editing ? 'Cancelar edição' : 'Cancelar resposta'}><X size={20} /></button>
@@ -112,10 +121,19 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
           onPaste={onPaste}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && hasKeyboard()) submit(e); }} />
         {empty && !editing && <button type="button" className="compose-icon compose-camera only-mobile" onClick={() => camera.current?.click()} aria-label="Câmera"><Camera size={22} /></button>}
-      </div>
-      <button type="submit" className={`send-button ${empty ? 'idle' : ''}`} aria-label={editing ? 'Salvar edição' : 'Enviar mensagem'} aria-disabled={empty}>
-        {editing ? <Check size={22} /> : <SendHorizontal size={22} />}
-      </button>
+      </div>}
+      {voice.mode === 'locked'
+        ? <button type="button" className="send-button recording-send" onClick={() => void voice.finish()} aria-label="Enviar mensagem de voz"><SendHorizontal size={22} /></button>
+        : showMic || voice.mode === 'hold'
+        ? (wide
+          ? <button type="button" className="send-button mic" onClick={() => void voice.begin('locked')} aria-label="Gravar mensagem de voz" title="Mensagem de voz"><Mic size={24} /></button>
+          : <button type="button" className={`send-button mic ${voice.mode === 'hold' ? 'holding' : ''}`} {...voice.holdHandlers} onContextMenu={e => e.preventDefault()} aria-label="Segure para gravar uma mensagem de voz">
+              {voice.mode === 'hold' && <LockHint dragY={voice.drag.y} />}
+              <Mic size={24} />
+            </button>)
+        : <button type="submit" className={`send-button ${empty ? 'idle' : ''}`} aria-label={editing ? 'Salvar edição' : 'Enviar mensagem'} aria-disabled={empty}>
+          {editing ? <Check size={22} /> : <SendHorizontal size={22} />}
+        </button>}
     </form>
 
     {attach && <>

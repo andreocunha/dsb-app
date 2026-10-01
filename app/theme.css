@@ -169,3 +169,7 @@
 /* Visualizador de mídia no desktop (WhatsApp Web). */
 :root { --wa-viewer: #ffffff; --wa-viewer-nav: #54656f; }
 [data-theme="dark"] { --wa-viewer: #111b21; --wa-viewer-nav: #3b4a54; }
+
+/* Mensagem de voz: barras da onda (a parte já tocada fica mais escura) e o botão de velocidade. */
+:root { --wa-wave: #0b141a33; --wa-wave-on: #0b141a99; --wa-speed: #0b141a73; }
+[data-theme="dark"] { --wa-wave: #e9edef40; --wa-wave-on: #e9edefbf; --wa-speed: #e9edef40; }
