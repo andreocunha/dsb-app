@@ -43,4 +43,6 @@
     <!-- Mensagens de voz no chat: o WebView só libera o microfone se o app declarar isto. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Sem isto o RECORD_AUDIO torna o microfone obrigatório e a loja esconde o app de aparelhos sem ele. -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 </manifest>
