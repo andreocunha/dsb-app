@@ -24,18 +24,13 @@ export async function registerPush(avisar?: (mensagem: string) => void, abrir?: 
     }
     // No Android cada canal vira um interruptor separado nas configurações do app.
     if (Capacitor.getPlatform() === 'android') {
-      await PushNotifications.createChannel({ id: 'mensagens', name: 'Mensagens', description: 'Conversas particulares e respostas no grupo', importance: 5, visibility: 0, vibration: true });
+      await PushNotifications.createChannel({ id: 'mensagens', name: 'Mensagens', description: 'Conversas particulares, respostas e menções no grupo', importance: 5, visibility: 0, vibration: true });
       await PushNotifications.createChannel({ id: 'dsb', name: 'Avisos das provas', description: 'Largadas e lembretes do fantasy', importance: 4, visibility: 1 });
     }
     await PushNotifications.removeAllListeners();
     await PushNotifications.addListener('registration', async ({ value }) => {
       const { error } = await supabase.rpc('register_push_device', { p_token: value, p_platform: Capacitor.getPlatform() });
       if (error) avisar?.(`Não consegui salvar este aparelho: ${errorMessage(error)}`);
-    });
-    // Tocar na notificação (uma menção no grupo, por exemplo) abre a tela dela.
-    await PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
-      const url = notification.data?.url;
-      if (typeof url === 'string' && url.startsWith('/')) window.location.assign(url);
     });
     await PushNotifications.addListener('registrationError', error => {
       avisar?.(`O Firebase recusou o registro: ${JSON.stringify(error)}`);
