@@ -44,6 +44,7 @@ export type Database = {
           height: number | null
           id: number
           mentions: string[]
+          event: Json | null
           reply_to: number | null
           thumb_path: string | null
           user_id: string
@@ -55,7 +56,16 @@ export type Database = {
         Relationships: []
       }
       conversations: {
-        Row: { created_at: string; id: string; user_a: string; user_b: string }
+        Row: {
+          created_at: string; id: string; user_a: string | null; user_b: string | null
+          is_group: boolean; name: string | null; description: string | null; photo_path: string | null; created_by: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      conversation_members: {
+        Row: { conversation_id: string; user_id: string; admin: boolean; added_by: string | null; joined_at: string; since_id: number; left_at: string | null }
         Insert: never
         Update: never
         Relationships: []
@@ -180,6 +190,7 @@ export type Database = {
           played_by_others: boolean
           waveform: number[]
           mentions: string[]
+          event: Json
           created_at: string
           deleted_at: string
           deleted_by: string
@@ -208,7 +219,21 @@ export type Database = {
       mark_conversation_read: { Args: { p_conversation_id: string; p_last_id: number }; Returns: undefined }
       my_conversations: {
         Args: never
-        Returns: { id: string; last: Json; other_avatar: string; other_delivered_id: number; other_id: string; other_name: string; other_read_id: number; unread: number }[]
+        Returns: {
+          id: string; is_group: boolean; last: Json; name: string | null; photo_path: string | null; description: string | null; mentions: number
+          other_avatar: string | null; other_delivered_id: number; other_id: string | null; other_name: string | null; other_read_id: number; unread: number
+        }[]
+      }
+      create_group: { Args: { p_name: string; p_members: string[]; p_description?: string }; Returns: string }
+      add_group_members: { Args: { p_conversation: string; p_users: string[] }; Returns: number }
+      remove_group_member: { Args: { p_conversation: string; p_user: string }; Returns: undefined }
+      leave_group: { Args: { p_conversation: string }; Returns: undefined }
+      set_group_admin: { Args: { p_conversation: string; p_user: string; p_admin: boolean }; Returns: undefined }
+      update_group: { Args: { p_conversation: string; p_name: string; p_description: string }; Returns: undefined }
+      set_group_photo: { Args: { p_conversation: string; p_path: string | null }; Returns: undefined }
+      group_members: {
+        Args: { p_conversation: string }
+        Returns: { user_id: string; name: string; avatar_url: string | null; admin: boolean; joined_at: string }[]
       }
       start_conversation: { Args: { p_user: string }; Returns: string }
       edit_message: { Args: { p_body: string; p_id: number }; Returns: Database["public"]["Tables"]["messages"]["Row"] }
