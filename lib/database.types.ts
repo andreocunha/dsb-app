@@ -43,6 +43,7 @@ export type Database = {
           file_type: string | null
           height: number | null
           id: number
+          mentions: string[]
           reply_to: number | null
           thumb_path: string | null
           user_id: string
@@ -178,6 +179,7 @@ export type Database = {
           played_by_me: boolean
           played_by_others: boolean
           waveform: number[]
+          mentions: string[]
           created_at: string
           deleted_at: string
           deleted_by: string
@@ -201,6 +203,7 @@ export type Database = {
       delete_message: { Args: { p_id: number }; Returns: string[] }
       dm_unread_count: { Args: never; Returns: number }
       mark_played: { Args: { p_message_id: number }; Returns: undefined }
+      my_mentions: { Args: { p_after?: number }; Returns: number[] }
       mark_delivered: { Args: { p_conversation_id?: string }; Returns: undefined }
       mark_conversation_read: { Args: { p_conversation_id: string; p_last_id: number }; Returns: undefined }
       my_conversations: {
@@ -231,6 +234,7 @@ export type Database = {
           p_file_name?: string
           p_file_path?: string
           p_height?: number
+          p_mentions?: string[]
           p_reply_to?: number
           p_thumb_path?: string
           p_waveform?: number[]

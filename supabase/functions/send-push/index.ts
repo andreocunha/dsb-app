@@ -3,7 +3,7 @@
 // Três modos:
 //   { "modo": "provas" }                      → avisos automáticos das provas
 //   { "modo": "aviso", "titulo": "...", "texto": "..." } → recado para todo mundo
-//   { "modo": "mensagem", "id": 123 }         → mensagem nova do chat (chamado pelo gatilho do banco)
+//   { "modo": "mensagem", "id": 123 }         → mensagem nova do chat: particular, resposta ou menção no grupo (chamado pelo gatilho do banco)
 //
 // Segredos necessários (Supabase → Edge Functions → Secrets):
 //   FCM_SERVICE_ACCOUNT  JSON da conta de serviço do Firebase
@@ -48,6 +48,13 @@ async function tokenDeAcesso(conta: ContaServico) {
   return (await resposta.json()).access_token as string;
 }
 
+// O token vale 1 hora: guardado, uma mensagem que marca várias pessoas não pede um por pessoa.
+let emCache: { token: string; ate: number } | null = null;
+async function acessoValido(conta: ContaServico) {
+  if (!emCache || emCache.ate < Date.now()) emCache = { token: await tokenDeAcesso(conta), ate: Date.now() + 50 * 60_000 };
+  return emCache.token;
+}
+
 type Notificacao = {
   titulo: string;
   texto: string;
@@ -63,7 +70,7 @@ async function enviar(conta: ContaServico, tokens: string[], aviso: Notificacao)
   const invalidos: string[] = [];
   let enviados = 0;
   if (tokens.length === 0) return { enviados, invalidos };
-  const acesso = await tokenDeAcesso(conta);
+  const acesso = await acessoValido(conta);
   const url = `https://fcm.googleapis.com/v1/projects/${conta.project_id}/messages:send`;
 
   for (const token of tokens) {
@@ -101,6 +108,7 @@ const duracao = (ms: number) => {
 type Mensagem = {
   id: number; user_id: string; author_name: string; body: string | null; file_type: string | null;
   file_name: string | null; duration_ms: number | null; conversation_id: string | null; reply_to: number | null; deleted_at: string | null;
+  mentions: string[] | null;
 };
 
 /** O que aparece na notificação, igual à prévia da lista de conversas do WhatsApp. */
@@ -116,41 +124,52 @@ function previa(m: Mensagem) {
 
 /**
  * Mensagem nova do chat: avisa só quem ela é para. Conversa particular → a outra pessoa;
- * resposta no grupo → quem escreveu a mensagem respondida. Quem bloqueou o autor não recebe.
+ * no grupo → quem foi marcado com @ e quem escreveu a mensagem respondida (um aviso só por pessoa).
+ * Quem bloqueou o autor não recebe.
  */
 // deno-lint-ignore no-explicit-any
 async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
   const { data: m } = await supabase
     .from('messages')
-    .select('id, user_id, author_name, body, file_type, file_name, duration_ms, conversation_id, reply_to, deleted_at')
+    .select('id, user_id, author_name, body, file_type, file_name, duration_ms, conversation_id, reply_to, deleted_at, mentions')
     .eq('id', id)
     .maybeSingle() as { data: Mensagem | null };
   if (!m || m.deleted_at) return { enviados: 0, motivo: 'mensagem não encontrada' };
 
-  let destino: string | null = null;
-  let aviso: Notificacao;
+  // Cada pessoa com o texto que vai receber; resposta vence menção, como no WhatsApp.
+  const destinos = new Map<string, Notificacao>();
   if (m.conversation_id) {
     const { data: c } = await supabase.from('conversations').select('user_a, user_b').eq('id', m.conversation_id).maybeSingle();
-    destino = c ? (c.user_a === m.user_id ? c.user_b : c.user_a) : null;
-    aviso = { titulo: nomeCurto(m.author_name), texto: previa(m), grupo: m.conversation_id };
+    const outra = c ? (c.user_a === m.user_id ? c.user_b : c.user_a) : null;
+    if (outra) destinos.set(outra, { titulo: nomeCurto(m.author_name), texto: previa(m), grupo: m.conversation_id });
   } else {
-    const { data: original } = await supabase.from('messages').select('user_id, deleted_at').eq('id', m.reply_to).maybeSingle();
-    destino = original && !original.deleted_at ? original.user_id : null;
-    aviso = { titulo: 'Torcida Solar', texto: `${nomeCurto(m.author_name)} respondeu: ${previa(m)}`, grupo: 'geral' };
+    for (const uid of m.mentions ?? []) {
+      destinos.set(uid, { titulo: 'Torcida Solar', texto: `${nomeCurto(m.author_name)} mencionou você: ${previa(m)}`, grupo: 'geral' });
+    }
+    if (m.reply_to) {
+      const { data: original } = await supabase.from('messages').select('user_id, deleted_at').eq('id', m.reply_to).maybeSingle();
+      if (original && !original.deleted_at) {
+        destinos.set(original.user_id, { titulo: 'Torcida Solar', texto: `${nomeCurto(m.author_name)} respondeu: ${previa(m)}`, grupo: 'geral' });
+      }
+    }
   }
-  if (!destino || destino === m.user_id) return { enviados: 0, motivo: 'sem destinatário' };
+  destinos.delete(m.user_id);
+  if (!destinos.size) return { enviados: 0, motivo: 'sem destinatário' };
 
-  const { data: bloqueio } = await supabase
-    .from('user_blocks').select('blocker_id').eq('blocker_id', destino).eq('blocked_id', m.user_id).maybeSingle();
-  if (bloqueio) return { enviados: 0, motivo: 'autor bloqueado' };
+  const { data: bloqueios } = await supabase
+    .from('user_blocks').select('blocker_id').eq('blocked_id', m.user_id).in('blocker_id', [...destinos.keys()]);
+  for (const b of bloqueios ?? []) destinos.delete(b.blocker_id);
+  if (!destinos.size) return { enviados: 0, motivo: 'autor bloqueado' };
 
-  const { data: aparelhos } = await supabase.from('push_devices').select('token').eq('user_id', destino);
-  const tokens = (aparelhos ?? []).map((a: { token: string }) => a.token);
-  const { enviados, invalidos } = await enviar(conta, tokens, {
-    ...aviso,
-    canal: 'mensagens',
-    dados: { c: aviso.grupo!, m: String(m.id) },
-  });
+  const { data: aparelhos } = await supabase.from('push_devices').select('token, user_id').in('user_id', [...destinos.keys()]);
+  let enviados = 0;
+  const invalidos: string[] = [];
+  for (const [uid, aviso] of destinos) {
+    const tokens = (aparelhos ?? []).filter((a: { user_id: string }) => a.user_id === uid).map((a: { token: string }) => a.token);
+    const r = await enviar(conta, tokens, { ...aviso, canal: 'mensagens', dados: { c: aviso.grupo!, m: String(m.id) } });
+    enviados += r.enviados;
+    invalidos.push(...r.invalidos);
+  }
   if (invalidos.length) await supabase.from('push_devices').delete().in('token', invalidos);
   return { enviados, removidos: invalidos.length };
 }
