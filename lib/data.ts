@@ -11,7 +11,7 @@ export type Race = { id: string; number: number; name: string; starts_at: string
 
 export type RaceResult = { race_id: string; team_id: string; points: number };
 
-/** Quantos barcos cada pessoa escala por prova, e quantos pontos vale o barco do 2x. */
+/** Quantos barcos cada pessoa escala por prova (o banco confere o mesmo limite em save_lineup). */
 export const PICKS_PER_RACE = 3;
 
 // Cache por sessão: barcos e provas mudam pouco e são lidos em várias telas.

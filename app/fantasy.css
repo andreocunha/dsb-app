@@ -1,0 +1,133 @@
+/*
+ * FANTASY — abas Meu fantasy / Ranking.
+ * Sem cartões: uma coluna central, tipografia e linhas finas. --brand só no que está escolhido.
+ */
+.fantasy { max-width: 640px; margin-inline: auto; }
+
+/* Abas com sublinhado. */
+.fx-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); }
+.fx-tabs button { position: relative; height: 40px; color: var(--text-tertiary); font-size: 14px; font-weight: 600; transition: color .15s; }
+.fx-tabs button[aria-selected="true"] { color: var(--text); }
+.fx-tabs button[aria-selected="true"]::after { content: ''; position: absolute; inset: auto 0 -1px; height: 2px; border-radius: 2px; background: var(--brand); }
+
+/* Prova: setas dos lados, nome no meio (abre a lista de provas). */
+.fx-round { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; align-items: center; gap: 8px; margin: 24px 0 28px; }
+.fx-arrow { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--text-secondary); }
+.fx-arrow:disabled { opacity: .25; }
+.fx-round-title { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
+.fx-round-title strong { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; font-size: 20px; font-weight: 700; letter-spacing: -.5px; line-height: 1.2; }
+.fx-round-title strong svg { color: var(--text-tertiary); }
+.fx-round-title span { color: var(--text-tertiary); font-size: 12px; }
+.fx-round-title em { font-style: normal; }
+.fx-round-title em.open { color: var(--brand); font-weight: 500; }
+.fx-round-title em.scored { color: var(--success); font-weight: 500; }
+
+/* Logos: os arquivos vêm quadrados e muitos vão até a borda, então ganham fundo branco
+   e respiro interno para o canto arredondado não cortar texto nem desenho. */
+.fantasy .team-logo, .fx-boats .team-logo { padding: 2px; background: #fff; }
+.fx-slot-logo .team-logo { padding: 5px; }
+
+/* Escalação */
+.fx-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.fx-slot { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
+.fx-slot-logo { position: relative; display: grid; place-items: center; width: 64px; height: 64px; }
+.fx-slot-logo .team-badge { width: 64px; height: 64px; border-radius: 16px; font-size: 16px; transition: box-shadow .15s; }
+/* Vaga livre: contorno tracejado leve e "+" na cor da marca, como um botão de adicionar. */
+.fx-slot-logo.empty { border: 1.5px dashed var(--border-strong); border-radius: 16px; color: var(--brand); transition: background .15s, border-color .15s; }
+div.fx-slot .fx-slot-logo.empty { color: var(--text-tertiary); }
+.fx-slot.turbo .team-badge { box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--brand); }
+.fx-slot-remove { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--border-strong); color: var(--text-secondary); }
+.fx-slot-name { max-width: 100%; overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.fx-slot:not(:has(.team-badge)) .fx-slot-name { color: var(--text-tertiary); font-weight: 500; }
+.fx-slot-points { color: var(--text-secondary); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 2x (Turbo solar) */
+.fx-x2 { display: inline-grid; place-items: center; height: 22px; padding: 0 9px; border-radius: 999px; background: var(--surface-hover); color: var(--text-tertiary); font-size: 11px; font-weight: 700; transition: background .15s, color .15s; }
+.fx-x2.on { background: var(--brand); color: var(--on-brand); }
+.fx-x2.mini { height: 18px; margin-left: 8px; padding: 0 6px; font-size: 10px; vertical-align: 1px; }
+
+.fx-note { margin-top: 20px; color: var(--text-secondary); font-size: 13px; text-align: center; }
+.fx-note strong { color: var(--text); font-weight: 600; }
+.fx-lineup-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 20px; color: var(--text-tertiary); font-size: 13px; }
+.fx-save { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.fx-save.saved { color: var(--success); font-weight: 500; }
+.fx-link { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+.fx-login { width: 100%; height: 44px; margin-top: 24px; border-radius: 12px; }
+
+/* Barcos */
+.fx-pool-head { position: sticky; top: var(--header-h); z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; border-bottom: 1px solid var(--border); background: var(--background); }
+.fx-picked { display: inline-flex; align-items: center; gap: 4px; }
+.fx-picked .team-badge.small { width: 24px; height: 24px; border-radius: 7px; font-size: 9px; }
+.fx-picked > span { margin-left: 4px; color: var(--text-tertiary); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fx-pool { margin-top: 28px; scroll-margin-top: calc(var(--header-h) + 16px); }
+.fx-label { color: var(--text-tertiary); font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; }
+.fx-boats, .fx-list, .fx-race-list { padding: 0; list-style: none; }
+.fx-boats li + li, .fx-list li + li { border-top: 1px solid var(--border); }
+.fx-boat { display: flex; align-items: center; gap: 12px; width: calc(100% + 16px); margin: 0 -8px; padding: 10px 8px; border-radius: 10px; text-align: left; transition: background .15s, opacity .15s; }
+.fx-boat:disabled { cursor: default; }
+.fx-boats.full .fx-boat:not(.picked) { opacity: .4; }
+.fx-boat-name { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.fx-boat-name strong, .fx-boat-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-boat-name strong { font-size: 14px; font-weight: 500; }
+.fx-boat-name small { color: var(--text-tertiary); font-size: 12px; }
+.fx-boat.picked .fx-boat-name strong { font-weight: 600; }
+.fx-boat-points { color: var(--text-secondary); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fx-tick { display: grid; flex-shrink: 0; place-items: center; width: 22px; height: 22px; border: 1.5px solid var(--border-strong); border-radius: 50%; color: var(--on-brand); transition: background .15s, border-color .15s; }
+.fx-boat.picked .fx-tick { border-color: var(--brand); background: var(--brand); }
+
+/* Ranking */
+.fx-list { margin-top: 12px; }
+.fx-list li { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.fx-list li.you .fx-list-name { color: var(--brand); font-weight: 600; }
+.fx-pos { width: 22px; color: var(--text-tertiary); font-size: 13px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+.fx-pos.p1 { color: var(--team-gold); }
+.fx-pos.p2 { color: var(--text-secondary); }
+.fx-pos.p3 { color: var(--team-orange); }
+.fx-list-name { flex: 1; min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.fx-list-name small { color: inherit; font-weight: 400; opacity: .7; }
+.fx-list strong { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fx-list strong small { color: var(--text-tertiary); font-weight: 400; }
+.fx-empty { padding: 48px 0; color: var(--text-tertiary); text-align: center; }
+
+/* Lista de provas (sheet) */
+.fx-race-list button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 10px; border-radius: 10px; text-align: left; }
+.fx-race-list button[aria-current="true"] { background: var(--brand-soft); }
+.fx-race-info { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.fx-race-info strong { font-weight: 600; }
+.fx-race-info small { overflow: hidden; color: var(--text-tertiary); text-overflow: ellipsis; white-space: nowrap; }
+.fx-race-count { flex-shrink: 0; color: var(--text-tertiary); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fx-race-count.full { display: grid; color: var(--success); }
+
+/* Como jogar */
+.fx-rules { display: flex; flex-direction: column; gap: 14px; padding-left: 20px; }
+.fx-rules li::marker { color: var(--text-tertiary); font-weight: 600; }
+.fx-rules p { color: var(--text-secondary); }
+
+/* Confirmação de "Repetir nas próximas" */
+.fx-confirm { color: var(--text-secondary); }
+.fx-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+/* Esqueleto de carregamento */
+.fx-skeleton { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+.fx-skeleton .fx-slots { margin: 12px 0 16px; }
+.fx-skeleton > span, .fx-sk-slot { display: block; border-radius: 10px; background: linear-gradient(90deg, var(--surface-hover) 30%, var(--border) 50%, var(--surface-hover) 70%) 0 0 / 300% 100%; animation: fx-shimmer 1.4s linear infinite; }
+.fx-sk-title { align-self: center; width: 50%; height: 40px; }
+.fx-sk-slot { justify-self: center; width: 64px; height: 64px; border-radius: 18px; }
+.fx-sk-row { height: 44px; }
+@keyframes fx-shimmer { to { background-position: -300% 0; } }
+
+/* No celular o :hover gruda no último elemento tocado; os realces de mouse ficam só onde há mouse.
+   No toque, o retorno é o :active, que dura só enquanto o dedo está na tela. */
+button.fx-slot:active .fx-slot-logo.empty { background: var(--brand-soft); }
+.fx-boat:not(:disabled):active, .fx-race-list button:active { background: var(--surface-hover); }
+@media (hover: hover) {
+  .fx-tabs button:hover { color: var(--text-secondary); }
+  .fx-arrow:not(:disabled):hover { background: var(--surface-hover); color: var(--text); }
+  button.fx-slot:hover .fx-slot-logo.empty { border-color: var(--brand); background: var(--brand-soft); }
+  .fx-slot-remove:hover { color: var(--text); }
+  button.fx-x2:hover { color: var(--text); }
+  button.fx-x2.on:hover { color: var(--on-brand); }
+  .fx-link:hover { color: var(--text); }
+  .fx-boat:not(:disabled):hover { background: var(--surface-hover); }
+  .fx-race-list button:hover { background: var(--surface-hover); }
+}
