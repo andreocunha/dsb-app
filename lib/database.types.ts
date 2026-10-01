@@ -10,8 +10,8 @@ export type Database = {
     Tables: {
       fantasy_lineups: {
         Row: { double_team_id: string | null; race_id: string; team_ids: string[]; updated_at: string; user_id: string }
-        Insert: { race_id: string; team_ids: string[]; updated_at?: string; user_id: string }
-        Update: { race_id?: string; team_ids?: string[]; updated_at?: string; user_id?: string }
+        Insert: { double_team_id?: string | null; race_id: string; team_ids: string[]; updated_at?: string; user_id: string }
+        Update: { double_team_id?: string | null; race_id?: string; team_ids?: string[]; updated_at?: string; user_id?: string }
         Relationships: []
       }
       message_reactions: {
