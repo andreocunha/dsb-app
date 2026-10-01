@@ -15,7 +15,7 @@ import { isVideo, type Message, type Person, type Target } from './types';
 type View = 'info' | 'media' | 'rules' | 'blocked';
 
 const contato = 'andreoliveiracunha20@gmail.com';
-const COLUMNS = 'id, user_id, author_name, author_avatar, body, file_path, file_name, file_type, file_size, thumb_path, width, height, created_at, deleted_at, deleted_by, reply_to, edited_at, conversation_id';
+const COLUMNS = 'id, user_id, author_name, author_avatar, body, file_path, file_name, file_type, file_size, thumb_path, width, height, created_at, deleted_at, deleted_by, reply_to, edited_at, conversation_id, duration_ms, waveform';
 // Valores com ":" e "." vão entre aspas dentro do or() do PostgREST.
 const LINKS = 'body.ilike."*http://*",body.ilike."*https://*",body.ilike."*www.*"';
 const date = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -28,7 +28,7 @@ function inConversation<Q extends { is: (column: string, value: null) => Q; eq: 
 export async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: number, conversationId: string | null) {
   let query = inConversation(supabase.from('messages').select(COLUMNS).is('deleted_at', null).order('id', { ascending: false }).limit(limit), conversationId);
   if (kind === 'media') query = query.not('file_path', 'is', null).or('file_type.like.image/*,file_type.like.video/*');
-  if (kind === 'docs') query = query.not('file_path', 'is', null).not('file_type', 'like', 'image/*').not('file_type', 'like', 'video/*');
+  if (kind === 'docs') query = query.not('file_path', 'is', null).not('file_type', 'like', 'image/*').not('file_type', 'like', 'video/*').not('file_type', 'like', 'audio/*');
   if (kind === 'links') query = query.or(LINKS);
   const { data } = await query;
   return (data ?? []).map(row => ({ ...row, reactions: [], reply: null })) as Message[];

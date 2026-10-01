@@ -35,6 +35,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           deleted_by: string | null
+          duration_ms: number | null
           edited_at: string | null
           file_name: string | null
           file_path: string | null
@@ -45,6 +46,7 @@ export type Database = {
           reply_to: number | null
           thumb_path: string | null
           user_id: string
+          waveform: number[] | null
           width: number | null
         }
         Insert: never
@@ -53,6 +55,12 @@ export type Database = {
       }
       conversations: {
         Row: { created_at: string; id: string; user_a: string; user_b: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      message_plays: {
+        Row: { message_id: number; played_at: string; user_id: string }
         Insert: never
         Update: never
         Relationships: []
@@ -166,6 +174,10 @@ export type Database = {
           author_name: string
           body: string
           conversation_id: string
+          duration_ms: number
+          played_by_me: boolean
+          played_by_others: boolean
+          waveform: number[]
           created_at: string
           deleted_at: string
           deleted_by: string
@@ -188,6 +200,7 @@ export type Database = {
       delete_account: { Args: never; Returns: undefined }
       delete_message: { Args: { p_id: number }; Returns: string[] }
       dm_unread_count: { Args: never; Returns: number }
+      mark_played: { Args: { p_message_id: number }; Returns: undefined }
       mark_delivered: { Args: { p_conversation_id?: string }; Returns: undefined }
       mark_conversation_read: { Args: { p_conversation_id: string; p_last_id: number }; Returns: undefined }
       my_conversations: {
@@ -214,11 +227,13 @@ export type Database = {
         Args: {
           p_body?: string
           p_conversation_id?: string
+          p_duration_ms?: number
           p_file_name?: string
           p_file_path?: string
           p_height?: number
           p_reply_to?: number
           p_thumb_path?: string
+          p_waveform?: number[]
           p_width?: number
         }
         Returns: Database["public"]["Tables"]["messages"]["Row"]
