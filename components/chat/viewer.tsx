@@ -245,3 +245,44 @@ function Stage({ api, message, onScale, onPrev, onNext, onClose }: {
       : <img ref={image} src={full ?? thumb ?? undefined} alt={message.file_name ?? ''} draggable={false} style={style} />}
   </div>;
 }
+
+export type Photo = { id: string; name: string; url: string; subtitle?: string };
+/** Foto do Google vem em 96px; para a tela cheia pede a mesma foto em tamanho grande. */
+const fullSize = (url: string) => /googleusercontent\.com\//.test(url) ? url.replace(/=s\d+(-c)?$/, '=s800$1') : url;
+
+/**
+ * Foto do grupo ou de uma pessoa em tela cheia, como ao tocar na foto nos dados do contato do WhatsApp.
+ * Toque fora da foto, voltar ou Esc fecham.
+ */
+export function PhotoViewer({ photo, onClose }: { photo: Photo | null; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const fechar = useRef(onClose);
+  useEffect(() => { fechar.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!photo) return;
+    dialog?.showModal();
+    const solta = registerOverlay(() => fechar.current());
+    return () => { dialog?.close(); solta(); };
+  }, [photo]);
+
+  return <dialog ref={ref} className="viewer photo-viewer" aria-label={photo ? `Foto de ${photo.name}` : 'Foto'}
+    onCancel={e => { e.preventDefault(); onClose(); }}
+    // O Esc fecha só a foto, não o painel de dados que está atrás.
+    onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); } }}>
+    {photo && <>
+      <header className="viewer-bar">
+        <button className="icon-button only-mobile" onClick={onClose} aria-label="Voltar"><ArrowLeft size={24} /></button>
+        <Avatar id={photo.id} name={photo.name} url={photo.url} />
+        <div className="viewer-who"><strong>{photo.name}</strong>{photo.subtitle && <small>{photo.subtitle}</small>}</div>
+        <div className="viewer-actions">
+          <button className="icon-button only-desktop" onClick={onClose} aria-label="Fechar" title="Fechar"><X size={24} /></button>
+        </div>
+      </header>
+      <div className="viewer-stage-wrap photo-stage" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <img src={fullSize(photo.url)} alt={`Foto de ${photo.name}`} referrerPolicy="no-referrer" draggable={false} />
+      </div>
+    </>}
+  </dialog>;
+}

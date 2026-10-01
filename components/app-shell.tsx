@@ -37,12 +37,14 @@ const READ_KEY = 'dsb-chat-read';
 const lastRead = () => { try { return Number(localStorage.getItem(READ_KEY)) || 0; } catch { return 0; } };
 export const lastReadId = lastRead;
 // unread: grupo geral (último lido fica no aparelho). dmUnread: conversas particulares (no banco).
-type UnreadValue = { unread: number; markRead: (lastId: number) => void; dmUnread: number; refreshDm: () => void };
-const UnreadContext = createContext<UnreadValue>({ unread: 0, markRead: () => {}, dmUnread: 0, refreshDm: () => {} });
+// mentions: menções a você no grupo ainda não lidas (o @ verde da lista, como no WhatsApp).
+type UnreadValue = { unread: number; mentions: number; markRead: (lastId: number) => void; dmUnread: number; refreshDm: () => void };
+const UnreadContext = createContext<UnreadValue>({ unread: 0, mentions: 0, markRead: () => {}, dmUnread: 0, refreshDm: () => {} });
 export const useChatUnread = () => useContext(UnreadContext);
 
 function useUnread(userId: string | null) {
   const [unread, setUnread] = useState(0);
+  const [mentions, setMentions] = useState({ user: null as string | null, count: 0 });
   const [dm, setDm] = useState({ user: null as string | null, count: 0 });
   const refreshDm = useCallback(() => {
     if (!userId) return;
@@ -52,6 +54,7 @@ function useUnread(userId: string | null) {
     let alive = true;
     void supabase.rpc('unread_count', { p_after: lastRead() }).then(({ data }) => { if (alive) setUnread(data ?? 0); });
     if (userId) void supabase.rpc('dm_unread_count').then(({ data }) => { if (alive) setDm({ user: userId, count: data ?? 0 }); });
+    if (userId) void supabase.rpc('my_mentions', { p_after: lastRead() }).then(({ data }) => { if (alive) setMentions({ user: userId, count: data?.length ?? 0 }); });
     // ✓✓ cinza do outro lado: o que chegou enquanto o app estava fechado conta como entregue ao abrir.
     const delivered = () => { if (userId) void supabase.rpc('mark_delivered', {}); };
     delivered();
@@ -63,7 +66,10 @@ function useUnread(userId: string | null) {
         if (row.conversation_id) {
           setDm(current => ({ ...current, count: current.count + 1 }));
           void supabase.rpc('mark_delivered', { p_conversation_id: row.conversation_id });
-        } else if (row.id > lastRead()) setUnread(count => count + 1);
+        } else if (row.id > lastRead()) {
+          setUnread(count => count + 1);
+          if (userId && (row.mentions as string[] | undefined)?.includes(userId)) setMentions(current => ({ user: userId, count: current.count + 1 }));
+        }
       })
       .subscribe();
     return () => { alive = false; document.removeEventListener('visibilitychange', onVisible); void supabase.removeChannel(channel); };
@@ -72,8 +78,9 @@ function useUnread(userId: string | null) {
     if (lastId <= lastRead()) return;
     try { localStorage.setItem(READ_KEY, String(lastId)); } catch { /* sem localStorage: só nesta sessão */ }
     setUnread(0);
+    setMentions(current => ({ ...current, count: 0 }));
   }, []);
-  return { unread, markRead, dmUnread: dm.user === userId ? dm.count : 0, refreshDm };
+  return { unread, mentions: mentions.user === userId ? mentions.count : 0, markRead, dmUnread: dm.user === userId ? dm.count : 0, refreshDm };
 }
 
 /**
@@ -106,7 +113,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState('');
   const [offline, setOffline] = useState(false);
   const online = useOnlinePresence(userId);
-  const { unread, markRead, dmUnread, refreshDm } = useUnread(userId);
+  const { unread, mentions, markRead, dmUnread, refreshDm } = useUnread(userId);
   const badge = unread + dmUnread;
   // No HTML estático é sempre web; no app nativo corrige após hidratar.
   const native = useSyncExternalStore(noopSubscribe, () => Capacitor.isNativePlatform(), () => false);
@@ -151,7 +158,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   const settingsActive = pathname.startsWith('/configuracoes');
 
-  return <AppContext.Provider value={{ theme, setTheme, notify: setToast }}><OnlineContext.Provider value={online}><UnreadContext.Provider value={{ unread, markRead, dmUnread, refreshDm }}>
+  return <AppContext.Provider value={{ theme, setTheme, notify: setToast }}><OnlineContext.Provider value={online}><UnreadContext.Provider value={{ unread, mentions, markRead, dmUnread, refreshDm }}>
     <a href="#main-content" className="skip-link">Pular para o conteúdo</a>
     <aside className="sidebar">
       <Link replace href="/" aria-label="Solar Brasil — início"><Brand /></Link>

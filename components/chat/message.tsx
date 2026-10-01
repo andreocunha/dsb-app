@@ -1,11 +1,12 @@
 'use client';
-import { useRef, useState } from 'react';
+import { use, useRef, useState } from 'react';
 import { Ban, Camera, Check, CheckCheck, ChevronDown, Clock3, Download, FileText, Mic, Play, Reply as ReplyIcon, SmilePlus, Video } from 'lucide-react';
 import { formatMessage, jumboEmoji, nameColor, preview, type Token } from '@/lib/chat-format';
 import { formatSize } from '@/lib/media';
 import { shortName } from '@/lib/names';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
+import { MentionPeople, type MentionContext } from './mentions';
 import { authorLabel, isAudio, isImage, isVideo, isVisual, replySnippet, time, type Message, type Played, type Reply } from './types';
 import { VoiceMessage } from './voice-message';
 
@@ -158,7 +159,7 @@ export function Bubble({ ref, message, first, userId, reply, group, receipts, vo
           ? 'Mensagem removida pela organização'
           : own ? 'Você apagou esta mensagem' : 'Esta mensagem foi apagada'}</i><span className="meta-spacer" aria-hidden>{meta}</span></p>
       : message.body && <p className="bubble-text">
-        {jumbo ? message.body : <Formatted text={short ?? message.body} />}
+        {jumbo ? message.body : <Formatted text={short ?? message.body} ids={message.mentions} />}
         {short && <button type="button" className="read-more" onClick={() => setExpanded(true)}>Ler mais</button>}
         <span className="meta-spacer" aria-hidden>{meta}</span>
       </p>}
@@ -172,21 +173,29 @@ function Tail() {
   return <svg className="bubble-tail" viewBox="0 0 8 13" width="8" height="13" aria-hidden><path d="M1.53 0H8v11.2L.84 2.66C.14 1.83.46 0 1.53 0z" /></svg>;
 }
 
-/** plain: sem links clicáveis (a citação inteira já é um botão). */
-export function Formatted({ text, plain = false }: { text: string; plain?: boolean }) {
-  return <Tokens tokens={formatMessage(text)} plain={plain} />;
+/**
+ * plain: sem links clicáveis (a citação inteira já é um botão).
+ * ids: quem a mensagem marcou de verdade (salvo no banco); assim dois "Estevão Silva" não se confundem.
+ */
+export function Formatted({ text, plain = false, ids }: { text: string; plain?: boolean; ids?: string[] }) {
+  const mentions = use(MentionPeople);
+  const people = ids ? mentions.people.filter(p => ids.includes(p.id)) : mentions.people;
+  return <Tokens tokens={formatMessage(text, people)} plain={plain} mentions={mentions} />;
 }
 
-function Tokens({ tokens, plain }: { tokens: Token[]; plain: boolean }) {
+function Tokens({ tokens, plain, mentions }: { tokens: Token[]; plain: boolean; mentions: MentionContext }) {
+  const { me, onOpen } = mentions;
   return tokens.map((token, i) => {
     switch (token.type) {
       case 'text': return token.text;
       case 'link': return plain ? token.text : <a key={i} className="bubble-link" href={token.href} target="_blank" rel="noopener noreferrer nofollow" onClick={e => e.stopPropagation()}>{token.text}</a>;
+      case 'mention': return plain || !onOpen || token.id === me ? <span key={i} className="mention">@{token.text}</span>
+        : <button key={i} type="button" className="mention" onClick={e => { e.stopPropagation(); onOpen(token.id); }}>@{token.text}</button>;
       case 'code': return <code key={i}>{token.text}</code>;
       case 'mono': return <code key={i} className="mono">{token.text}</code>;
-      case 'bold': return <strong key={i}><Tokens tokens={token.children} plain={plain} /></strong>;
-      case 'italic': return <em key={i}><Tokens tokens={token.children} plain={plain} /></em>;
-      case 'strike': return <s key={i}><Tokens tokens={token.children} plain={plain} /></s>;
+      case 'bold': return <strong key={i}><Tokens tokens={token.children} plain={plain} mentions={mentions} /></strong>;
+      case 'italic': return <em key={i}><Tokens tokens={token.children} plain={plain} mentions={mentions} /></em>;
+      case 'strike': return <s key={i}><Tokens tokens={token.children} plain={plain} mentions={mentions} /></s>;
     }
   });
 }

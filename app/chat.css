@@ -143,6 +143,9 @@
 .tick-read, .msg.own .bubble-meta .tick-read { color: var(--wa-tick); }
 .bubble-link { color: var(--wa-link); }
 .bubble-link:hover { text-decoration: underline; }
+.mention { color: var(--wa-link); font-weight: 500; }
+button.mention { display: inline; padding: 0; border: 0; background: none; font: inherit; font-weight: 500; text-align: inherit; cursor: pointer; }
+button.mention:hover { text-decoration: underline; }
 .bubble code { padding: 0 3px; border-radius: 3px; background: #0b141a14; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: .88em; }
 .bubble code.mono { display: block; padding: 0; background: none; white-space: pre-wrap; }
 .read-more { margin-left: 4px; color: var(--wa-link); font-size: inherit; font-weight: 500; }
@@ -206,6 +209,7 @@
 .reactions span { margin-left: 3px; color: var(--wa-text-2); font-size: 12px; }
 
 .scroll-down { position: absolute; right: 12px; bottom: 12px; z-index: 3; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--wa-chip); color: var(--wa-icon); box-shadow: var(--wa-menu-shadow); }
+.scroll-mention { bottom: 64px; color: var(--wa-green); }
 .scroll-down .badge { position: absolute; top: -8px; right: -3px; background: var(--wa-badge); color: #fff; }
 
 /* ---------- Barra de digitar (celular) ---------- */
@@ -230,6 +234,15 @@
 .attach-menu { position: absolute; bottom: calc(100% - var(--safe-bottom)); left: 8px; right: 8px; z-index: 10; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 22px 12px; border-radius: 16px; background: var(--wa-drawer); box-shadow: var(--wa-menu-shadow); transform-origin: bottom left; animation: pop-in .15s ease-out; }
 .attach-menu button { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--wa-text-2); font-size: 13px; }
 .attach-menu span { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; color: #fff; }
+
+/* Lista do @: quem dá para marcar no grupo, logo acima da barra de digitar. */
+.mention-list { position: absolute; bottom: calc(100% - var(--safe-bottom)); left: 8px; right: 8px; z-index: 10; max-height: min(280px, 40vh); overflow-y: auto; padding: 6px 0; border-radius: 12px; background: var(--wa-drawer); box-shadow: var(--wa-menu-shadow); transform-origin: bottom left; animation: pop-in .12s ease-out; }
+.mention-option { display: flex; align-items: center; gap: 12px; padding: 8px 14px; color: var(--wa-text); cursor: pointer; }
+.mention-option[aria-selected="true"] { background: var(--wa-hover); }
+.mention-option .avatar { flex-shrink: 0; width: 34px; height: 34px; font-size: 12px; }
+.mention-option > span { min-width: 0; display: flex; flex-direction: column; }
+.mention-option strong { overflow: hidden; font-size: 15px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.mention-option small { overflow: hidden; color: var(--wa-text-2); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Painel de emojis do WhatsApp: abas, busca, seções e grade. No celular fica no lugar do teclado. */
 .emoji-panel { display: flex; flex-direction: column; height: 300px; border-top: 1px solid var(--wa-divider); background: var(--wa-drawer); }
@@ -297,6 +310,10 @@
 .group-hero img, .group-hero .avatar { width: 120px; height: 120px; margin-bottom: 18px; border-radius: 50%; object-fit: cover; }
 .group-hero img { background: #422378; }
 .group-hero .avatar { font-size: 40px; }
+.hero-photo { flex-shrink: 0; display: block; border-radius: 50%; cursor: pointer; transition: filter .15s; }
+.hero-photo:hover { filter: brightness(.92); }
+.group-hero .hero-photo { margin-bottom: 18px; }
+.group-hero .hero-photo > * { margin-bottom: 0; }
 .group-hero h1 { font-size: 24px; font-weight: 400; line-height: 1.3; }
 .group-hero p { margin-top: 2px; color: var(--wa-text-2); font-size: 16px; }
 .group-hero p b { color: var(--wa-green-strong); font-weight: 600; }
@@ -378,6 +395,8 @@ a.group-member:hover, .group-member.me { background: var(--wa-hover); }
 .viewer-caption { flex-shrink: 0; max-height: 30vh; overflow-y: auto; padding: 12px 16px calc(16px + var(--safe-bottom)); font-size: 15px; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }
 .viewer-caption .bubble-link { color: #53bdeb; }
 .viewer-stage-wrap:last-child { padding-bottom: var(--safe-bottom); }
+.photo-stage { align-items: center; justify-content: center; }
+.photo-stage img { display: block; width: min(100%, 640px); max-height: 100%; aspect-ratio: 1; object-fit: contain; animation: pop-in .18s ease-out; -webkit-user-drag: none; }
 .viewer-nav { position: absolute; top: 50%; z-index: 2; display: grid; place-items: center; width: 32px; height: 32px; margin-top: -16px; border-radius: 50%; background: var(--wa-viewer-nav); color: #fff; box-shadow: 0 1px 3px #0b141a40; }
 .viewer-nav.prev { left: 40px; }
 .viewer-nav.next { right: 40px; }
