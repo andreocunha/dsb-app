@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayLabel, formatMessage, jumboEmoji, listTime, nameColor, NAME_COLORS, preview, whenLabel } from '../lib/chat-format.ts';
+import { dayLabel, fold, formatMessage, jumboEmoji, listTime, mentionedIds, mentionQuery, nameColor, NAME_COLORS, preview, whenLabel } from '../lib/chat-format.ts';
 
 const text = t => ({ type: 'text', text: t });
 
@@ -25,6 +25,36 @@ test('código e bloco monoespaçado não recebem outra formatação', () => {
 test('links viram clicáveis, sem a pontuação do fim', () => {
   assert.deepEqual(formatMessage('veja www.dsb.app.br.'), [text('veja '), { type: 'link', text: 'www.dsb.app.br', href: 'https://www.dsb.app.br' }, text('.')]);
   assert.deepEqual(formatMessage('*https://x.com/a*'), [{ type: 'bold', children: [{ type: 'link', text: 'https://x.com/a', href: 'https://x.com/a' }] }]);
+});
+
+const people = [{ id: 'a', label: 'Ana' }, { id: 'b', label: 'Ana Paula' }, { id: 'c', label: 'Andre Cunha' }];
+
+test('@Nome de quem está no grupo vira menção, preferindo o nome mais longo', () => {
+  assert.deepEqual(formatMessage('oi @andre cunha!', people), [text('oi '), { type: 'mention', text: 'andre cunha', id: 'c' }, text('!')]);
+  assert.deepEqual(formatMessage('@Ana Paula e @Ana', people), [{ type: 'mention', text: 'Ana Paula', id: 'b' }, text(' e '), { type: 'mention', text: 'Ana', id: 'a' }]);
+  assert.deepEqual(formatMessage('*@Ana*', people), [{ type: 'bold', children: [{ type: 'mention', text: 'Ana', id: 'a' }] }]);
+});
+
+test('@ sem pessoa, colado em palavra ou no meio de um nome não marca', () => {
+  assert.deepEqual(formatMessage('@Fulano', people), [text('@Fulano')]);
+  assert.deepEqual(formatMessage('ana@ana.com', people), [text('ana@ana.com')]);
+  assert.deepEqual(formatMessage('@Anabela', people), [text('@Anabela')]);
+  assert.deepEqual(formatMessage('@Ana'), [text('@Ana')]);
+});
+
+test('quem foi marcado vai junto com a mensagem, sem repetir e sem contar código', () => {
+  assert.deepEqual(mentionedIds('@Ana e *@Andre Cunha*, de novo @ana e `@Ana Paula`', people), ['a', 'c']);
+  assert.deepEqual(mentionedIds('sem ninguém', people), []);
+});
+
+test('o @ que está sendo digitado', () => {
+  assert.deepEqual(mentionQuery('oi @', 4), { start: 3, query: '' });
+  assert.deepEqual(mentionQuery('oi @Andre Cu', 12), { start: 3, query: 'Andre Cu' });
+  assert.deepEqual(mentionQuery('@est tudo', 4), { start: 0, query: 'est' });
+  assert.equal(mentionQuery('email@x', 7), null);
+  assert.equal(mentionQuery('@Andre Cunha ', 13), null);
+  assert.equal(mentionQuery('@a\nb', 4), null);
+  assert.equal(fold('Estevão'), 'estevao');
 });
 
 test('de 1 a 3 emojis sozinhos ficam grandes', () => {

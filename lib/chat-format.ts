@@ -4,42 +4,48 @@ export type Token =
   | { type: 'text'; text: string }
   | { type: 'link'; text: string; href: string }
   | { type: 'mono' | 'code'; text: string }
+  | { type: 'mention'; text: string; id: string }
   | { type: 'bold' | 'italic' | 'strike'; children: Token[] };
 
 const MARKS = { '*': 'bold', '_': 'italic', '~': 'strike' } as const;
 const wordChar = (c: string | undefined) => !!c && /[\p{L}\p{N}]/u.test(c);
 const space = (c: string | undefined) => !c || /\s/.test(c);
 
+/** Quem pode ser marcado com @: o nome como aparece depois do @ e a pessoa. */
+export type Mentionable = { id: string; label: string };
+const NONE: Mentionable[] = [];
+
 /**
  * *negrito*, _itálico_, ~riscado~, `código` e ```bloco```, como no WhatsApp:
  * o marcador só vale colado no texto e fora de palavras (snake_case continua como está).
+ * people: nomes que viram menção quando vêm depois de um @ ("@Andre Cunha").
  */
-export function formatMessage(text: string): Token[] {
+export function formatMessage(text: string, people: Mentionable[] = NONE): Token[] {
   const tokens: Token[] = [];
   const blocks = /```([\s\S]+?)```/g;
   let last = 0;
   for (const match of text.matchAll(blocks)) {
-    tokens.push(...inlineCode(text.slice(last, match.index)));
+    tokens.push(...inlineCode(text.slice(last, match.index), people));
     tokens.push({ type: 'mono', text: match[1] });
     last = match.index + match[0].length;
   }
-  tokens.push(...inlineCode(text.slice(last)));
+  tokens.push(...inlineCode(text.slice(last), people));
   return tokens;
 }
 
-function inlineCode(text: string): Token[] {
+function inlineCode(text: string, people: Mentionable[]): Token[] {
   const tokens: Token[] = [];
   let last = 0;
   for (const match of text.matchAll(/`([^`\n]+)`/g)) {
-    tokens.push(...marks(text.slice(last, match.index)));
+    tokens.push(...marks(text.slice(last, match.index), people));
     tokens.push({ type: 'code', text: match[1] });
     last = match.index + match[0].length;
   }
-  tokens.push(...marks(text.slice(last)));
+  tokens.push(...marks(text.slice(last), people));
   return tokens;
 }
 
-function marks(text: string): Token[] {
+function marks(text: string, people: Mentionable[]): Token[] {
   const tokens: Token[] = [];
   let plain = '';
   let i = 0;
@@ -47,13 +53,69 @@ function marks(text: string): Token[] {
     const mark = text[i] as keyof typeof MARKS;
     const end = MARKS[mark] && !wordChar(text[i - 1]) && !space(text[i + 1]) && text[i + 1] !== mark ? closing(text, i) : -1;
     if (end < 0) { plain += text[i++]; continue; }
-    if (plain) { tokens.push(...links(plain)); plain = ''; }
-    tokens.push({ type: MARKS[mark], children: marks(text.slice(i + 1, end)) });
+    if (plain) { tokens.push(...mentions(plain, people)); plain = ''; }
+    tokens.push({ type: MARKS[mark], children: marks(text.slice(i + 1, end), people) });
     i = end + 1;
   }
-  if (plain) tokens.push(...links(plain));
+  if (plain) tokens.push(...mentions(plain, people));
   return tokens;
 }
+
+/** @Nome de alguém da lista vira menção; com nomes parecidos vale o mais longo ("@Ana Paula" antes de "@Ana"). */
+function mentions(text: string, people: Mentionable[]): Token[] {
+  if (!people.length || !text.includes('@')) return links(text);
+  const tokens: Token[] = [];
+  let last = 0;
+  for (let i = text.indexOf('@'); i >= 0; i = text.indexOf('@', i + 1)) {
+    if (i < last || wordChar(text[i - 1])) continue;
+    const found = findMention(text, i + 1, people);
+    if (!found) continue;
+    tokens.push(...links(text.slice(last, i)));
+    tokens.push({ type: 'mention', text: text.slice(i + 1, i + 1 + found.label.length), id: found.id });
+    last = i + 1 + found.label.length;
+  }
+  tokens.push(...links(text.slice(last)));
+  return tokens.filter(t => t.type !== 'text' || t.text);
+}
+
+function findMention(text: string, at: number, people: Mentionable[]) {
+  let best: Mentionable | null = null;
+  for (const person of people) {
+    const { label } = person;
+    if (!label || (best && label.length <= best.label.length)) continue;
+    if (text.slice(at, at + label.length).toLocaleLowerCase('pt-BR') !== label.toLocaleLowerCase('pt-BR')) continue;
+    if (!wordChar(text[at + label.length])) best = person;
+  }
+  return best;
+}
+
+/** Quem foi marcado no texto (sem repetir), na ordem em que aparece. Vai junto com a mensagem para o banco avisar. */
+export function mentionedIds(text: string, people: Mentionable[]) {
+  const ids = new Set<string>();
+  const walk = (tokens: Token[]) => tokens.forEach(t => {
+    if (t.type === 'mention') ids.add(t.id);
+    else if ('children' in t) walk(t.children);
+  });
+  walk(formatMessage(text, people));
+  return [...ids];
+}
+
+/**
+ * O @ que está sendo digitado no cursor: de onde começa e o que já foi escrito depois dele.
+ * Vale no começo do texto ou depois de um espaço, até três palavras, e some ao dar espaço no fim ou pular linha.
+ */
+export function mentionQuery(text: string, caret: number) {
+  if (caret > text.length) return null;
+  const before = text.slice(0, caret);
+  const start = before.lastIndexOf('@');
+  if (start < 0 || caret - start > 41 || wordChar(before[start - 1]) || (start > 0 && !space(before[start - 1]))) return null;
+  const query = before.slice(start + 1);
+  if (/\n|^\s|\s$|\s.*\s.*\s/.test(query)) return null;
+  return { start, query };
+}
+
+/** Comparação sem acento e sem maiúsculas: "estev" acha "Estevão". */
+export const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR');
 
 function closing(text: string, open: number) {
   for (let j = open + 2; j < text.length; j++) {

@@ -11,6 +11,7 @@ import { useAuth } from '../auth';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
 import { isVideo, type Message, type Person, type Target } from './types';
+import { PhotoViewer, type Photo } from './viewer';
 
 type View = 'info' | 'media' | 'rules' | 'blocked';
 
@@ -31,7 +32,7 @@ export async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: num
   if (kind === 'docs') query = query.not('file_path', 'is', null).not('file_type', 'like', 'image/*').not('file_type', 'like', 'video/*').not('file_type', 'like', 'audio/*');
   if (kind === 'links') query = query.or(LINKS);
   const { data } = await query;
-  return (data ?? []).map(row => ({ ...row, reactions: [], reply: null })) as Message[];
+  return (data ?? []).map(row => ({ ...row, mentions: [], reactions: [], reply: null })) as Message[];
 }
 
 /**
@@ -48,6 +49,7 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
   const [preview, setPreview] = useState<Message[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [admins, setAdmins] = useState<Person[]>([]);
+  const [photo, setPhoto] = useState<Photo | null>(null);
   const ref = useRef<HTMLElement>(null);
   const fechar = useRef(onClose);
   const conversationId = target.kind === 'direct' ? target.id : null;
@@ -109,7 +111,7 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
     <div className="group-info-body">
       {view === 'info' && person && <>
         <section className="group-hero">
-          <Avatar id={person.id} name={person.name} url={person.avatar_url} />
+          <PhotoButton person={person} onOpen={setPhoto} />
           <h1>{person.name}</h1>
           <p>{contactOnline ? <b>online</b> : 'Contato no DSB'}</p>
           <div className="group-actions">
@@ -137,7 +139,9 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
 
       {view === 'info' && !person && <>
         <section className="group-hero">
-          <img src="/images/logo.png" alt="" />
+          <button className="hero-photo" onClick={() => setPhoto({ id: 'grupo', name: 'Torcida Solar', url: '/images/logo.png', subtitle: 'Foto do grupo' })} aria-label="Ver a foto do grupo">
+            <img src="/images/logo.png" alt="" />
+          </button>
           <h1>Torcida Solar</h1>
           <p>Grupo · <b>{online > 0 ? `${online} ${online === 1 ? 'pessoa' : 'pessoas'} online` : 'Comunidade DSB'}</b></p>
           <div className="group-actions">
@@ -172,7 +176,7 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
           {profile.role === 'moderator' && <i className="admin-badge">Admin do grupo</i>}
         </Link>}
         {admins.filter(a => a.id !== userId).map(admin => <div key={admin.id} className="group-member">
-          <Avatar id={admin.id} name={admin.name} url={admin.avatar_url} />
+          <PhotoButton person={admin} onOpen={setPhoto} />
           <span><strong>{shortName(admin.name)}</strong><small>Organização do DSB</small></span>
           <i className="admin-badge">Admin do grupo</i>
         </div>)}
@@ -201,7 +205,16 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
         ? <Blocked ids={blocked} onUnblock={onUnblock} />
         : <p className="group-empty">Ninguém bloqueado. Quem você bloquear aparece aqui, para desbloquear quando quiser.</p>)}
     </div>
+    <PhotoViewer photo={photo} onClose={() => setPhoto(null)} />
   </aside>;
+}
+
+/** Foto que amplia ao tocar. Sem foto (só as iniciais) não há o que ampliar. */
+function PhotoButton({ person, onOpen }: { person: Person; onOpen: (photo: Photo) => void }) {
+  const avatar = <Avatar id={person.id} name={person.name} url={person.avatar_url} />;
+  if (!person.avatar_url) return avatar;
+  const url = person.avatar_url;
+  return <button className="hero-photo" onClick={() => onOpen({ id: person.id, name: person.name, url })} aria-label={`Ver a foto de ${shortName(person.name)}`}>{avatar}</button>;
 }
 
 function MediaTile({ message, onOpen }: { message: Message; onOpen: (message: Message) => void }) {

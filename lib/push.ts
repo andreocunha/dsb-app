@@ -32,6 +32,11 @@ export async function registerPush(avisar?: (mensagem: string) => void, abrir?: 
       const { error } = await supabase.rpc('register_push_device', { p_token: value, p_platform: Capacitor.getPlatform() });
       if (error) avisar?.(`Não consegui salvar este aparelho: ${errorMessage(error)}`);
     });
+    // Tocar na notificação (uma menção no grupo, por exemplo) abre a tela dela.
+    await PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
+      const url = notification.data?.url;
+      if (typeof url === 'string' && url.startsWith('/')) window.location.assign(url);
+    });
     await PushNotifications.addListener('registrationError', error => {
       avisar?.(`O Firebase recusou o registro: ${JSON.stringify(error)}`);
     });

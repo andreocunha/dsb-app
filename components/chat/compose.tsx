@@ -1,12 +1,15 @@
 'use client';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Camera, Check, FileText, Image as ImageIcon, Keyboard, Mic, Paperclip, SendHorizontal, Smile, X } from 'lucide-react';
+import { mentionQuery } from '@/lib/chat-format';
+import { shortName } from '@/lib/names';
 import { canRecord, type Recording } from '@/lib/voice';
 import { EmojiPicker } from './emoji-picker';
+import { MentionList, suggest } from './mentions';
 import { Quote } from './message';
 import { useWide } from './use-wide';
 import { LockHint, RecordingBar, useVoiceRecorder } from './voice-recorder';
-import { toReply, type Message } from './types';
+import { toReply, type Message, type Person } from './types';
 
 export type ComposeContext = { kind: 'reply' | 'edit'; message: Message } | null;
 
@@ -14,9 +17,12 @@ const MAX_LINES = 6;
 const noop = () => () => {};
 const hasKeyboard = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
-/** Barra de digitar: pílula com emoji, texto e anexos no celular; barra inteira no desktop (WhatsApp Web). */
-export function Compose({ text, setText, context, userId, inputRef, onCancelContext, onSubmit, onFile, onTyping, onVoice, onRecording, onError }: {
-  text: string; setText: (text: string) => void; context: ComposeContext; userId: string | null;
+/**
+ * Barra de digitar: pílula com emoji, texto e anexos no celular; barra inteira no desktop (WhatsApp Web).
+ * people: no grupo, quem aparece na lista ao digitar @.
+ */
+export function Compose({ text, setText, context, userId, people, onMention, inputRef, onCancelContext, onSubmit, onFile, onTyping, onVoice, onRecording, onError }: {
+  text: string; setText: (text: string) => void; context: ComposeContext; userId: string | null; people?: Person[]; onMention?: (person: Person) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>; onCancelContext: () => void; onSubmit: () => void;
   onFile: (file: File) => void; onTyping: () => void;
   onVoice: (recording: Recording) => void; onRecording: () => void; onError: (message: string) => void;
@@ -35,6 +41,15 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
   const micSupported = useSyncExternalStore(noop, canRecord, () => false);
   const showMic = empty && !editing && micSupported;
   const recording = voice.mode !== 'idle';
+  // Menção: o @ no cursor abre a lista; Esc fecha até começar outro @.
+  const [caret, setCaret] = useState<number | null>(null);
+  const [active, setActive] = useState(0);
+  const [dismissed, setDismissed] = useState<number | null>(null);
+  const listId = useId();
+  const mention = people && caret !== null ? mentionQuery(text, caret) : null;
+  const matches = mention && mention.start !== dismissed ? suggest(people!, mention.query, userId) : [];
+  const mentioning = matches.length > 0;
+  const current = Math.min(active, matches.length - 1);
 
   useEffect(() => {
     if (!attach) return;
@@ -80,6 +95,32 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
     });
   }
 
+  function pickMention(person: Person) {
+    const el = inputRef.current;
+    if (!mention || caret === null) return;
+    const tag = `@${shortName(person.name)} `;
+    const next = text.slice(0, mention.start) + tag + text.slice(caret);
+    const at = mention.start + tag.length;
+    setText(next);
+    setCaret(at);
+    setActive(0);
+    onMention?.(person);
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at, at); });
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentioning) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActive((current + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length);
+        return;
+      }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pickMention(matches[current]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDismissed(mention!.start); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && hasKeyboard()) submit(e);
+  }
+
   function toggleEmojis() {
     // No celular o painel ocupa o lugar do teclado; o ícone vira um teclado para voltar a digitar.
     if (emojis) { setEmojis(false); if (!wide) inputRef.current?.focus(); return; }
@@ -116,10 +157,14 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
           <Paperclip size={22} />
         </button>}
         <textarea ref={inputRef} rows={1} value={text} maxLength={2000} placeholder={wide ? 'Digite uma mensagem' : 'Mensagem'} aria-label="Sua mensagem"
-          onChange={e => { setText(e.target.value); if (e.target.value.trim()) onTyping(); }}
+          role={people ? 'combobox' : undefined} aria-autocomplete={people ? 'list' : undefined} aria-expanded={people ? mentioning : undefined}
+          aria-controls={mentioning ? listId : undefined} aria-activedescendant={mentioning ? `${listId}-${current}` : undefined}
+          onChange={e => { setText(e.target.value); setCaret(e.target.selectionStart); setActive(0); if (e.target.value.trim()) onTyping(); }}
+          onSelect={e => setCaret(e.currentTarget.selectionStart)}
+          onBlur={() => setCaret(null)}
           onFocus={() => { if (!wide) setEmojis(false); }}
           onPaste={onPaste}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && hasKeyboard()) submit(e); }} />
+          onKeyDown={onKeyDown} />
         {empty && !editing && <button type="button" className="compose-icon compose-camera only-mobile" onClick={() => camera.current?.click()} aria-label="Câmera"><Camera size={22} /></button>}
       </div>}
       {voice.mode === 'locked'
@@ -136,6 +181,7 @@ export function Compose({ text, setText, context, userId, inputRef, onCancelCont
         </button>}
     </form>
 
+    {mentioning && !recording && <MentionList id={listId} people={matches} active={current} onPick={pickMention} onHover={setActive} />}
     {attach && <>
       <button type="button" className="attach-backdrop" aria-label="Fechar anexos" onClick={() => setAttach(false)} />
       <div className="attach-menu" role="menu">

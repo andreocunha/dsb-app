@@ -32,7 +32,7 @@ export function Chats() {
   const open = params.get('c');
   const { userId, requireLogin } = useAuth();
   const { notify } = useApp();
-  const { unread: groupUnread } = useChatUnread();
+  const { unread: groupUnread, mentions: groupMentions } = useChatUnread();
   const [chats, setChats] = useState<Chat[] | null>(null);
   const [groupLast, setGroupLast] = useState<Last | null>(null);
   const [extra, setExtra] = useState<Target | null>(null);
@@ -159,14 +159,14 @@ export function Chats() {
     <div className="chats-list">
       {newChat
         ? <NewChat userId={userId} onClose={() => setNewChat(false)} onPick={person => void openPerson(person)} />
-        : <ChatList userId={userId} chats={chats} groupLast={groupLast} groupUnread={groupUnread} open={open} blocked={blocked}
+        : <ChatList userId={userId} chats={chats} groupLast={groupLast} groupUnread={groupUnread} groupMentions={groupMentions} open={open} blocked={blocked}
           onOpen={go} onNew={() => { if (userId) setNewChat(true); else requireLogin('Entre para conversar em particular.'); }}
           onPerson={person => void openPerson(person)} />}
     </div>
     <div className="chats-pane">
       {target
         ? <Conversation key={targetKey(target)} target={target} blocked={blocked} onBlock={(person, id) => void block(person, id)} onUnblock={id => void unblock(id)}
-          onBack={() => go(null)} onSeen={onSeen} />
+          onBack={() => go(null)} onSeen={onSeen} onOpenPerson={person => void openPerson(person)} />
         : open ? <div className="chats-intro"><span className="spinner" /></div>
         : <Intro onGroup={() => go(GROUP_KEY)} />}
     </div>
@@ -190,8 +190,8 @@ function LastPreview({ last, userId, group, receipts }: { last: Last | null; use
   return <span className={`chat-row-preview ${last.deleted ? 'deleted' : ''}`}>{tick}{own && group && !last.deleted ? 'Você: ' : who}{icon}<span>{text}</span></span>;
 }
 
-function ChatList({ userId, chats, groupLast, groupUnread, open, blocked, onOpen, onNew, onPerson }: {
-  userId: string | null; chats: Chat[] | null; groupLast: Last | null; groupUnread: number; open: string | null; blocked: string[];
+function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, blocked, onOpen, onNew, onPerson }: {
+  userId: string | null; chats: Chat[] | null; groupLast: Last | null; groupUnread: number; groupMentions: number; open: string | null; blocked: string[];
   onOpen: (key: string) => void; onNew: () => void; onPerson: (person: Person) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -236,6 +236,7 @@ function ChatList({ userId, chats, groupLast, groupUnread, open, blocked, onOpen
           <span className="chat-row-top"><strong>Torcida Solar</strong>{groupLast && <time className={groupUnread ? 'unread' : ''}>{listTime(groupLast.created_at)}</time>}</span>
           <span className="chat-row-bottom">
             <LastPreview last={groupLast && !blocked.includes(groupLast.user_id) ? groupLast : null} userId={userId} group receipts={null} />
+            {groupMentions > 0 && <b className="chat-row-badge chat-row-mention" aria-label="Você foi mencionado">@</b>}
             {groupUnread > 0 && <b className="chat-row-badge">{groupUnread > 99 ? '99+' : groupUnread}</b>}
             <Pin size={16} className="chat-row-pin" aria-label="Fixada" />
           </span>
