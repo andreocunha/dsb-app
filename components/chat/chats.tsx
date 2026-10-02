@@ -10,6 +10,7 @@ import { useApp, useChatUnread, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar } from '../ui';
 import { Conversation } from './chat';
+import { useGeneralReceipts } from './general-receipts';
 import { GroupAvatar, NewGroup } from './groups';
 import { eventText, GROUP_KEY, targetKey, type GroupEvent, type GroupInfo, type Person, type Target } from './types';
 import { useWide, WIDE } from './use-wide';
@@ -260,6 +261,8 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
   const [menu, setMenu] = useState(false);
   const wide = useWide();
   const people = usePeople(userId, !!query.trim());
+  // Tiques do geral: só importam quando a última mensagem é sua.
+  const groupReceipts = useGeneralReceipts(!!userId && groupLast?.user_id === userId).receipts;
   const onlineUsers = useOnlineUsers();
   const term = normalize(query.trim());
   const sortedChats = [...(chats ?? [])].sort((a, b) => (b.last?.id ?? 0) - (a.last?.id ?? 0));
@@ -297,7 +300,7 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
         <span className="chat-row-main">
           <span className="chat-row-top"><strong>Torcida Solar</strong>{groupLast && <time className={groupUnread ? 'unread' : ''}>{listTime(groupLast.created_at)}</time>}</span>
           <span className="chat-row-bottom">
-            <LastPreview last={groupLast && !blocked.includes(groupLast.user_id) ? groupLast : null} userId={userId} group receipts={null} />
+            <LastPreview last={groupLast && !blocked.includes(groupLast.user_id) ? groupLast : null} userId={userId} group receipts={groupReceipts} />
             {groupMentions > 0 && <b className="chat-row-badge chat-row-mention" aria-label="Você foi mencionado">@</b>}
             {groupUnread > 0 && <b className="chat-row-badge">{groupUnread > 99 ? '99+' : groupUnread}</b>}
             <Pin size={16} className="chat-row-pin" aria-label="Fixada" />

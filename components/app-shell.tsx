@@ -68,7 +68,10 @@ function useUnread(userId: string | null) {
         if (row.conversation_id) {
           setDm(current => ({ ...current, count: current.count + 1 }));
           void supabase.rpc('mark_delivered', { p_conversation_id: row.conversation_id });
-        } else if (row.id > lastRead()) {
+        } else {
+          // Geral: chegou ao app, é entregue (✓✓ cinza para quem mandou).
+          if (userId) void supabase.rpc('mark_general_delivered');
+          if (row.id <= lastRead()) return;
           setUnread(count => count + 1);
           if (mentionsMe(row as Parameters<typeof mentionsMe>[0], userId)) setMentions(current => ({ user: userId, count: current.count + 1 }));
         }

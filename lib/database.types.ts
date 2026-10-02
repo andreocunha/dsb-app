@@ -83,6 +83,12 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      general_reads: {
+        Row: { last_delivered_id: number; last_read_id: number; since_id: number; updated_at: string; user_id: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       profiles: {
         Row: { avatar_url: string | null; banned_at: string | null; banned_by: string | null; created_at: string; id: string; name: string; role: string; terms_accepted_at: string | null }
         Insert: { avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id: string; name: string; role?: string; terms_accepted_at?: string | null }
@@ -244,6 +250,13 @@ export type Database = {
         Returns: { avatar_url: string; name: string; points: number; position: number; user_id: string }[]
       }
       placement_points: { Args: { p_position: number }; Returns: number }
+      general_receipts: { Args: never; Returns: { delivered: number; read: number }[] }
+      mark_general_delivered: { Args: never; Returns: undefined }
+      mark_general_read: { Args: { p_last_id: number }; Returns: undefined }
+      message_info: {
+        Args: { p_message_id: number }
+        Returns: { avatar_url: string | null; delivered: boolean; delivered_at: string | null; name: string; read: boolean; read_at: string | null; user_id: string }[]
+      }
       message_reactors: {
         Args: { p_message_id: number }
         Returns: { avatar_url: string; emoji: string; name: string; user_id: string }[]

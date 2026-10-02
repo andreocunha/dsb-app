@@ -406,6 +406,16 @@ a.group-member:hover, .group-member.me { background: var(--wa-hover); }
 .group-member .avatar.letter { font-size: 24px; font-weight: 400; }
 button.group-member { width: 100%; text-align: left; box-sizing: content-box; }
 button.group-member:hover { background: var(--wa-hover); }
+
+/* ---------- Dados da mensagem ---------- */
+.message-info-preview { position: relative; overflow: hidden; margin: 4px 0 20px; padding: 18px 0; border-radius: 10px; background: var(--wa-bg); }
+.message-info-preview .msg { position: relative; margin: 0; padding-right: 16px; }
+.message-info-preview .bubble { max-width: min(82%, 520px); }
+.receipt-label { display: flex; align-items: center; gap: 10px; margin: 8px 0; color: var(--wa-text-2); font-size: 14px; }
+.receipt-label svg { flex-shrink: 0; }
+.receipt-pair time { display: block; margin: -4px 0 18px 28px; color: var(--wa-text); font-size: 15px; }
+.receipt-list { display: flex; flex-direction: column; padding: 0; list-style: none; }
+.receipt-remaining { margin: 6px 0 0 28px; color: var(--wa-text-2); font-size: 14px; }
 .sheet-menu { display: flex; flex-direction: column; padding: 0 10px; }
 .edit-group { display: flex; flex-direction: column; gap: 16px; }
 .edit-group label { display: flex; flex-direction: column; gap: 6px; }
