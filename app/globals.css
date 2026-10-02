@@ -433,7 +433,9 @@ button.race-row:disabled { cursor: default; }
 .sheet:focus { outline: none; }
 .sheet[open] { animation: sheet-up .3s cubic-bezier(.2, .8, .2, 1); }
 .sheet[open]::backdrop { animation: fade-in .3s ease-out; }
-.sheet-content { display: flex; flex-direction: column; max-height: 90dvh; overflow: hidden; padding-top: 8px; border-radius: 20px 20px 0 0; background: var(--surface); box-shadow: var(--sheet-shadow); }
+/* position: relative segura os absolutos (ex.: .sr-only da tabela) dentro do conteúdo: sem isso eles
+   saem do scroll de .sheet-body e o próprio <dialog> ganha um segundo scroll. */
+.sheet-content { position: relative; display: flex; flex-direction: column; max-height: 90dvh; overflow: hidden; padding-top: 8px; border-radius: 20px 20px 0 0; background: var(--surface); box-shadow: var(--sheet-shadow); }
 /* Alça e título: é por aqui que se arrasta para fechar, então não rolam junto. */
 .sheet-grab { flex-shrink: 0; padding: 0 20px; touch-action: none; user-select: none; -webkit-user-select: none; }
 .sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px calc(20px + var(--safe-bottom)); }
