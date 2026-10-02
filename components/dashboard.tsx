@@ -10,7 +10,9 @@ import { ResultsSheet } from './results';
 // A live fica em tela cheia sobre o mapa ou num mini player (PiP) no canto.
 type LiveMode = 'off' | 'full' | 'pip';
 
-export function Dashboard() {
+// Fica montada na moldura do app (AppShell) e só se esconde fora da home: assim o mapa,
+// que é um iframe, não recarrega do zero a cada volta para a home.
+export function Dashboard({ visible }: { visible: boolean }) {
   const [results, setResults] = useState(false);
   const [live, setLive] = useState<LiveMode>('off');
   const now = useNow();
@@ -18,7 +20,7 @@ export function Dashboard() {
   const race = races?.length ? nextRace(races, now) : null;
 
   return (
-    <div className={`home fill ${live === 'pip' ? 'has-pip' : ''}`}>
+    <div className={`home fill ${live === 'pip' ? 'has-pip' : ''}`} hidden={!visible}>
       <div className="home-hud">
         <section className="hud-card race-card" aria-label="Próxima prova">
           {race ? <>
@@ -45,7 +47,8 @@ export function Dashboard() {
           allowFullScreen
           referrerPolicy="strict-origin-when-cross-origin"
         />
-        {live !== 'off' && <Live mode={live} raceName={race?.name ?? 'Desafio Solar Brasil'} setMode={setLive} />}
+        {/* A live sai junto com a home, para o áudio não seguir tocando escondido. */}
+        {visible && live !== 'off' && <Live mode={live} raceName={race?.name ?? 'Desafio Solar Brasil'} setMode={setLive} />}
       </div>
       <ResultsSheet open={results} onClose={() => setResults(false)} />
     </div>

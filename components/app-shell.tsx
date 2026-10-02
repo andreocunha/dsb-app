@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState, useSyncExt
 import { House, MessageCircle, Trophy, Menu, ChevronRight, Settings, ShieldCheck, Sun, Moon, LogIn, LogOut, Download, Check, X, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Avatar, Brand, Sheet } from './ui';
+import { Dashboard } from './dashboard';
 import { useAuth } from './auth';
 import { useLocalState } from '@/lib/local-state';
 import { supabase } from '@/lib/supabase';
@@ -157,6 +158,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setToast('Você saiu da sua conta.');
   }
   const settingsActive = pathname.startsWith('/configuracoes');
+  // A home monta na primeira visita e depois só se esconde (ver Dashboard).
+  const home = pathname === '/';
+  const [homeSeen, setHomeSeen] = useState(home);
+  if (home && !homeSeen) setHomeSeen(true);
 
   return <AppContext.Provider value={{ theme, setTheme, notify: setToast }}><OnlineContext.Provider value={online}><UnreadContext.Provider value={{ unread, mentions, markRead, dmUnread, refreshDm }}>
     <a href="#main-content" className="skip-link">Pular para o conteúdo</a>
@@ -183,6 +188,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </aside>
     <main id="main-content" className={`main ${immersive ? 'immersive' : ''}`}>
       {offline && <div className="offline-banner"><WifiOff size={15} /> Você está offline. Mapa e live precisam de conexão.</div>}
+      {homeSeen && <Dashboard visible={home} />}
       {children}
     </main>
     <nav className="mobile-nav" aria-label="Navegação mobile">
