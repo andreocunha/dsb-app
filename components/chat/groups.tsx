@@ -266,7 +266,7 @@ export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onM
   const memberRow = (m: Member) => {
     const mine = m.id === userId;
     const content = <>
-      <Avatar id={m.id} name={m.name} url={m.avatar_url} />
+      <Avatar id={m.id} name={m.name} url={m.avatar_url} letter />
       <span><strong>{mine ? 'Você' : m.name}</strong><small>{onlineUsers.has(m.id) && !mine ? 'online' : 'Contato no DSB'}</small></span>
       {m.admin && <i className="admin-badge">Admin do grupo</i>}
     </>;

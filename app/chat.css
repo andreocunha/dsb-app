@@ -397,8 +397,10 @@ a.group-member:hover, .group-member.me { background: var(--wa-hover); }
 .group-description.editable:disabled { cursor: text; }
 .group-row strong.green { color: var(--wa-green-strong); }
 .group-row > .round-icon { flex: 0 0 40px; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--wa-green); color: #fff; }
+.group-search { margin: 12px 0; }
 /* Avatar sem foto também é um span: não pode esticar como o texto ao lado. */
-.group-member > .avatar { flex: 0 0 48px; }
+.group-member > .avatar { flex: 0 0 48px; display: grid; }
+.group-member .avatar.letter { font-size: 24px; font-weight: 400; }
 button.group-member { width: 100%; text-align: left; box-sizing: content-box; }
 button.group-member:hover { background: var(--wa-hover); }
 .sheet-menu { display: flex; flex-direction: column; padding: 0 10px; }
