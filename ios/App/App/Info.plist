@@ -75,6 +75,8 @@
 	<string>Para salvar no seu celular as imagens de resultados e as fotos do chat do evento.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Para gravar mensagens de voz e o som dos vídeos que você enviar no chat do evento.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Para enviar sua localização, atual ou em tempo real, nas conversas do chat do evento.</string>
 	<!-- O app não usa criptografia própria: evita o questionário de exportação a cada envio. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

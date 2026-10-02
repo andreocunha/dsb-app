@@ -1,4 +1,5 @@
 import type { Database } from '@/lib/database.types';
+import { asPlace, placeLabel, type LivePosition } from '@/lib/location';
 import { shortName } from '@/lib/names';
 import { formatDuration } from '@/lib/voice';
 
@@ -17,9 +18,12 @@ export type Row = Database['public']['Tables']['messages']['Row'];
 /** Aviso no meio do grupo ("Fulano adicionou Ciclano"), salvo em messages.event. */
 export type GroupEvent = { type: 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'description' | 'photo'; users?: { id: string; name: string }[]; name?: string };
 /** Resumo da mensagem citada, como vem de chat_messages. */
-export type Reply = { id: number; user_id: string; author_name: string; body: string | null; file_type: string | null; file_name: string | null; thumb_path: string | null; duration_ms?: number | null; deleted: boolean };
-/** pending: ainda enviando (relógio no lugar do ✓). localUrl: prévia do arquivo que saiu deste aparelho. */
-export type Message = Row & { reactions: Reaction[]; reply: Reply | null; pending?: boolean; localUrl?: string; played_by_me?: boolean; played_by_others?: boolean };
+export type Reply = { id: number; user_id: string; author_name: string; body: string | null; file_type: string | null; file_name: string | null; thumb_path: string | null; duration_ms?: number | null; location?: unknown; deleted: boolean };
+/**
+ * pending: ainda enviando (relógio no lugar do ✓). localUrl: prévia do arquivo que saiu deste aparelho.
+ * live: onde quem compartilha a localização em tempo real está agora.
+ */
+export type Message = Row & { reactions: Reaction[]; reply: Reply | null; pending?: boolean; localUrl?: string; played_by_me?: boolean; played_by_others?: boolean; live?: LivePosition | null };
 /** Microfone da mensagem de voz: verde (você ainda não ouviu), cinza (enviada) ou azul (ouvida). */
 export type Played = 'new' | 'sent' | 'played';
 
@@ -30,14 +34,15 @@ export const time = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', {
 export const isVideo = (m: { file_type: string | null }) => !!m.file_type?.startsWith('video/');
 export const isImage = (m: { file_type: string | null }) => !!m.file_type?.startsWith('image/');
 export const isAudio = (m: { file_type: string | null }) => !!m.file_type?.startsWith('audio/');
+export const isLocation = (m: { location?: unknown }) => !!asPlace(m.location);
 /** Imagem precisa da miniatura (ou da prévia local); vídeo abre no player mesmo sem ela. */
 export const isVisual = (m: Message) => isVideo(m) || (isImage(m) && (!!m.thumb_path || !!m.localUrl));
 export const canEdit = (m: Message, userId: string | null) =>
-  m.user_id === userId && !m.deleted_at && !m.pending && !!m.body && Date.now() - new Date(m.created_at).getTime() < EDIT_WINDOW;
+  m.user_id === userId && !m.deleted_at && !m.pending && !!m.body && !isLocation(m) && Date.now() - new Date(m.created_at).getTime() < EDIT_WINDOW;
 
 export const toReply = (m: Message): Reply => ({
   id: m.id, user_id: m.user_id, author_name: m.author_name, body: m.body, file_type: m.file_type,
-  file_name: m.file_name, thumb_path: m.thumb_path, duration_ms: m.duration_ms, deleted: !!m.deleted_at,
+  file_name: m.file_name, thumb_path: m.thumb_path, duration_ms: m.duration_ms, location: m.location, deleted: !!m.deleted_at,
 });
 
 export const authorLabel = (reply: { user_id: string; author_name: string }, userId: string | null) =>
@@ -47,6 +52,7 @@ export const authorLabel = (reply: { user_id: string; author_name: string }, use
 export function replySnippet(reply: Reply) {
   if (reply.deleted) return 'Mensagem apagada';
   if (reply.body) return reply.body;
+  if (isLocation(reply)) return placeLabel(asPlace(reply.location));
   if (isImage(reply)) return 'Foto';
   if (isVideo(reply)) return 'Vídeo';
   if (isAudio(reply)) return reply.duration_ms ? `Mensagem de voz (${formatDuration(reply.duration_ms)})` : reply.file_name ?? 'Áudio';

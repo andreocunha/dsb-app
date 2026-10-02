@@ -109,6 +109,7 @@ type Mensagem = {
   id: number; user_id: string; author_name: string; body: string | null; file_type: string | null;
   file_name: string | null; duration_ms: number | null; conversation_id: string | null; reply_to: number | null; deleted_at: string | null;
   mentions: string[] | null; mention_all: boolean | null; event: { type: string; users?: { id: string }[] } | null;
+  location: { live_until?: string } | null;
 };
 
 /** Filtro .in() com muitos ids (o @all do grupo geral) vai em partes, para a URL não estourar. */
@@ -126,6 +127,7 @@ function previa(m: Mensagem) {
   if (tipo.startsWith('video/')) return texto ? `🎥 ${texto}` : '🎥 Vídeo';
   if (tipo.startsWith('audio/')) return m.duration_ms ? `🎤 Mensagem de voz (${duracao(m.duration_ms)})` : `🎵 ${m.file_name ?? 'Áudio'}`;
   if (m.file_name) return texto ? `📄 ${texto}` : `📄 ${m.file_name}`;
+  if (m.location) return texto ? `📍 ${texto}` : m.location.live_until ? '📍 Localização em tempo real' : '📍 Localização';
   return texto ?? '';
 }
 
@@ -140,7 +142,7 @@ function previa(m: Mensagem) {
 async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
   const { data: m } = await supabase
     .from('messages')
-    .select('id, user_id, author_name, body, file_type, file_name, duration_ms, conversation_id, reply_to, deleted_at, mentions, mention_all, event')
+    .select('id, user_id, author_name, body, file_type, file_name, duration_ms, conversation_id, reply_to, deleted_at, mentions, mention_all, event, location')
     .eq('id', id)
     .maybeSingle() as { data: Mensagem | null };
   if (!m || m.deleted_at) return { enviados: 0, motivo: 'mensagem não encontrada' };

@@ -45,4 +45,8 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Sem isto o RECORD_AUDIO torna o microfone obrigatório e a loja esconde o app de aparelhos sem ele. -->
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <!-- Enviar localização no chat: o WebView do Capacitor pede a permissão do sistema quando o site usa o GPS. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>

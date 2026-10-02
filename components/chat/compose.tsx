@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Camera, Check, FileText, Image as ImageIcon, Keyboard, Mic, Paperclip, SendHorizontal, Smile, X } from 'lucide-react';
+import { Camera, Check, FileText, Image as ImageIcon, Keyboard, MapPin, Mic, Paperclip, SendHorizontal, Smile, X } from 'lucide-react';
 import { mentionQuery } from '@/lib/chat-format';
 import { shortName } from '@/lib/names';
 import { canRecord, type Recording } from '@/lib/voice';
@@ -20,11 +20,12 @@ const hasKeyboard = () => window.matchMedia('(hover: hover) and (pointer: fine)'
 /**
  * Barra de digitar: pílula com emoji, texto e anexos no celular; barra inteira no desktop (WhatsApp Web).
  * people: no grupo, quem aparece na lista ao digitar @. mentionAll: o @all entra no topo da lista.
+ * onLocation: "Localização" nos anexos.
  */
-export function Compose({ text, setText, context, userId, people, mentionAll = false, onMention, inputRef, onCancelContext, onSubmit, onFile, onTyping, onVoice, onRecording, onError }: {
+export function Compose({ text, setText, context, userId, people, mentionAll = false, onMention, inputRef, onCancelContext, onSubmit, onFile, onLocation, onTyping, onVoice, onRecording, onError }: {
   text: string; setText: (text: string) => void; context: ComposeContext; userId: string | null; people?: Person[]; mentionAll?: boolean; onMention?: (person: Person) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>; onCancelContext: () => void; onSubmit: () => void;
-  onFile: (file: File) => void; onTyping: () => void;
+  onFile: (file: File) => void; onLocation?: () => void; onTyping: () => void;
   onVoice: (recording: Recording) => void; onRecording: () => void; onError: (message: string) => void;
 }) {
   const [emojis, setEmojis] = useState(false);
@@ -188,6 +189,7 @@ export function Compose({ text, setText, context, userId, people, mentionAll = f
         <button type="button" role="menuitem" onClick={() => docs.current?.click()}><span style={{ background: '#7f66ff' }}><FileText size={20} /></span>Documento</button>
         <button type="button" role="menuitem" onClick={() => media.current?.click()}><span style={{ background: '#007bfc' }}><ImageIcon size={20} /></span>Fotos e vídeos</button>
         <button type="button" role="menuitem" onClick={() => camera.current?.click()}><span style={{ background: '#ff2e74' }}><Camera size={20} /></span>Câmera</button>
+        {onLocation && <button type="button" role="menuitem" onClick={() => { setAttach(false); onLocation(); }}><span style={{ background: '#1fa855' }}><MapPin size={20} /></span>Localização</button>}
       </div>
     </>}
     <input ref={docs} type="file" hidden onChange={picked} />
