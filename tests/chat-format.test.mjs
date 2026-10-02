@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayLabel, fold, formatMessage, jumboEmoji, listTime, mentionedIds, mentionQuery, nameColor, NAME_COLORS, preview, whenLabel } from '../lib/chat-format.ts';
+import { dayLabel, fold, formatMessage, hasMentionAll, jumboEmoji, listTime, mentionedIds, mentionQuery, mentionsMe, nameColor, NAME_COLORS, preview, whenLabel } from '../lib/chat-format.ts';
 
 const text = t => ({ type: 'text', text: t });
 
@@ -96,4 +96,19 @@ test('horário da lista de conversas: hora hoje, depois ontem e datas', () => {
   assert.equal(listTime(new Date(2026, 8, 30, 14, 31).toISOString(), now), '14:31');
   assert.equal(listTime(new Date(2026, 8, 29, 9, 8).toISOString(), now), 'Ontem');
   assert.equal(listTime(new Date(2026, 8, 20, 9, 8).toISOString(), now), '20/09/2026');
+});
+
+test('@all: palavra solta no texto, e conta como menção a todo mundo menos quem mandou', () => {
+  assert.equal(hasMentionAll('@all bora!'), true);
+  assert.equal(hasMentionAll('Atenção @ALL, prova às 14h'), true);
+  assert.equal(hasMentionAll('oi (@all)'), true);
+  assert.equal(hasMentionAll('@allan tudo bem?'), false);
+  assert.equal(hasMentionAll('mande para e-mail@all.com'), false);
+  assert.equal(hasMentionAll('all sem arroba'), false);
+  assert.equal(mentionsMe({ user_id: 'a', mentions: [], mention_all: true }, 'b'), true);
+  assert.equal(mentionsMe({ user_id: 'b', mentions: [], mention_all: true }, 'b'), false);
+  assert.equal(mentionsMe({ user_id: 'a', mentions: ['b'] }, 'b'), true);
+  assert.equal(mentionsMe({ user_id: 'a', mentions: ['c'], mention_all: false }, 'b'), false);
+  assert.equal(mentionsMe({ user_id: 'a', mentions: [], mention_all: true }, null), false);
+  assert.deepEqual(formatMessage('@all bora', [{ id: 'all', label: 'all' }])[0], { type: 'mention', text: 'all', id: 'all' });
 });

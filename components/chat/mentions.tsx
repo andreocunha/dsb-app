@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useEffect, useMemo, useState } from 'react';
-import { fold, type Mentionable } from '@/lib/chat-format';
+import { Users } from 'lucide-react';
+import { fold, MENTION_ALL, type Mentionable } from '@/lib/chat-format';
 import { shortName } from '@/lib/names';
 import { supabase } from '@/lib/supabase';
 import { Avatar } from '../ui';
@@ -8,6 +9,9 @@ import type { Person } from './types';
 
 const MAX_SUGGESTIONS = 50;
 const NOBODY: Person[] = [];
+/** O @all na lista e no balão: não é uma pessoa, marca todo mundo da conversa. */
+export const ALL: Person = { id: MENTION_ALL, name: MENTION_ALL, avatar_url: null };
+export const ALL_MENTIONABLE: Mentionable = { id: MENTION_ALL, label: MENTION_ALL };
 
 /**
  * Quem pode ser marcado no grupo, para o balão pintar o @Nome. Fora do grupo fica vazio.
@@ -44,10 +48,14 @@ export function useMentionables(people: Person[]) {
   }), [people]);
 }
 
-/** Quem combina com o que veio depois do @: começo do nome ou de qualquer sobrenome, sem ligar para acento. */
-export function suggest(people: Person[], query: string, userId: string | null) {
+/**
+ * Quem combina com o que veio depois do @: começo do nome ou de qualquer sobrenome, sem ligar para acento.
+ * all: quem pode marcar todo mundo vê o @all primeiro, enquanto o que foi digitado combinar com "all".
+ */
+export function suggest(people: Person[], query: string, userId: string | null, all = false) {
   const q = fold(query);
-  return people.filter(p => p.id !== userId && (` ${fold(p.name)}`.includes(` ${q}`) || fold(shortName(p.name)).startsWith(q))).slice(0, MAX_SUGGESTIONS);
+  const everyone = all && MENTION_ALL.startsWith(q) ? [ALL] : [];
+  return [...everyone, ...people.filter(p => p.id !== userId && (` ${fold(p.name)}`.includes(` ${q}`) || fold(shortName(p.name)).startsWith(q)))].slice(0, MAX_SUGGESTIONS);
 }
 
 /** Lista que abre em cima da barra de digitar, como a do WhatsApp. O toque não tira o foco do campo. */
@@ -61,8 +69,13 @@ export function MentionList({ id, people, active, onPick, onHover }: {
   return <div id={id} className="mention-list" role="listbox" aria-label="Marcar alguém">
     {people.map((person, i) => <div key={person.id} id={`${id}-${i}`} role="option" aria-selected={i === active} className="mention-option"
       onPointerDown={e => e.preventDefault()} onPointerEnter={() => onHover(i)} onClick={() => onPick(person)}>
-      <Avatar id={person.id} name={person.name} url={person.avatar_url} small />
-      <span><strong>{shortName(person.name)}</strong>{person.name.trim() !== shortName(person.name) && <small>{person.name}</small>}</span>
+      {person.id === ALL.id ? <>
+        <span className="avatar small mention-all-icon"><Users size={16} /></span>
+        <span><strong>@all</strong><small>Marcar todo mundo do grupo</small></span>
+      </> : <>
+        <Avatar id={person.id} name={person.name} url={person.avatar_url} small />
+        <span><strong>{shortName(person.name)}</strong>{person.name.trim() !== shortName(person.name) && <small>{person.name}</small>}</span>
+      </>}
     </div>)}
   </div>;
 }

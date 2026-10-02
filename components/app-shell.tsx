@@ -10,6 +10,7 @@ import { useAuth } from './auth';
 import { useLocalState } from '@/lib/local-state';
 import { supabase } from '@/lib/supabase';
 import { shortName } from '@/lib/names';
+import { mentionsMe } from '@/lib/chat-format';
 import { closeTopOverlay } from '@/lib/overlays';
 import { hideSplash, listenBackButton, paintStatusBar } from '@/lib/system-ui';
 import { registerPush } from '@/lib/push';
@@ -69,7 +70,7 @@ function useUnread(userId: string | null) {
           void supabase.rpc('mark_delivered', { p_conversation_id: row.conversation_id });
         } else if (row.id > lastRead()) {
           setUnread(count => count + 1);
-          if (userId && (row.mentions as string[] | undefined)?.includes(userId)) setMentions(current => ({ user: userId, count: current.count + 1 }));
+          if (mentionsMe(row as Parameters<typeof mentionsMe>[0], userId)) setMentions(current => ({ user: userId, count: current.count + 1 }));
         }
       })
       .subscribe();

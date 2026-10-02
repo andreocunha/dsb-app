@@ -15,12 +15,13 @@ export function TeamBadge({ team, small = false }: { team: Pick<Team, 'initials'
   return <span className={`team-badge color-${team.color} ${small ? 'small' : ''}`}>{team.initials}</span>;
 }
 /** Foto do perfil ou iniciais coloridas de forma estável pelo id. */
-export function Avatar({ id, name, url, small = false }: { id: string; name: string; url?: string | null; small?: boolean }) {
-  const className = `avatar ${small ? 'small' : ''}`;
+/** letter: só a primeira letra, branca sobre cor forte, como a foto padrão das contas Google. */
+export function Avatar({ id, name, url, small = false, letter = false }: { id: string; name: string; url?: string | null; small?: boolean; letter?: boolean }) {
+  const className = `avatar ${small ? 'small' : ''} ${letter ? 'letter' : ''}`;
   if (url) return <img className={className} src={url} alt="" loading="lazy" referrerPolicy="no-referrer" />;
   const colors = ['green', 'gold', 'blue', 'orange', 'purple', 'cyan'];
   const color = colors[[...id].reduce((sum, c) => sum + c.charCodeAt(0), 0) % colors.length];
-  const initials = name.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase();
+  const initials = name.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, letter ? 1 : 2).toUpperCase();
   return <span className={`${className} color-${color}`}>{initials}</span>;
 }
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;

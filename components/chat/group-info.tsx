@@ -1,26 +1,29 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Ban, ChevronRight, FileText, Images, Link2, LogOut, Moon, Palette, Play, Settings, Share2, ShieldCheck, Sun, ThumbsDown, X } from 'lucide-react';
+import { ArrowLeft, Ban, ChevronRight, FileText, Images, Link2, LogOut, Moon, Palette, Play, Search, Settings, Share2, ShieldCheck, Sun, ThumbsDown, X } from 'lucide-react';
 import { formatSize } from '@/lib/media';
 import { shortName } from '@/lib/names';
 import { shareLink } from '@/lib/native-share';
 import { registerOverlay } from '@/lib/overlays';
 import { supabase } from '@/lib/supabase';
-import { useApp } from '../app-shell';
+import { useApp, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
 import { AddMembers, GroupDetails } from './groups';
+import { usePeople } from './mentions';
 import { isVideo, type Member, type Message, type Person, type Target } from './types';
 import { PhotoViewer, type Photo } from './viewer';
 
-type View = 'info' | 'media' | 'rules' | 'blocked' | 'add';
+type View = 'info' | 'media' | 'rules' | 'blocked' | 'add' | 'members';
 
 const contato = 'andreoliveiracunha20@gmail.com';
 const COLUMNS = 'id, user_id, author_name, author_avatar, body, file_path, file_name, file_type, file_size, thumb_path, width, height, created_at, deleted_at, deleted_by, reply_to, edited_at, conversation_id, duration_ms, waveform, event';
 // Valores com ":" e "." vão entre aspas dentro do or() do PostgREST.
 const LINKS = 'body.ilike."*http://*",body.ilike."*https://*",body.ilike."*www.*"';
+const PREVIEW_MEMBERS = 10;
+const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const date = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 // Sempre de uma conversa só: o grupo geral (conversation_id nulo), a particular ou o grupo aberto.
@@ -34,7 +37,7 @@ export async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: num
   if (kind === 'docs') query = query.not('file_path', 'is', null).not('file_type', 'like', 'image/*').not('file_type', 'like', 'video/*').not('file_type', 'like', 'audio/*');
   if (kind === 'links') query = query.or(LINKS);
   const { data } = await query;
-  return (data ?? []).map(row => ({ ...row, mentions: [], reactions: [], reply: null })) as Message[];
+  return (data ?? []).map(row => ({ ...row, mentions: [], mention_all: false, reactions: [], reply: null })) as Message[];
 }
 
 /**
@@ -53,6 +56,8 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
   const [preview, setPreview] = useState<Message[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [admins, setAdmins] = useState<Person[]>([]);
+  const [participants, setParticipants] = useState<number | null>(null);
+  const people = usePeople(open && target.kind === 'general');
   const [photo, setPhoto] = useState<Photo | null>(null);
   const ref = useRef<HTMLElement>(null);
   const fechar = useRef(onClose);
@@ -74,7 +79,9 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
     const count = () => inConversation(supabase.from('messages').select('id', { count: 'exact', head: true }).is('deleted_at', null), conversationId);
     void Promise.all([count().not('file_path', 'is', null), count().is('file_path', null).or(LINKS)])
       .then(([files, links]) => setTotal((files.count ?? 0) + (links.count ?? 0)));
-    if (!conversationId) void supabase.from('profiles').select('id, name, avatar_url').eq('role', 'moderator').order('name').then(({ data }) => setAdmins(data ?? []));
+    if (conversationId) return;
+    void supabase.from('profiles').select('id, name, avatar_url').eq('role', 'moderator').order('name').then(({ data }) => setAdmins(data ?? []));
+    void supabase.from('profiles').select('id', { count: 'exact', head: true }).is('banned_at', null).then(({ count }) => setParticipants(count));
   }, [open, conversationId]);
 
   if (!open) return null;
@@ -89,8 +96,14 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
   const personBlocked = !!person && blocked.includes(person.id);
   const visible = preview.filter(m => !blocked.includes(m.user_id) || !!person).slice(0, 4);
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
-  const titles: Record<View, string> = { info: person ? 'Dados do contato' : 'Dados do grupo', media: 'Mídia, links e docs', rules: 'Regras do chat', blocked: 'Pessoas bloqueadas', add: 'Adicionar participantes' };
+  const titles: Record<View, string> = { info: person ? 'Dados do contato' : 'Dados do grupo', media: 'Mídia, links e docs', rules: 'Regras do chat', blocked: 'Pessoas bloqueadas', add: 'Adicionar participantes', members: 'Participantes' };
   const back = view === 'info' ? onClose : () => setView('info');
+
+  // Grupo geral: todo mundo que entrou no app. Você primeiro, depois a organização, depois o resto por nome.
+  const adminIds = new Set(admins.map(a => a.id));
+  const everyoneElse = people.filter(p => p.id !== userId && !adminIds.has(p.id));
+  const participantCount = participants ?? (people.length || null);
+  const openPerson = userId ? (p: Person) => { onClose(); onOpenPerson(p); } : undefined;
 
   const mediaRow = <>
     <button className="group-row" onClick={() => setView('media')}>
@@ -178,23 +191,26 @@ export function InfoPanel({ target, open, initialView, online, contactOnline, bl
         </Link>
         <hr />
 
-        <p className="group-label">Você e a organização</p>
+        <p className="group-label">{participantCount ? `${participantCount} ${participantCount === 1 ? 'participante' : 'participantes'}` : 'Participantes'}</p>
         {userId && profile && <Link className="group-member me" href="/configuracoes/">
-          <Avatar id={userId} name={profile.name} url={profile.avatar_url} />
+          <Avatar id={userId} name={profile.name} url={profile.avatar_url} letter />
           <span><strong>Você</strong><small className="green">Mudar seu nome no chat</small></span>
           {profile.role === 'moderator' && <i className="admin-badge">Admin do grupo</i>}
         </Link>}
-        {admins.filter(a => a.id !== userId).map(admin => <div key={admin.id} className="group-member">
-          <PhotoButton person={admin} onOpen={setPhoto} />
-          <span><strong>{shortName(admin.name)}</strong><small>Organização do DSB</small></span>
-          <i className="admin-badge">Admin do grupo</i>
-        </div>)}
+        {admins.filter(a => a.id !== userId).map(admin => <MemberRow key={admin.id} person={admin} admin onOpen={openPerson} />)}
+        {everyoneElse.slice(0, PREVIEW_MEMBERS).map(p => <MemberRow key={p.id} person={p} onOpen={openPerson} />)}
+        {everyoneElse.length > PREVIEW_MEMBERS && <button className="group-row" onClick={() => setView('members')}>
+          <span><strong className="green">Ver todos{participantCount ? ` (${participantCount})` : ''}</strong></span><ChevronRight size={20} />
+        </button>}
+        <hr />
 
         <Link className="group-row" href="/configuracoes/"><Settings size={22} /><span><strong>Configurações do app</strong></span></Link>
         {userId && <button className="group-row danger" onClick={() => { onClose(); void signOut(); }}><LogOut size={22} /><span><strong>Sair da conta</strong></span></button>}
         <a className="group-row danger" href={`mailto:${contato}?subject=${encodeURIComponent('Denúncia no chat do DSB')}`}><ThumbsDown size={22} /><span><strong>Denunciar um problema</strong></span></a>
         <p className="group-footnote">Grupo criado pela organização do Desafio Solar Brasil.</p>
       </>}
+
+      {view === 'members' && <AllMembers people={people} admins={adminIds} userId={userId} onOpen={openPerson} />}
 
       {view === 'media' && <MediaView blocked={person ? [] : blocked} conversationId={conversationId} onOpen={onOpenMedia} />}
 
@@ -224,6 +240,37 @@ function PhotoButton({ person, onOpen }: { person: Person; onOpen: (photo: Photo
   if (!person.avatar_url) return avatar;
   const url = person.avatar_url;
   return <button className="hero-photo" onClick={() => onOpen({ id: person.id, name: person.name, url })} aria-label={`Ver a foto de ${shortName(person.name)}`}>{avatar}</button>;
+}
+
+/** Alguém do grupo geral. Tocar abre a conversa particular com a pessoa (só com conta). */
+function MemberRow({ person, admin = false, onOpen }: { person: Person; admin?: boolean; onOpen?: (person: Person) => void }) {
+  const onlineUsers = useOnlineUsers();
+  const content = <>
+    <Avatar id={person.id} name={person.name} url={person.avatar_url} letter />
+    <span><strong>{admin ? shortName(person.name) : person.name}</strong>
+      <small>{onlineUsers.has(person.id) ? 'online' : admin ? 'Organização do DSB' : 'Contato no DSB'}</small></span>
+    {admin && <i className="admin-badge">Admin do grupo</i>}
+  </>;
+  return onOpen ? <button className="group-member" onClick={() => onOpen(person)} aria-label={`Conversar com ${shortName(person.name)}`}>{content}</button>
+    : <div className="group-member">{content}</div>;
+}
+
+/** Lista inteira do grupo geral, com busca pelo nome (sem ligar para acento). */
+function AllMembers({ people, admins, userId, onOpen }: { people: Person[]; admins: Set<string>; userId: string | null; onOpen?: (person: Person) => void }) {
+  const [query, setQuery] = useState('');
+  const term = normalize(query.trim());
+  const list = people.filter(p => p.id !== userId && (!term || normalize(p.name).includes(term)))
+    .sort((a, b) => Number(admins.has(b.id)) - Number(admins.has(a.id)));
+  return <>
+    <label className="chats-search group-search">
+      <Search size={18} />
+      <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Pesquisar nome" aria-label="Pesquisar participantes" />
+      {query && <button type="button" onClick={() => setQuery('')} aria-label="Limpar pesquisa"><X size={18} /></button>}
+    </label>
+    {!people.length ? <p className="group-empty"><span className="spinner" /></p>
+      : !list.length ? <p className="group-empty">Ninguém encontrado com esse nome.</p>
+      : list.map(p => <MemberRow key={p.id} person={p} admin={admins.has(p.id)} onOpen={onOpen} />)}
+  </>;
 }
 
 function MediaTile({ message, onOpen }: { message: Message; onOpen: (message: Message) => void }) {
@@ -277,7 +324,7 @@ function Blocked({ ids, onUnblock }: { ids: string[]; onUnblock: (id: string) =>
       const person = people.find(p => p.id === id);
       const name = person ? shortName(person.name) : 'Carregando…';
       return <div key={id} className="group-member">
-        <Avatar id={id} name={person?.name ?? '?'} url={person?.avatar_url ?? null} />
+        <Avatar id={id} name={person?.name ?? '?'} url={person?.avatar_url ?? null} letter />
         <span><strong>{name}</strong></span>
         <button className="button" onClick={() => onUnblock(id)} aria-label={`Desbloquear ${name}`}>Desbloquear</button>
       </div>;

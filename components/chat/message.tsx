@@ -7,7 +7,7 @@ import { shortName } from '@/lib/names';
 import { isNativeApp, shareNativeFile } from '@/lib/native-share';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
-import { MentionPeople, type MentionContext } from './mentions';
+import { ALL_MENTIONABLE, MentionPeople, type MentionContext } from './mentions';
 import { authorLabel, isAudio, isImage, isVideo, isVisual, replySnippet, time, type Message, type Played, type Reply } from './types';
 import { VoiceMessage } from './voice-message';
 
@@ -160,7 +160,7 @@ export function Bubble({ ref, message, first, userId, reply, group, receipts, vo
           ? 'Mensagem removida pela organização'
           : own ? 'Você apagou esta mensagem' : 'Esta mensagem foi apagada'}</i><span className="meta-spacer" aria-hidden>{meta}</span></p>
       : message.body && <p className="bubble-text">
-        {jumbo ? message.body : <Formatted text={short ?? message.body} ids={message.mentions} />}
+        {jumbo ? message.body : <Formatted text={short ?? message.body} ids={message.mentions} all={message.mention_all} />}
         {short && <button type="button" className="read-more" onClick={() => setExpanded(true)}>Ler mais</button>}
         <span className="meta-spacer" aria-hidden>{meta}</span>
       </p>}
@@ -177,10 +177,12 @@ function Tail() {
 /**
  * plain: sem links clicáveis (a citação inteira já é um botão).
  * ids: quem a mensagem marcou de verdade (salvo no banco); assim dois "Estevão Silva" não se confundem.
+ * all: a mensagem marcou todo mundo com @all.
  */
-export function Formatted({ text, plain = false, ids }: { text: string; plain?: boolean; ids?: string[] }) {
+export function Formatted({ text, plain = false, ids, all = false }: { text: string; plain?: boolean; ids?: string[]; all?: boolean }) {
   const mentions = use(MentionPeople);
-  const people = ids ? mentions.people.filter(p => ids.includes(p.id)) : mentions.people;
+  const marked = ids ? mentions.people.filter(p => ids.includes(p.id)) : mentions.people;
+  const people = all ? [...marked, ALL_MENTIONABLE] : marked;
   return <Tokens tokens={formatMessage(text, people)} plain={plain} mentions={mentions} />;
 }
 
@@ -190,7 +192,7 @@ function Tokens({ tokens, plain, mentions }: { tokens: Token[]; plain: boolean; 
     switch (token.type) {
       case 'text': return token.text;
       case 'link': return plain ? token.text : <a key={i} className="bubble-link" href={token.href} target="_blank" rel="noopener noreferrer nofollow" onClick={e => e.stopPropagation()}>{token.text}</a>;
-      case 'mention': return plain || !onOpen || token.id === me ? <span key={i} className="mention">@{token.text}</span>
+      case 'mention': return plain || !onOpen || token.id === me || token.id === ALL_MENTIONABLE.id ? <span key={i} className="mention">@{token.text}</span>
         : <button key={i} type="button" className="mention" onClick={e => { e.stopPropagation(); onOpen(token.id); }}>@{token.text}</button>;
       case 'code': return <code key={i}>{token.text}</code>;
       case 'mono': return <code key={i} className="mono">{token.text}</code>;

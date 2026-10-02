@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { ArrowLeft, AtSign, Ban, ChevronDown, Copy, EllipsisVertical, Flag, LogIn, Pencil, Pin, Reply as ReplyIcon, Trash2, UserX } from 'lucide-react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { dayLabel, fold, mentionedIds } from '@/lib/chat-format';
+import { dayLabel, fold, hasMentionAll, mentionedIds, mentionsMe } from '@/lib/chat-format';
 import { makeThumbnail, MAX_FILE_SIZE, storageName } from '@/lib/media';
 import { shortName } from '@/lib/names';
 import { clearChatNotifications } from '@/lib/push';
@@ -18,7 +18,7 @@ import { bucketFor } from './files';
 import { InfoPanel } from './group-info';
 import { GroupAvatar, useGroupMembers } from './groups';
 import { MediaSend, type Pick } from './media-send';
-import { MentionPeople, useMentionables, usePeople, type MentionContext } from './mentions';
+import { ALL, MentionPeople, useMentionables, usePeople, type MentionContext } from './mentions';
 import { Bubble, MessageRow, type MenuRequest, type Receipts, type VoiceInfo } from './message';
 import { MessageMenu, type MenuAction } from './message-menu';
 import { Reactors } from './reactors';
@@ -72,6 +72,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const everyone = usePeople(general);
   const { members, reload: reloadMembers } = useGroupMembers(group ? conversationId : null);
   const people = general ? everyone : group ? members ?? NO_PEOPLE : NO_PEOPLE;
+  // @all: num grupo criado qualquer participante marca todo mundo; no grupo geral (o app inteiro), só a organização.
+  const canMentionAll = !!group || moderador;
   const mentionables = useMentionables(people);
   const mentionContext: MentionContext = { people: mentionables, me: userId, onOpen: id => { const person = people.find(p => p.id === id); if (person) onOpenPerson(person); } };
   // Menções a você que ainda não foram vistas: o botão @ acima do "descer" leva a cada uma, como no WhatsApp.
@@ -167,7 +169,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
         setReads(Object.fromEntries((saved.data ?? []).filter(r => r.user_id !== userId)
           .map(r => [r.user_id, { read: r.last_read_id, delivered: Math.max(r.last_delivered_id, r.last_read_id) }])));
         // Menções a você no grupo que chegaram desde a última leitura: o botão @ leva a cada uma.
-        if (userId && page) setMentionedMe(page.filter(m => m.id > myRead && !m.deleted_at && m.mentions?.includes(userId)).map(m => m.id));
+        if (userId && page) setMentionedMe(page.filter(m => m.id > myRead && !m.deleted_at && mentionsMe(m, userId)).map(m => m.id));
         applyPage(page);
       });
     } else {
@@ -206,7 +208,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
         if (stickToBottom.current) markSeen(row.id);
         else {
           setNewCount(count => count + 1);
-          if (userId && row.user_id !== userId && row.mentions?.includes(userId)) setMentionedMe(current => [...current, row.id]);
+          if (mentionsMe(row, userId)) setMentionedMe(current => [...current, row.id]);
         }
       })
       // Edições, e a pessoa que trocou o nome e teve as mensagens antigas atualizadas.
@@ -371,6 +373,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     const reply = replyTo ? toReply(replyTo) : null;
     const bucket = bucketFor(conversationId);
     const mentions = multi && body ? whoIsMentioned(body) : [];
+    const mentionAll = canMentionAll && hasMentionAll(body);
     stickToBottom.current = true;
     lastTyping.current = 0;
     setNewCount(0);
@@ -380,7 +383,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       file_path: file ? 'pending' : null, file_name: file?.name ?? null, file_type: file ? file.type || 'application/octet-stream' : null,
       file_size: file?.size ?? null, thumb_path: null, width: null, height: null, created_at: new Date().toISOString(),
       deleted_at: null, deleted_by: null, reply_to: replyTo?.id ?? null, edited_at: null, conversation_id: conversationId,
-      duration_ms: voice?.durationMs ?? null, waveform: voice?.waveform ?? null, mentions, event: null,
+      duration_ms: voice?.durationMs ?? null, waveform: voice?.waveform ?? null, mentions, mention_all: mentionAll, event: null,
       reactions: [], reply, pending: true, localUrl,
     }]);
     const uploaded: string[] = [];
@@ -434,7 +437,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       return person && !names.has(fold(shortName(person.name)));
     });
     picked.current = [];
-    return [...new Set([...chosen.map(p => p.id), ...typed])].filter(id => id !== userId);
+    return [...new Set([...chosen.map(p => p.id), ...typed])].filter(id => id !== userId && id !== ALL.id);
   }
 
   function submit() {
@@ -729,7 +732,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
           Você bloqueou este contato. Toque para desbloquear.
         </button>
         : leftGroup ? <p className="chat-login blocked-bar">Você não faz mais parte deste grupo.</p>
-        : <Compose text={text} setText={setText} context={context} userId={userId} people={multi ? people : undefined} onMention={person => { picked.current = [...picked.current, person]; }} inputRef={input}
+        : <Compose text={text} setText={setText} context={context} userId={userId} people={multi ? people : undefined} mentionAll={canMentionAll} onMention={person => { picked.current = [...picked.current, person]; }} inputRef={input}
           onCancelContext={cancelContext} onSubmit={submit} onFile={chooseFile} onTyping={() => sendTyping()}
           onVoice={sendVoice} onRecording={sendRecording} onError={notify} />}
     </div>
