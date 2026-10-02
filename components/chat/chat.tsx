@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, AtSign, Ban, ChevronDown, Copy, EllipsisVertical, Flag, LogIn, Pencil, Pin, Reply as ReplyIcon, Trash2, UserX } from 'lucide-react';
+import { ArrowLeft, AtSign, Ban, ChevronDown, Copy, EllipsisVertical, Flag, Info, LogIn, Pencil, Pin, Reply as ReplyIcon, Trash2, UserX } from 'lucide-react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { dayLabel, fold, hasMentionAll, mentionedIds, mentionsMe } from '@/lib/chat-format';
@@ -14,12 +14,14 @@ import { useAuth } from '../auth';
 import { Avatar, Sheet } from '../ui';
 import { Compose, type ComposeContext } from './compose';
 import { EmojiPicker } from './emoji-picker';
+import { useGeneralReceipts } from './general-receipts';
 import { bucketFor } from './files';
 import { InfoPanel } from './group-info';
 import { GroupAvatar, useGroupMembers } from './groups';
 import { MediaSend, type Pick } from './media-send';
 import { ALL, MentionPeople, useMentionables, usePeople, type MentionContext } from './mentions';
 import { Bubble, MessageRow, type MenuRequest, type Receipts, type VoiceInfo } from './message';
+import { MessageInfo } from './message-info';
 import { MessageMenu, type MenuAction } from './message-menu';
 import { Reactors } from './reactors';
 import { canEdit, eventText, isAudio, isImage, targetKey, toReply, type GroupEvent, type Message, type Person, type Reaction, type Reply, type Row, type Target } from './types';
@@ -93,6 +95,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const [reactorsOf, setReactorsOf] = useState<Message | null>(null);
   const [viewer, setViewer] = useState<Message | null>(null);
   const [info, setInfo] = useState<null | 'info' | 'blocked'>(null);
+  // Dados da mensagem (quem recebeu e leu): ocupa o lugar dos dados do grupo ou do contato.
+  const [infoOf, setInfoOf] = useState<Message | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   // Quem está digitando ou gravando áudio agora (o WhatsApp mostra os dois no topo).
   const [typers, setTypers] = useState<Record<string, { name: string; audio: boolean }>>({});
@@ -100,8 +104,9 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   // Faixa "N mensagens não lidas": o que chegou entre a última visita e a abertura da conversa.
   const [readAtOpen, setReadAtOpen] = useState(() => general ? lastReadId() : 0);
   const [unreadUpTo, setUnreadUpTo] = useState(0);
-  // Até onde cada outra pessoa da conversa recebeu (✓✓) e leu (✓✓ azul).
+  // Até onde cada outra pessoa da conversa recebeu (✓✓) e leu (✓✓ azul). No geral, o banco já manda o de todo mundo junto.
   const [reads, setReads] = useState<Record<string, Receipts>>({});
+  const generalReads = useGeneralReceipts(general && !!userId);
   // Quando a pessoa está lendo mensagens antigas, as novas viram um contador no botão de descer.
   const [newCount, setNewCount] = useState(0);
   const [atBottom, setAtBottom] = useState(true);
@@ -119,16 +124,20 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const latestId = useRef(0);
 
   /**
-   * Marca como lida: no aparelho para o grupo, no banco para as particulares (é o que acende o azul do outro lado).
+   * Marca como lida: no banco (é o que acende o azul do outro lado) e, no grupo geral, também no aparelho, para a contagem de não lidas.
    * Só com a tela visível: conversa aberta numa aba escondida não conta como lida, como no WhatsApp.
    */
   const markSeen = useCallback((lastId: number) => {
     if (lastId <= 0 || lastId <= lastSeen.current || document.visibilityState !== 'visible') return;
     lastSeen.current = lastId;
     void clearChatNotifications(key);
-    if (!conversationId) { markRead(lastId); return; }
+    if (!conversationId) {
+      markRead(lastId);
+      if (userId) void supabase.rpc('mark_general_read', { p_last_id: lastId });
+      return;
+    }
     void supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId, p_last_id: lastId }).then(() => { refreshDm(); onSeen(key); });
-  }, [conversationId, key, markRead, refreshDm, onSeen]);
+  }, [conversationId, key, userId, markRead, refreshDm, onSeen]);
 
   const applyPage = useCallback((page: Message[] | null, before?: number) => {
     if (!page) { if (before) notify('Não foi possível carregar as mensagens anteriores.'); else setStatus('error'); return; }
@@ -556,6 +565,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     });
   }
 
+  function openInfo(view: 'info' | 'blocked') { setInfoOf(null); setInfo(view); }
+
   function askLeave() {
     if (!group || !conversationId) return;
     setConfirm({
@@ -577,6 +588,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     const actions: MenuAction[] = [{ id: 'reply', label: 'Responder', icon: <ReplyIcon size={20} /> }];
     if (message.body) actions.push({ id: 'copy', label: 'Copiar', icon: <Copy size={20} /> });
     if (canEdit(message, userId)) actions.push({ id: 'edit', label: 'Editar', icon: <Pencil size={20} /> });
+    if (message.user_id === userId && !message.deleted_at && !message.pending) actions.push({ id: 'info', label: 'Dados', icon: <Info size={20} /> });
     if (message.user_id === userId) return [...actions, { id: 'delete', label: 'Apagar', icon: <Trash2 size={20} />, danger: true }];
     actions.push({ id: 'report', label: 'Denunciar', icon: <Flag size={20} />, danger: true });
     if (!blocked.includes(message.user_id)) actions.push({ id: 'block', label: `Bloquear ${name}`, icon: <Ban size={20} />, danger: true });
@@ -595,6 +607,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       case 'reply': startReply(message); break;
       case 'copy': void copy(message); break;
       case 'edit': startEdit(message); break;
+      case 'info': setInfo(null); setInfoOf(message); break;
       case 'delete': setConfirm({ title: 'Apagar mensagem?', text: multi ? 'A mensagem será apagada para todas as pessoas do grupo.' : `A mensagem será apagada para você e para ${other ? shortName(other.name) : 'a outra pessoa'}.`, label: 'Apagar para todos', run: () => void remove(message) }); break;
       case 'report': setConfirm({ title: `Denunciar ${name}?`, text: 'A organização vai analisar esta mensagem em até 24 horas. Quem mandou não fica sabendo.', label: 'Denunciar', run: () => void report(message) }); break;
       case 'block': askBlock({ id: message.user_id, name: message.author_name, avatar_url: message.author_avatar }, message.id); break;
@@ -645,7 +658,10 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   // Tiques: na particular, os da outra pessoa; no grupo, o menor de todos (azul só quando todo mundo leu).
   const receiptsOf = (ids: string[]): Receipts | null => ids.length
     ? { read: Math.min(...ids.map(id => reads[id]?.read ?? 0)), delivered: Math.min(...ids.map(id => reads[id]?.delivered ?? 0)) } : null;
-  const tickState = other ? receiptsOf([other.id]) : group ? receiptsOf(othersInGroup.map(m => m.id)) : null;
+  const tickState = other ? receiptsOf([other.id]) : group ? receiptsOf(othersInGroup.map(m => m.id)) : generalReads.receipts;
+  // Mensagem dos dados (a versão mais nova; apagada, o painel fecha) e quantas pessoas já receberam e leram, para atualizar ao vivo.
+  const infoMessage = infoOf ? byId.get(infoOf.id) ?? infoOf : null;
+  const infoStamp = !infoMessage ? '' : general ? String(generalReads.version) : `${Object.values(reads).filter(r => r.read >= infoMessage.id).length}:${Object.values(reads).filter(r => r.delivered >= infoMessage.id).length}`;
   /** Microfone: verde (você não ouviu), azul (ouvido) ou cinza (seu, ainda não ouvido; no grupo aberto fica cinza). */
   const voiceOf = (m: Message, index: number): VoiceInfo | undefined => {
     if (!isAudio(m) || m.deleted_at) return undefined;
@@ -659,13 +675,13 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   };
   const indexOf = new Map(visible.map((m, i) => [m.id, i]));
 
-  return <MentionPeople value={mentionContext}><section className={`chat ${multi ? 'group' : 'direct'} ${info ? 'with-info' : ''}`} aria-label={other ? `Conversa com ${other.name}` : group ? `Grupo ${group.name}` : 'Chat da comunidade'}>
+  return <MentionPeople value={mentionContext}><section className={`chat ${multi ? 'group' : 'direct'} ${info || infoMessage ? 'with-info' : ''}`} aria-label={other ? `Conversa com ${other.name}` : group ? `Grupo ${group.name}` : 'Chat da comunidade'}>
     <div className="chat-main" onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={onDrop}>
       {/* Atrás de tudo, inclusive da barra de digitar, que flutua sobre ele. */}
       <div className="chat-wallpaper" aria-hidden />
       <header className="chat-header">
         <button className="icon-button chat-back only-mobile" onClick={onBack} aria-label="Voltar para as conversas"><ArrowLeft size={22} /></button>
-        <button className="chat-title" onClick={() => setInfo('info')} aria-label={other ? 'Dados do contato' : 'Dados do grupo'}>
+        <button className="chat-title" onClick={() => openInfo('info')} aria-label={other ? 'Dados do contato' : 'Dados do grupo'}>
           {other ? <Avatar id={other.id} name={other.name} url={other.avatar_url} />
             : group ? <GroupAvatar id={key} group={group} />
             : <img src="/images/logo.png" alt="" className="chat-avatar" />}
@@ -678,15 +694,15 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       </header>
       {headerMenu && <div className="menu-layer" onClick={() => setHeaderMenu(false)}>
         <div className="menu-list header-menu" role="menu">
-          <button role="menuitem" onClick={() => { setHeaderMenu(false); setInfo('info'); }}><span>{other ? 'Dados do contato' : 'Dados do grupo'}</span></button>
+          <button role="menuitem" onClick={() => { setHeaderMenu(false); openInfo('info'); }}><span>{other ? 'Dados do contato' : 'Dados do grupo'}</span></button>
           {other
             ? <button role="menuitem" className="danger" onClick={() => { setHeaderMenu(false); if (otherBlocked) onUnblock(other.id); else askBlock(other); }}><span>{otherBlocked ? 'Desbloquear' : 'Bloquear'}</span></button>
             : group ? !leftGroup && <button role="menuitem" className="danger" onClick={() => { setHeaderMenu(false); askLeave(); }}><span>Sair do grupo</span></button>
-            : <button role="menuitem" onClick={() => { setHeaderMenu(false); setInfo('blocked'); }}><span>Pessoas bloqueadas</span></button>}
+            : <button role="menuitem" onClick={() => { setHeaderMenu(false); openInfo('blocked'); }}><span>Pessoas bloqueadas</span></button>}
           <button role="menuitem" onClick={() => { setHeaderMenu(false); onBack(); }}><span>Fechar conversa</span></button>
         </div>
       </div>}
-      {general && <button className="chat-pinned" onClick={() => setInfo('info')}>
+      {general && <button className="chat-pinned" onClick={() => openInfo('info')}>
         <span className="pinned-text"><small>Mensagem fixada</small><span>Respeito é a nossa principal regra. Boa torcida!</span></span><Pin size={18} />
       </button>}
 
@@ -741,6 +757,9 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       contactOnline={!!other && onlineUsers.has(other.id)} blocked={blocked} members={members} onUnblock={onUnblock}
       onBlock={person => askBlock(person, messages.findLast(m => m.user_id === person.id && !m.deleted_at)?.id)}
       onOpenMedia={setViewer} onOpenPerson={onOpenPerson} onLeft={onLeft} onMembersChanged={reloadMembers} onClose={() => setInfo(null)} />
+
+    {infoMessage && !infoMessage.deleted_at && !info && <MessageInfo key={`dados-${infoMessage.id}`} message={infoMessage} userId={userId} reply={replyOf(infoMessage)}
+      group={multi} receipts={tickState} stamp={infoStamp} onClose={() => setInfoOf(null)} />}
 
     {menu && menuMessage && <MessageMenu request={menu} own={menuMessage.user_id === userId}
       myReaction={menuMessage.reactions.find(r => r.user_id === userId)?.emoji ?? null} actions={actionsFor(menuMessage)} onAction={id => runAction(menuMessage, id)}
