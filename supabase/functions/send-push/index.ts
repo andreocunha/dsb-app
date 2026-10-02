@@ -108,8 +108,15 @@ const duracao = (ms: number) => {
 type Mensagem = {
   id: number; user_id: string; author_name: string; body: string | null; file_type: string | null;
   file_name: string | null; duration_ms: number | null; conversation_id: string | null; reply_to: number | null; deleted_at: string | null;
-  mentions: string[] | null; event: { type: string; users?: { id: string }[] } | null;
+  mentions: string[] | null; mention_all: boolean | null; event: { type: string; users?: { id: string }[] } | null;
 };
+
+/** Filtro .in() com muitos ids (o @all do grupo geral) vai em partes, para a URL não estourar. */
+async function emLotes<T>(ids: string[], buscar: (lote: string[]) => PromiseLike<{ data: T[] | null }>) {
+  const linhas: T[] = [];
+  for (let i = 0; i < ids.length; i += 150) linhas.push(...((await buscar(ids.slice(i, i + 150))).data ?? []));
+  return linhas;
+}
 
 /** O que aparece na notificação, igual à prévia da lista de conversas do WhatsApp. */
 function previa(m: Mensagem) {
@@ -125,14 +132,15 @@ function previa(m: Mensagem) {
 /**
  * Mensagem nova do chat: avisa só quem ela é para. Conversa particular → a outra pessoa;
  * grupo criado pelas pessoas → todo mundo que participa (e quem acabou de ser adicionado, no aviso de entrada);
- * grupo geral → quem foi marcado com @ e quem escreveu a mensagem respondida (um aviso só por pessoa).
+ * grupo geral → quem foi marcado com @ (no @all, todo mundo com o app no celular) e quem escreveu a mensagem
+ * respondida (um aviso só por pessoa).
  * Quem bloqueou o autor não recebe.
  */
 // deno-lint-ignore no-explicit-any
 async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
   const { data: m } = await supabase
     .from('messages')
-    .select('id, user_id, author_name, body, file_type, file_name, duration_ms, conversation_id, reply_to, deleted_at, mentions, event')
+    .select('id, user_id, author_name, body, file_type, file_name, duration_ms, conversation_id, reply_to, deleted_at, mentions, mention_all, event')
     .eq('id', id)
     .maybeSingle() as { data: Mensagem | null };
   if (!m || m.deleted_at) return { enviados: 0, motivo: 'mensagem não encontrada' };
@@ -156,7 +164,7 @@ async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
         ? await supabase.from('messages').select('user_id, deleted_at').eq('id', m.reply_to).maybeSingle()
         : { data: null };
       for (const p of participantes ?? []) {
-        const texto = (m.mentions ?? []).includes(p.user_id) ? `${autor} mencionou você: ${previa(m)}`
+        const texto = m.mention_all || (m.mentions ?? []).includes(p.user_id) ? `${autor} mencionou você: ${previa(m)}`
           : original && !original.deleted_at && original.user_id === p.user_id ? `${autor} respondeu: ${previa(m)}`
           : `${autor}: ${previa(m)}`;
         destinos.set(p.user_id, { titulo: c.name, texto, grupo: conversa });
@@ -166,7 +174,12 @@ async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
     const outra = c.user_a === m.user_id ? c.user_b : c.user_a;
     if (outra) destinos.set(outra, { titulo: nomeCurto(m.author_name), texto: previa(m), grupo: m.conversation_id! });
   } else if (!m.conversation_id) {
-    for (const uid of m.mentions ?? []) {
+    // @all no grupo geral: quem tem o app instalado (só a organização consegue mandar).
+    const { data: todos } = m.mention_all
+      ? await supabase.from('push_devices').select('user_id').not('user_id', 'is', null)
+      : { data: null };
+    const marcados = new Set([...(m.mentions ?? []), ...(todos ?? []).map((d: { user_id: string }) => d.user_id)]);
+    for (const uid of marcados) {
       destinos.set(uid, { titulo: 'Torcida Solar', texto: `${nomeCurto(m.author_name)} mencionou você: ${previa(m)}`, grupo: 'geral' });
     }
     if (m.reply_to) {
@@ -179,12 +192,12 @@ async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
   destinos.delete(m.user_id);
   if (!destinos.size) return { enviados: 0, motivo: 'sem destinatário' };
 
-  const { data: bloqueios } = await supabase
-    .from('user_blocks').select('blocker_id').eq('blocked_id', m.user_id).in('blocker_id', [...destinos.keys()]);
-  for (const b of bloqueios ?? []) destinos.delete(b.blocker_id);
+  const bloqueios = await emLotes([...destinos.keys()], ids =>
+    supabase.from('user_blocks').select('blocker_id').eq('blocked_id', m.user_id).in('blocker_id', ids));
+  for (const b of bloqueios as { blocker_id: string }[]) destinos.delete(b.blocker_id);
   if (!destinos.size) return { enviados: 0, motivo: 'autor bloqueado' };
 
-  const { data: aparelhos } = await supabase.from('push_devices').select('token, user_id').in('user_id', [...destinos.keys()]);
+  const aparelhos = await emLotes([...destinos.keys()], ids => supabase.from('push_devices').select('token, user_id').in('user_id', ids));
   let enviados = 0;
   const invalidos: string[] = [];
   for (const [uid, aviso] of destinos) {

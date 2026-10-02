@@ -89,6 +89,18 @@ function findMention(text: string, at: number, people: Mentionable[]) {
   return best;
 }
 
+/**
+ * @all marca todo mundo da conversa (o banco guarda em mention_all). Vale como palavra solta,
+ * igual à regra do send_message: "@all" sim, "@allan" e "e-mail@all" não.
+ */
+export const MENTION_ALL = 'all';
+export const hasMentionAll = (text: string) => /(^|[^\p{L}\p{N}_])@all(?![\p{L}\p{N}_])/iu.test(text);
+
+/** A mensagem marcou você: pelo nome ou com o @all de outra pessoa. */
+export function mentionsMe(row: { user_id: string; mentions?: string[] | null; mention_all?: boolean | null }, userId: string | null) {
+  return !!userId && row.user_id !== userId && (!!row.mentions?.includes(userId) || !!row.mention_all);
+}
+
 /** Quem foi marcado no texto (sem repetir), na ordem em que aparece. Vai junto com a mensagem para o banco avisar. */
 export function mentionedIds(text: string, people: Mentionable[]) {
   const ids = new Set<string>();

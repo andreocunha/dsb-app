@@ -44,6 +44,7 @@ export type Database = {
           height: number | null
           id: number
           mentions: string[]
+          mention_all: boolean
           event: Json | null
           reply_to: number | null
           thumb_path: string | null
@@ -190,6 +191,7 @@ export type Database = {
           played_by_others: boolean
           waveform: number[]
           mentions: string[]
+          mention_all: boolean
           event: Json
           created_at: string
           deleted_at: string

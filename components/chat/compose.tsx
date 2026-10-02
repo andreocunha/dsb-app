@@ -19,10 +19,10 @@ const hasKeyboard = () => window.matchMedia('(hover: hover) and (pointer: fine)'
 
 /**
  * Barra de digitar: pílula com emoji, texto e anexos no celular; barra inteira no desktop (WhatsApp Web).
- * people: no grupo, quem aparece na lista ao digitar @.
+ * people: no grupo, quem aparece na lista ao digitar @. mentionAll: o @all entra no topo da lista.
  */
-export function Compose({ text, setText, context, userId, people, onMention, inputRef, onCancelContext, onSubmit, onFile, onTyping, onVoice, onRecording, onError }: {
-  text: string; setText: (text: string) => void; context: ComposeContext; userId: string | null; people?: Person[]; onMention?: (person: Person) => void;
+export function Compose({ text, setText, context, userId, people, mentionAll = false, onMention, inputRef, onCancelContext, onSubmit, onFile, onTyping, onVoice, onRecording, onError }: {
+  text: string; setText: (text: string) => void; context: ComposeContext; userId: string | null; people?: Person[]; mentionAll?: boolean; onMention?: (person: Person) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>; onCancelContext: () => void; onSubmit: () => void;
   onFile: (file: File) => void; onTyping: () => void;
   onVoice: (recording: Recording) => void; onRecording: () => void; onError: (message: string) => void;
@@ -47,7 +47,7 @@ export function Compose({ text, setText, context, userId, people, onMention, inp
   const [dismissed, setDismissed] = useState<number | null>(null);
   const listId = useId();
   const mention = people && caret !== null ? mentionQuery(text, caret) : null;
-  const matches = mention && mention.start !== dismissed ? suggest(people!, mention.query, userId) : [];
+  const matches = mention && mention.start !== dismissed ? suggest(people!, mention.query, userId, mentionAll) : [];
   const mentioning = matches.length > 0;
   const current = Math.min(active, matches.length - 1);
 

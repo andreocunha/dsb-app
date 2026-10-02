@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Ban, Camera, Check, CheckCheck, EllipsisVertical, FileText, Lock, LogIn, MessageSquarePlus, Mic, Pin, Search, Users, Video, X } from 'lucide-react';
 import { formatDuration } from '@/lib/voice';
-import { listTime } from '@/lib/chat-format';
+import { listTime, mentionsMe } from '@/lib/chat-format';
 import { shortName } from '@/lib/names';
 import { supabase, errorMessage } from '@/lib/supabase';
 import { useApp, useChatUnread, useOnlineUsers } from '../app-shell';
@@ -86,7 +86,7 @@ function ChatsScreen() {
         const viewing = openRef.current === row.conversation_id;
         const counts = row.user_id !== userId && !viewing;
         setChats(current => current?.map(c => c.id !== row.conversation_id ? c
-          : { ...c, last, unread: counts ? c.unread + 1 : c.unread, mentions: counts && (row.mentions as string[] | undefined)?.includes(userId ?? '') ? c.mentions + 1 : c.mentions }) ?? current);
+          : { ...c, last, unread: counts ? c.unread + 1 : c.unread, mentions: counts && mentionsMe(row as Parameters<typeof mentionsMe>[0], userId) ? c.mentions + 1 : c.mentions }) ?? current);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, ({ new: row }) => {
         const patch = (last: Last | null): Last | null => last && last.id === row.id ? { ...last, body: row.body, file_type: row.file_type, file_name: row.file_name, deleted: !!row.deleted_at } : last;
