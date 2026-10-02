@@ -6,6 +6,8 @@ import type { Database } from '@/lib/database.types';
 import { dayLabel, fold, hasMentionAll, mentionedIds, mentionsMe } from '@/lib/chat-format';
 import { makeThumbnail, MAX_FILE_SIZE, storageName } from '@/lib/media';
 import { shortName } from '@/lib/names';
+import { primeLivePosition, syncLiveSharing } from '@/lib/live-location';
+import { asPlace, isLivePlace, type LivePosition } from '@/lib/location';
 import { clearChatNotifications } from '@/lib/push';
 import { supabase, errorMessage } from '@/lib/supabase';
 import type { Recording } from '@/lib/voice';
@@ -18,6 +20,7 @@ import { useGeneralReceipts } from './general-receipts';
 import { bucketFor } from './files';
 import { InfoPanel } from './group-info';
 import { GroupAvatar, useGroupMembers } from './groups';
+import { LocationSend, LocationViewer, type LocationChoice } from './location';
 import { MediaSend, type Pick } from './media-send';
 import { ALL, MentionPeople, useMentionables, usePeople, type MentionContext } from './mentions';
 import { Bubble, MessageRow, type MenuRequest, type Receipts, type VoiceInfo } from './message';
@@ -44,7 +47,7 @@ async function fetchPage(conversationId: string | null, before?: number) {
 const order = (m: Message) => m.pending ? Number.MAX_SAFE_INTEGER : m.id;
 const sorted = (list: Message[]) => [...list].sort((a, b) => order(a) - order(b));
 const wiped = (m: Message, by: string | null): Message =>
-  ({ ...m, deleted_at: new Date().toISOString(), deleted_by: by, body: null, file_path: null, thumb_path: null, file_name: null, file_type: null, reactions: [] });
+  ({ ...m, deleted_at: new Date().toISOString(), deleted_by: by, body: null, file_path: null, thumb_path: null, file_name: null, file_type: null, location: null, live: null, reactions: [] });
 
 /**
  * Uma conversa, como no WhatsApp: o grupo geral (fotos e nomes de quem escreve, moderação),
@@ -94,6 +97,9 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const [reactPicker, setReactPicker] = useState<Message | null>(null);
   const [reactorsOf, setReactorsOf] = useState<Message | null>(null);
   const [viewer, setViewer] = useState<Message | null>(null);
+  // Localização: a tela de enviar e o mapa de uma localização aberta.
+  const [locating, setLocating] = useState(false);
+  const [mapOf, setMapOf] = useState<Message | null>(null);
   const [info, setInfo] = useState<null | 'info' | 'blocked'>(null);
   // Dados da mensagem (quem recebeu e leu): ocupa o lugar dos dados do grupo ou do contato.
   const [infoOf, setInfoOf] = useState<Message | null>(null);
@@ -230,6 +236,13 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'message_reactions' }, ({ new: row }) => upsertReaction(row as Reaction & { message_id: number }))
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, ({ old }) =>
         setMessages(current => current.map(m => m.id !== old.message_id ? m : { ...m, reactions: m.reactions.filter(r => r.user_id !== old.user_id) })))
+      // Localização em tempo real: a pessoa andou, o mapa do balão (e o aberto) acompanha.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_locations', ...filter }, ({ new: row }) => {
+        const at = row as Partial<LivePosition & { message_id: number; conversation_id: string | null }>;
+        if (!mine(at) || typeof at.message_id !== 'number' || typeof at.lat !== 'number' || typeof at.lng !== 'number') return;
+        const live: LivePosition = { lat: at.lat, lng: at.lng, accuracy: at.accuracy ?? null, heading: at.heading ?? null, updated_at: at.updated_at ?? new Date().toISOString() };
+        setMessages(current => current.map(m => m.id === at.message_id ? { ...m, live } : m));
+      })
       // Alguém ouviu uma mensagem de voz: o microfone fica azul.
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_plays' }, ({ new: row }) => {
         const play = row as { message_id: number; user_id: string };
@@ -392,7 +405,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       file_path: file ? 'pending' : null, file_name: file?.name ?? null, file_type: file ? file.type || 'application/octet-stream' : null,
       file_size: file?.size ?? null, thumb_path: null, width: null, height: null, created_at: new Date().toISOString(),
       deleted_at: null, deleted_by: null, reply_to: replyTo?.id ?? null, edited_at: null, conversation_id: conversationId,
-      duration_ms: voice?.durationMs ?? null, waveform: voice?.waveform ?? null, mentions, mention_all: mentionAll, event: null,
+      duration_ms: voice?.durationMs ?? null, waveform: voice?.waveform ?? null, mentions, mention_all: mentionAll, event: null, location: null,
       reactions: [], reply, pending: true, localUrl,
     }]);
     const uploaded: string[] = [];
@@ -431,6 +444,68 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       if (!file && body) setText(current => current || body);
       notify(errorMessage(error));
     }
+  }
+
+  /** Localização atual, um ponto escolhido no mapa ou em tempo real (que começa a mandar a posição na hora). */
+  async function sendLocation(choice: LocationChoice) {
+    setLocating(false);
+    if (!userId || !profile) return;
+    const tempId = -Date.now();
+    const replyTo = context?.kind === 'reply' ? context.message : null;
+    const reply = replyTo ? toReply(replyTo) : null;
+    if (replyTo) setContext(null);
+    const live = choice.minutes ? new Date(Date.now() + choice.minutes * 60_000).toISOString() : undefined;
+    const comment = choice.minutes && choice.comment ? choice.comment : null;
+    stickToBottom.current = true;
+    setNewCount(0);
+    setUnreadUpTo(0);
+    setMessages(current => [...current, {
+      id: tempId, user_id: userId, author_name: profile.name, author_avatar: profile.avatar_url, body: comment,
+      file_path: null, file_name: null, file_type: null, file_size: null, thumb_path: null, width: null, height: null, created_at: new Date().toISOString(),
+      deleted_at: null, deleted_by: null, reply_to: replyTo?.id ?? null, edited_at: null, conversation_id: conversationId,
+      duration_ms: null, waveform: null, mentions: [], mention_all: false, event: null,
+      location: { lat: choice.lat, lng: choice.lng, ...(choice.accuracy ? { accuracy: Math.round(choice.accuracy) } : {}), ...(live ? { live_until: live } : {}),
+        ...(choice.name ? { name: choice.name } : {}), ...(choice.address ? { address: choice.address } : {}) },
+      reactions: [], reply, pending: true,
+    }]);
+    const { data, error } = await supabase.rpc('send_location', {
+      p_conversation_id: conversationId, p_lat: choice.lat, p_lng: choice.lng, p_accuracy: choice.accuracy,
+      p_live_minutes: choice.minutes, p_body: comment ?? undefined, p_reply_to: replyTo?.id, p_name: choice.name, p_address: choice.address,
+    });
+    if (error) {
+      setMessages(current => current.filter(m => m.id !== tempId));
+      notify(errorMessage(error));
+      return;
+    }
+    const position: LivePosition | null = choice.minutes ? { lat: choice.lat, lng: choice.lng, accuracy: choice.accuracy ?? null, heading: null, updated_at: data.created_at } : null;
+    setMessages(current => sorted(current.filter(m => m.id !== data.id).map(m => m.id === tempId ? { ...data, reactions: [], reply, live: position } : m)));
+    markSeen(data.id);
+    if (choice.minutes) {
+      if (choice.position) primeLivePosition(choice.position);
+      void syncLiveSharing(userId);
+    }
+  }
+
+  function askStopLive(message: Message) {
+    setConfirm({
+      title: 'Parar de compartilhar?',
+      text: `${other ? `${shortName(other.name)} não verá` : group ? 'Os participantes do grupo não verão' : 'A torcida não verá'} mais onde você está. A última posição continua na conversa.`,
+      label: 'Parar',
+      run: () => void stopLive(message),
+    });
+  }
+
+  async function stopLive(message: Message) {
+    const ended = (m: Message): Message => ({ ...m, location: { ...asPlace(m.location)!, live_until: new Date().toISOString() } });
+    setMessages(current => current.map(m => m.id === message.id ? ended(m) : m));
+    const { error } = await supabase.rpc('stop_live_location', { p_message_id: message.id });
+    if (error) notify(errorMessage(error));
+    void syncLiveSharing(userId);
+  }
+
+  /** Toque numa foto ou vídeo abre o visualizador; numa localização, o mapa. */
+  function openMessage(message: Message) {
+    if (asPlace(message.location)) setMapOf(message); else setViewer(message);
   }
 
   /**
@@ -674,6 +749,9 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     };
   };
   const indexOf = new Map(visible.map((m, i) => [m.id, i]));
+  // Mapa aberto: a versão mais nova da mensagem (apagada, fecha) e as localizações em tempo real da conversa.
+  const mapMessage = mapOf ? byId.get(mapOf.id) ?? mapOf : null;
+  const liveMessages = visible.filter(m => !m.deleted_at && !m.pending && isLivePlace(asPlace(m.location)));
 
   return <MentionPeople value={mentionContext}><section className={`chat ${multi ? 'group' : 'direct'} ${info || infoMessage ? 'with-info' : ''}`} aria-label={other ? `Conversa com ${other.name}` : group ? `Grupo ${group.name}` : 'Chat da comunidade'}>
     <div className="chat-main" onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={onDrop}>
@@ -725,7 +803,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
                 {message.event ? <p id={`m-${message.id}`} className="chat-notice chat-event">{eventText(message.event as GroupEvent, message, userId)}</p>
                 : <MessageRow message={message} first={first} userId={userId} reply={replyOf(message)} flash={flash === message.id} group={multi} receipts={tickState}
                   voice={voiceOf(message, indexOf.get(message.id) ?? -1)}
-                  onMenu={setMenu} onReply={startReply} onOpen={setViewer} onJump={id => void jumpTo(id)} onReactors={setReactorsOf} />}
+                  onMenu={setMenu} onReply={startReply} onOpen={openMessage} onJump={id => void jumpTo(id)} onReactors={setReactorsOf} onStopLive={askStopLive} />}
               </div>;
             })}
           </section>)}
@@ -749,7 +827,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
         </button>
         : leftGroup ? <p className="chat-login blocked-bar">Você não faz mais parte deste grupo.</p>
         : <Compose text={text} setText={setText} context={context} userId={userId} people={multi ? people : undefined} mentionAll={canMentionAll} onMention={person => { picked.current = [...picked.current, person]; }} inputRef={input}
-          onCancelContext={cancelContext} onSubmit={submit} onFile={chooseFile} onTyping={() => sendTyping()}
+          onCancelContext={cancelContext} onSubmit={submit} onFile={chooseFile} onLocation={() => setLocating(true)} onTyping={() => sendTyping()}
           onVoice={sendVoice} onRecording={sendRecording} onError={notify} />}
     </div>
 
@@ -786,5 +864,9 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       onReply={m => { setViewer(null); setInfo(null); startReply(byId.get(m.id) ?? m); }}
       onReact={(m, emoji) => void react(byId.get(m.id) ?? m, emoji)} />
     <MediaSend key={`media-${pick?.url ?? 'fechado'}`} pick={pick} onClose={closePick} onSend={sendPick} />
+    <LocationSend open={locating} onClose={() => setLocating(false)} onSend={choice => void sendLocation(choice)}
+      audience={other ? `${shortName(other.name)} verá` : group ? 'Os participantes deste grupo verão' : 'Todo mundo na Torcida Solar verá'}
+      notice={general ? 'A Torcida Solar é aberta: qualquer pessoa, mesmo sem conta no app, vê a localização que você mandar aqui.' : undefined} />
+    <LocationViewer message={mapMessage} live={liveMessages} userId={userId} onClose={() => setMapOf(null)} onStop={askStopLive} />
   </section></MentionPeople>;
 }

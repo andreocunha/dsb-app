@@ -46,6 +46,7 @@ export type Database = {
           mentions: string[]
           mention_all: boolean
           event: Json | null
+          location: Json | null
           reply_to: number | null
           thumb_path: string | null
           user_id: string
@@ -67,6 +68,12 @@ export type Database = {
       }
       conversation_members: {
         Row: { conversation_id: string; user_id: string; admin: boolean; added_by: string | null; joined_at: string; since_id: number; left_at: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      live_locations: {
+        Row: { message_id: number; user_id: string; conversation_id: string | null; lat: number; lng: number; accuracy: number | null; heading: number | null; updated_at: string }
         Insert: never
         Update: never
         Relationships: []
@@ -199,6 +206,8 @@ export type Database = {
           mentions: string[]
           mention_all: boolean
           event: Json
+          location: Json
+          live: Json
           created_at: string
           deleted_at: string
           deleted_by: string
@@ -283,6 +292,13 @@ export type Database = {
         Returns: Database["public"]["Tables"]["messages"]["Row"]
       }
       update_profile: { Args: { p_name: string }; Returns: undefined }
+      send_location: {
+        Args: { p_conversation_id: string | null; p_lat: number; p_lng: number; p_accuracy?: number; p_live_minutes?: number; p_body?: string; p_reply_to?: number; p_name?: string; p_address?: string }
+        Returns: Database["public"]["Tables"]["messages"]["Row"]
+      }
+      update_live_location: { Args: { p_lat: number; p_lng: number; p_accuracy?: number; p_heading?: number }; Returns: number }
+      stop_live_location: { Args: { p_message_id?: number }; Returns: undefined }
+      my_live_locations: { Args: never; Returns: { message_id: number; conversation_id: string | null; live_until: string }[] }
     }
     Enums: { [_ in never]: never }
     CompositeTypes: { [_ in never]: never }

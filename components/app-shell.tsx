@@ -14,6 +14,7 @@ import { mentionsMe } from '@/lib/chat-format';
 import { closeTopOverlay } from '@/lib/overlays';
 import { hideSplash, listenBackButton, paintStatusBar } from '@/lib/system-ui';
 import { registerPush } from '@/lib/push';
+import { syncLiveSharing } from '@/lib/live-location';
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 type AppValue = { theme: string; setTheme: (theme: string) => void; notify: (message: string) => void };
 const AppContext = createContext<AppValue>({ theme: 'light', setTheme: () => {}, notify: () => {} });
@@ -137,6 +138,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     await App.exitApp();
   }), [router]);
 
+  // Localização em tempo real: ao abrir o app (e ao voltar para ele) retoma o envio da posição, se houver alguma ativa.
+  useEffect(() => {
+    void syncLiveSharing(userId);
+    const onVisible = () => { if (document.visibilityState === 'visible') void syncLiveSharing(userId); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [userId]);
   // Registra de novo ao entrar/sair, para associar o aparelho à conta.
   // Tocar numa notificação de mensagem abre a conversa dela; o voltar leva à lista, como em qualquer conversa.
   useEffect(() => {

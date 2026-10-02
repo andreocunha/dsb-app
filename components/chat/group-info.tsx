@@ -37,7 +37,7 @@ export async function fetchMessages(kind: 'media' | 'docs' | 'links', limit: num
   if (kind === 'docs') query = query.not('file_path', 'is', null).not('file_type', 'like', 'image/*').not('file_type', 'like', 'video/*').not('file_type', 'like', 'audio/*');
   if (kind === 'links') query = query.or(LINKS);
   const { data } = await query;
-  return (data ?? []).map(row => ({ ...row, mentions: [], mention_all: false, reactions: [], reply: null })) as Message[];
+  return (data ?? []).map(row => ({ ...row, mentions: [], mention_all: false, location: null, reactions: [], reply: null })) as Message[];
 }
 
 /**
