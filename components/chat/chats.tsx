@@ -10,6 +10,7 @@ import { supabase, errorMessage } from '@/lib/supabase';
 import { useApp, useChatUnread, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar } from '../ui';
+import { forgetConversation } from './cache';
 import { Conversation } from './chat';
 import { useGeneralReceipts } from './general-receipts';
 import { GroupAvatar, NewGroup } from './groups';
@@ -187,6 +188,7 @@ function ChatsScreen() {
 
   /** Você saiu do grupo por aqui: some da lista na hora, sem esperar o tempo real. */
   function leftGroup(id: string) {
+    forgetConversation(userId, id);
     setChats(current => current?.filter(c => c.id !== id) ?? current);
     if (extra && targetKey(extra) === id) setExtra(null);
     if (openRef.current === id) go(null);

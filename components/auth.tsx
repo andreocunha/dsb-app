@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase, errorMessage } from '@/lib/supabase';
 import { isNativeApp, listenNativeLogin, nativeSignIn } from '@/lib/native-auth';
+import { clearChatCache } from './chat/cache';
 import { Sheet } from './ui';
 
 export type Affiliation = 'team' | 'organization' | 'visitor';
@@ -98,7 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userId,
     profile,
     requireLogin: reason => { setError(''); setLoginReason(reason ?? 'Entre para participar do chat e do fantasy.'); },
-    signOut: async () => { await supabase.auth.signOut(); },
+    // As conversas guardadas no aparelho saem junto com a conta.
+    signOut: async () => { await supabase.auth.signOut(); clearChatCache(); },
     reloadProfile,
   };
 

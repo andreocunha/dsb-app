@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { TransformComponent, TransformWrapper, type ReactZoomPanPinchRef } from 'react-zoom-pan-pinch';
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Download, MessageSquareText, Play, Reply as ReplyIcon, SmilePlus, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { whenLabel } from '@/lib/chat-format';
 import { canSaveToGallery, isNativeApp, saveToGallery, shareNativeFile } from '@/lib/native-share';
+import { googleSize, proxiedImage } from '@/lib/images';
 import { registerOverlay } from '@/lib/overlays';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
@@ -10,11 +12,8 @@ import { fetchMessages } from './group-info';
 import { Formatted } from './message';
 import { authorLabel, isVideo, REACTIONS, type Message } from './types';
 
-type Zoom = { s: number; x: number; y: number };
 type StageApi = { zoomBy: (delta: number) => void };
-const NO_ZOOM: Zoom = { s: 1, x: 0, y: 0 };
 const MAX_ZOOM = 4;
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
 
 /**
  * Visualizador de fotos e vídeos do WhatsApp: quem mandou e quando no topo, ações à direita,
@@ -151,119 +150,141 @@ function Thumb({ message, active, onPick }: { message: Message; active: boolean;
   </button>;
 }
 
-/** A mídia em si, com zoom e gestos. */
+/** Área da foto: cabe inteira na tela, sem ampliar além do tamanho original. */
+function fitSize(box: { w: number; h: number }, ratio: number, maxW: number) {
+  const w = Math.min(box.w, box.h * ratio, maxW);
+  return { w: Math.round(w), h: Math.round(w / ratio) };
+}
+
+/**
+ * A mídia em si. A foto abre pela miniatura (já em cache do chat) e troca pelo original quando ele chega.
+ * Zoom pelo react-zoom-pan-pinch (pinça, roda, arrastar ampliada); clique (mouse) ou toque duplo alterna o zoom.
+ * Sem zoom, no toque: deslizar para os lados troca de mídia e puxar para baixo fecha.
+ */
 function Stage({ api, message, onScale, onPrev, onNext, onClose }: {
   api: React.Ref<StageApi>; message: Message; onScale: (scale: number) => void;
   onPrev: () => void; onNext: () => void; onClose: () => void;
 }) {
-  const [zoom, setZoomState] = useState<Zoom>(NO_ZOOM);
-  const setZoom = (next: Zoom) => { setZoomState(next); onScale(next.s); };
   const stage = useRef<HTMLDivElement>(null);
-  const image = useRef<HTMLImageElement>(null);
-  const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ startX: number; startY: number; start: Zoom; dist: number; moved: boolean; pinch: boolean; lastTap: number }>({ startX: 0, startY: 0, start: NO_ZOOM, dist: 0, moved: false, pinch: false, lastTap: 0 });
+  const zoom = useRef<ReactZoomPanPinchRef>(null);
+  const scale = useRef(1);
+  const pointers = useRef(new Set<number>());
+  const gesture = useRef({ x: 0, y: 0, moved: false, multi: false, lastTap: 0 });
+  const [zoomed, setZoomed] = useState(false);
   const [drag, setDrag] = useState({ x: 0, y: 0 });
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  // Proporção e tamanho original: do banco quando há, senão de quem carregar primeiro (miniatura ou original).
+  const [measured, setMeasured] = useState<{ ratio: number; maxW: number } | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const full = useFileUrl(message.conversation_id, message.file_path);
   const thumb = useFileUrl(message.conversation_id, message.thumb_path);
   const video = isVideo(message);
+  const known = message.width && message.height ? { ratio: message.width / message.height, maxW: message.width } : null;
+  const shape = known ?? measured;
+  const size = box && shape ? fitSize(box, shape.ratio, shape.maxW) : null;
 
-  /** Aplica um zoom mantendo parado o ponto da tela em (px, py), e não deixa a imagem sair da área. */
-  function zoomAt(next: number, px: number, py: number, from: Zoom = zoom) {
-    const el = stage.current, img = image.current;
-    if (!el || !img) return;
-    const s = clamp(next, 1, MAX_ZOOM);
-    if (s === 1) { setZoom(NO_ZOOM); return; }
-    const box = el.getBoundingClientRect();
-    const cx = px - (box.left + box.width / 2), cy = py - (box.top + box.height / 2);
-    const x = cx - (s / from.s) * (cx - from.x), y = cy - (s / from.s) * (cy - from.y);
-    setZoom(fit({ s, x, y }));
-  }
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-  function fit(z: Zoom): Zoom {
-    const el = stage.current, img = image.current;
-    if (!el || !img) return z;
-    const maxX = Math.max(0, (img.offsetWidth * z.s - el.clientWidth) / 2);
-    const maxY = Math.max(0, (img.offsetHeight * z.s - el.clientHeight) / 2);
-    return { s: z.s, x: clamp(z.x, -maxX, maxX), y: clamp(z.y, -maxY, maxY) };
-  }
+  // A área da foto mudou (girou a tela, chegou o tamanho): volta ao centro, sem zoom.
+  useEffect(() => { if (size) zoom.current?.centerView(1, 0); }, [size?.w, size?.h]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Botões e teclado do topo ampliam pelo centro da área.
   useImperativeHandle(api, () => ({
     zoomBy(delta: number) {
-      const box = stage.current?.getBoundingClientRect();
-      if (box) zoomAt(zoom.s + delta, box.left + box.width / 2, box.top + box.height / 2);
+      if (delta > 0) zoom.current?.zoomIn(delta); else zoom.current?.zoomOut(-delta);
     },
   }));
 
-  function onPointerDown(e: React.PointerEvent) {
-    if (video) return;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ponteiro já saiu */ }
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const g = gesture.current;
-    if (pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      Object.assign(g, { pinch: true, dist: Math.hypot(a.x - b.x, a.y - b.y), start: zoom, moved: true });
-      return;
+  function onTransform(_: unknown, state: { scale: number }) {
+    const before = scale.current;
+    scale.current = state.scale;
+    // O topo só precisa saber quando cruza 1x ou o máximo (para habilitar os botões), não a cada quadro.
+    if ((before > 1.01) !== (state.scale > 1.01) || (before >= MAX_ZOOM) !== (state.scale >= MAX_ZOOM)) {
+      setZoomed(state.scale > 1.01);
+      onScale(state.scale);
     }
-    Object.assign(g, { startX: e.clientX, startY: e.clientY, start: zoom, moved: false, pinch: false });
+  }
+
+  function toggleZoom(x: number, y: number) {
+    const z = zoom.current;
+    if (!z) return;
+    if (scale.current > 1.01) void z.resetTransform(200);
+    else void z.zoomToPoint(2.5, x, y, 200);
+  }
+
+  function onPointerDown(e: React.PointerEvent) {
+    pointers.current.add(e.pointerId);
+    const g = gesture.current;
+    if (pointers.current.size > 1) { g.multi = true; setDrag({ x: 0, y: 0 }); return; }
+    Object.assign(g, { x: e.clientX, y: e.clientY, moved: false, multi: false });
   }
 
   function onPointerMove(e: React.PointerEvent) {
-    if (!pointers.current.has(e.pointerId)) return;
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const g = gesture.current;
-    if (g.pinch && pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      zoomAt(g.start.s * Math.hypot(a.x - b.x, a.y - b.y) / g.dist, (a.x + b.x) / 2, (a.y + b.y) / 2, g.start);
-      return;
-    }
-    const dx = e.clientX - g.startX, dy = e.clientY - g.startY;
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) g.moved = true;
-    if (!g.moved) return;
-    // Ampliada: arrastar move a imagem. Sem zoom (toque): acompanha o dedo para trocar ou fechar.
-    if (zoom.s > 1) setZoom(fit({ s: zoom.s, x: g.start.x + dx, y: g.start.y + dy }));
-    else if (e.pointerType !== 'mouse') setDrag(Math.abs(dx) > Math.abs(dy) ? { x: dx, y: 0 } : { x: 0, y: Math.max(0, dy) });
+    if (!pointers.current.has(e.pointerId) || g.multi) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) g.moved = true;
+    // Ampliada, quem move a foto é a biblioteca. Sem zoom (toque): acompanha o dedo para trocar ou fechar.
+    if (!g.moved || scale.current > 1.01 || e.pointerType === 'mouse') return;
+    setDrag(Math.abs(dx) > Math.abs(dy) ? { x: dx, y: 0 } : { x: 0, y: Math.max(0, dy) });
   }
 
   function onPointerUp(e: React.PointerEvent) {
-    pointers.current.delete(e.pointerId);
+    if (!pointers.current.delete(e.pointerId)) return;
     const g = gesture.current;
-    if (g.pinch) { if (pointers.current.size === 0) g.pinch = false; return; }
-    const dx = e.clientX - g.startX, dy = e.clientY - g.startY;
+    if (g.multi) { if (pointers.current.size === 0) g.multi = false; return; }
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
     setDrag({ x: 0, y: 0 });
+    if (e.type === 'pointercancel') return;
     if (!g.moved) {
+      if (video) return;
       // Mouse: clique amplia no ponto e clica de novo para voltar. Toque: toque duplo.
       const now = performance.now();
       const toggle = e.pointerType === 'mouse' || now - g.lastTap < 300;
-      g.lastTap = e.pointerType === 'mouse' ? 0 : now;
-      if (toggle) { if (zoom.s > 1) setZoom(NO_ZOOM); else zoomAt(2.5, e.clientX, e.clientY); }
+      g.lastTap = toggle ? 0 : now;
+      if (toggle) toggleZoom(e.clientX, e.clientY);
       return;
     }
-    if (zoom.s > 1 || e.pointerType === 'mouse') return;
+    if (scale.current > 1.01 || e.pointerType === 'mouse') return;
     if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy)) { if (dx < 0) onNext(); else onPrev(); }
     else if (dy > 110) onClose();
   }
 
-  function onWheel(e: React.WheelEvent) {
-    if (video) return;
-    zoomAt(zoom.s * Math.exp(-e.deltaY * .0015), e.clientX, e.clientY);
-  }
+  const measure = (img: HTMLImageElement, original: boolean) => {
+    if (known || !img.naturalWidth || !img.naturalHeight) return;
+    // A miniatura dá só a proporção; o tamanho original vem do arquivo completo.
+    setMeasured(current => original || !current ? { ratio: img.naturalWidth / img.naturalHeight, maxW: original ? img.naturalWidth : Infinity } : current);
+  };
+  const swipe = drag.x || drag.y ? { transform: `translate(${drag.x}px, ${drag.y}px)`, opacity: 1 - Math.min(drag.y / 400, .5), transition: 'none' } : undefined;
 
-  const style = zoom.s > 1
-    ? { transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})` }
-    : drag.x || drag.y ? { transform: `translate(${drag.x}px, ${drag.y}px)`, opacity: 1 - Math.min(drag.y / 400, .5), transition: 'none' } : undefined;
-
-  return <div ref={stage} className={`viewer-stage ${zoom.s > 1 ? 'zoomed' : ''}`}
-    onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onWheel={onWheel}>
-    {video
-      ? <video src={full ?? undefined} controls autoPlay playsInline poster={thumb ?? undefined} />
-      : <img ref={image} src={full ?? thumb ?? undefined} alt={message.file_name ?? ''} draggable={false} style={style} />}
+  return <div ref={stage} className={`viewer-stage ${zoomed ? 'zoomed' : ''}`}
+    onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+    <div className="viewer-swipe" style={swipe}>
+      {video
+        ? <video src={full ?? undefined} controls autoPlay playsInline poster={thumb ?? undefined} />
+        : <TransformWrapper ref={zoom} minScale={1} maxScale={MAX_ZOOM} centerOnInit centerZoomedOut limitToBounds
+            doubleClick={{ disabled: true }} panning={{ disabled: !zoomed }} onTransform={onTransform}>
+          <TransformComponent wrapperStyle={{ width: '100%', height: '100%' }}>
+            <div className="viewer-photo" style={size ? { width: size.w, height: size.h } : { width: 0, height: 0 }}>
+              {thumb && !loaded && <img src={thumb} alt="" draggable={false} onLoad={e => measure(e.currentTarget, false)} />}
+              {full && <img src={full} alt={message.file_name ?? ''} draggable={false}
+                onLoad={e => { measure(e.currentTarget, true); setLoaded(true); }} />}
+            </div>
+          </TransformComponent>
+        </TransformWrapper>}
+    </div>
+    {!video && !loaded && <span className="viewer-loading"><span className="spinner" /></span>}
   </div>;
 }
 
 export type Photo = { id: string; name: string; url: string; subtitle?: string };
-/** Foto do Google vem em 96px; para a tela cheia pede a mesma foto em tamanho grande. */
-const fullSize = (url: string) => /googleusercontent\.com\//.test(url) ? url.replace(/=s\d+(-c)?$/, '=s800$1') : url;
+/** Tela cheia: a foto do Google em tamanho grande, reduzida e em cache pelo wsrv. */
+const fullSize = (url: string) => proxiedImage(googleSize(url, 1080), 1080, 'inside');
 
 /**
  * Foto do grupo ou de uma pessoa em tela cheia, como ao tocar na foto nos dados do contato do WhatsApp.
