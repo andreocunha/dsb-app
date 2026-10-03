@@ -101,6 +101,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const [locating, setLocating] = useState(false);
   const [mapOf, setMapOf] = useState<Message | null>(null);
   const [info, setInfo] = useState<null | 'info' | 'blocked'>(null);
+  // Dados de quem escreveu (tocar na foto ou no nome no grupo), no mesmo painel dos dados do grupo.
+  const [contactOf, setContactOf] = useState<Person | null>(null);
   // Dados da mensagem (quem recebeu e leu): ocupa o lugar dos dados do grupo ou do contato.
   const [infoOf, setInfoOf] = useState<Message | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
@@ -640,7 +642,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     });
   }
 
-  function openInfo(view: 'info' | 'blocked') { setInfoOf(null); setInfo(view); }
+  function openInfo(view: 'info' | 'blocked') { setInfoOf(null); setContactOf(null); setInfo(view); }
+  function openContact(person: Person) { setInfoOf(null); setContactOf(person); setInfo('info'); }
 
   function askLeave() {
     if (!group || !conversationId) return;
@@ -803,7 +806,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
                 {message.event ? <p id={`m-${message.id}`} className="chat-notice chat-event">{eventText(message.event as GroupEvent, message, userId)}</p>
                 : <MessageRow message={message} first={first} userId={userId} reply={replyOf(message)} flash={flash === message.id} group={multi} receipts={tickState}
                   voice={voiceOf(message, indexOf.get(message.id) ?? -1)}
-                  onMenu={setMenu} onReply={startReply} onOpen={openMessage} onJump={id => void jumpTo(id)} onReactors={setReactorsOf} onStopLive={askStopLive} />}
+                  onMenu={setMenu} onReply={startReply} onOpen={openMessage} onJump={id => void jumpTo(id)} onReactors={setReactorsOf} onStopLive={askStopLive}
+                  onPerson={openContact} />}
               </div>;
             })}
           </section>)}
@@ -831,10 +835,10 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
           onVoice={sendVoice} onRecording={sendRecording} onError={notify} />}
     </div>
 
-    <InfoPanel key={`info-${info ?? 'fechado'}`} target={target} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} online={online}
+    <InfoPanel key={`info-${info ?? 'fechado'}-${contactOf?.id ?? ''}`} target={target} open={!!info} initialView={info === 'blocked' ? 'blocked' : 'info'} initialContact={contactOf} online={online}
       contactOnline={!!other && onlineUsers.has(other.id)} blocked={blocked} members={members} onUnblock={onUnblock}
       onBlock={person => askBlock(person, messages.findLast(m => m.user_id === person.id && !m.deleted_at)?.id)}
-      onOpenMedia={setViewer} onOpenPerson={onOpenPerson} onLeft={onLeft} onMembersChanged={reloadMembers} onClose={() => setInfo(null)} />
+      onOpenMedia={setViewer} onOpenPerson={onOpenPerson} onLeft={onLeft} onMembersChanged={reloadMembers} onClose={() => { setInfo(null); setContactOf(null); }} />
 
     {infoMessage && !infoMessage.deleted_at && !info && <MessageInfo key={`dados-${infoMessage.id}`} message={infoMessage} userId={userId} reply={replyOf(infoMessage)}
       group={multi} receipts={tickState} stamp={infoStamp} onClose={() => setInfoOf(null)} />}

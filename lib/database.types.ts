@@ -97,9 +97,15 @@ export type Database = {
         Relationships: []
       }
       profiles: {
-        Row: { avatar_url: string | null; banned_at: string | null; banned_by: string | null; created_at: string; id: string; name: string; role: string; terms_accepted_at: string | null }
-        Insert: { avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id: string; name: string; role?: string; terms_accepted_at?: string | null }
-        Update: { avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id?: string; name?: string; role?: string; terms_accepted_at?: string | null }
+        Row: { affiliation: string | null; avatar_url: string | null; banned_at: string | null; banned_by: string | null; created_at: string; id: string; name: string; role: string; team_id: string | null; team_status: string | null; terms_accepted_at: string | null }
+        Insert: { affiliation?: string | null; avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id: string; name: string; role?: string; team_id?: string | null; team_status?: string | null; terms_accepted_at?: string | null }
+        Update: { affiliation?: string | null; avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id?: string; name?: string; role?: string; team_id?: string | null; team_status?: string | null; terms_accepted_at?: string | null }
+        Relationships: []
+      }
+      notification_prefs: {
+        Row: { announcements: boolean; chat: string; fantasy: boolean; updated_at: string; user_id: string }
+        Insert: { announcements?: boolean; chat?: string; fantasy?: boolean; updated_at?: string; user_id: string }
+        Update: { announcements?: boolean; chat?: string; fantasy?: boolean; updated_at?: string; user_id?: string }
         Relationships: []
       }
       push_devices: {
@@ -292,6 +298,10 @@ export type Database = {
         Returns: Database["public"]["Tables"]["messages"]["Row"]
       }
       update_profile: { Args: { p_name: string }; Returns: undefined }
+      update_avatar: { Args: { p_path: string | null }; Returns: string | null }
+      use_account_avatar: { Args: never; Returns: string }
+      update_affiliation: { Args: { p_affiliation: string; p_team_id?: string | null; p_team_status?: string | null }; Returns: undefined }
+      update_notification_prefs: { Args: { p_announcements: boolean; p_chat: string; p_fantasy: boolean }; Returns: undefined }
       send_location: {
         Args: { p_conversation_id: string | null; p_lat: number; p_lng: number; p_accuracy?: number; p_live_minutes?: number; p_body?: string; p_reply_to?: number; p_name?: string; p_address?: string }
         Returns: Database["public"]["Tables"]["messages"]["Row"]
