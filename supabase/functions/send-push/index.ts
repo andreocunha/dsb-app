@@ -5,6 +5,10 @@
 //   { "modo": "aviso", "titulo": "...", "texto": "..." } → recado para todo mundo
 //   { "modo": "mensagem", "id": 123 }         → mensagem nova do chat: particular, grupo, resposta ou menção no grupo geral (chamado pelo gatilho do banco)
 //
+// Cada pessoa escolhe o que recebe em Configurações (tabela notification_prefs; sem linha = padrão):
+//   chat: 'all' (tudo, inclusive a Torcida Solar), 'mentions' (padrão) ou 'off'
+//   fantasy: lembrete 1 hora antes da prova · announcements: largadas e recados da organização
+//
 // Segredos necessários (Supabase → Edge Functions → Secrets):
 //   FCM_SERVICE_ACCOUNT  JSON da conta de serviço do Firebase
 //   CRON_SECRET          valor combinado, exigido no cabeçalho x-cron-secret
@@ -135,8 +139,8 @@ function previa(m: Mensagem) {
  * Mensagem nova do chat: avisa só quem ela é para. Conversa particular → a outra pessoa;
  * grupo criado pelas pessoas → todo mundo que participa (e quem acabou de ser adicionado, no aviso de entrada);
  * grupo geral → quem foi marcado com @ (no @all, todo mundo com o app no celular) e quem escreveu a mensagem
- * respondida (um aviso só por pessoa).
- * Quem bloqueou o autor não recebe.
+ * respondida (um aviso só por pessoa); quem escolheu receber tudo do chat recebe qualquer mensagem do geral.
+ * Quem bloqueou o autor ou desligou as notificações do chat não recebe.
  */
 // deno-lint-ignore no-explicit-any
 async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
@@ -190,9 +194,19 @@ async function avisarMensagem(conta: ContaServico, supabase: any, id: number) {
         destinos.set(original.user_id, { titulo: 'Torcida Solar', texto: `${nomeCurto(m.author_name)} respondeu: ${previa(m)}`, grupo: 'geral' });
       }
     }
+    // Quem quer tudo do chat recebe também a mensagem comum (menção e resposta, já definidas acima, vencem).
+    const { data: tudo } = await supabase.from('notification_prefs').select('user_id').eq('chat', 'all');
+    for (const { user_id } of (tudo ?? []) as { user_id: string }[]) {
+      if (!destinos.has(user_id)) destinos.set(user_id, { titulo: 'Torcida Solar', texto: `${nomeCurto(m.author_name)}: ${previa(m)}`, grupo: 'geral' });
+    }
   }
   destinos.delete(m.user_id);
   if (!destinos.size) return { enviados: 0, motivo: 'sem destinatário' };
+
+  const silenciados = await emLotes([...destinos.keys()], ids =>
+    supabase.from('notification_prefs').select('user_id').eq('chat', 'off').in('user_id', ids));
+  for (const s of silenciados as { user_id: string }[]) destinos.delete(s.user_id);
+  if (!destinos.size) return { enviados: 0, motivo: 'notificações do chat desligadas' };
 
   const bloqueios = await emLotes([...destinos.keys()], ids =>
     supabase.from('user_blocks').select('blocker_id').eq('blocked_id', m.user_id).in('blocker_id', ids));
@@ -228,10 +242,11 @@ Deno.serve(async (req) => {
   }
 
   // Monta a lista de avisos a enviar agora.
-  const avisos: { chave: string; titulo: string; texto: string }[] = [];
+  // tipo: qual filtro das Configurações decide quem recebe.
+  const avisos: { chave: string; titulo: string; texto: string; tipo: 'fantasy' | 'announcements' }[] = [];
   if (modo === 'aviso') {
     if (!titulo || !texto) return new Response('informe titulo e texto', { status: 400 });
-    avisos.push({ chave: `aviso:${Date.now()}`, titulo, texto });
+    avisos.push({ chave: `aviso:${Date.now()}`, titulo, texto, tipo: 'announcements' });
   } else {
     const { data: provas } = await supabase
       .from('races')
@@ -246,26 +261,34 @@ Deno.serve(async (req) => {
           chave: `${prova.id}:1h`,
           titulo: `Prova ${prova.number} começa em 1 hora`,
           texto: `${prova.name}. Última chance de mudar seu fantasy.`,
+          tipo: 'fantasy',
         });
       } else if (faltam <= 0 && faltam > -10) {
         avisos.push({
           chave: `${prova.id}:largada`,
           titulo: `${prova.name} começou!`,
           texto: 'Acompanhe os barcos ao vivo no mapa.',
+          tipo: 'announcements',
         });
       }
     }
   }
   if (avisos.length === 0) return Response.json({ enviados: 0, motivo: 'nada para avisar agora' });
 
-  const { data: aparelhos } = await supabase.from('push_devices').select('token');
-  const tokens = (aparelhos ?? []).map(a => a.token);
+  const { data: aparelhos } = await supabase.from('push_devices').select('token, user_id');
+  // Quem desligou cada tipo; aparelho sem conta recebe tudo.
+  const { data: preferencias } = await supabase.from('notification_prefs').select('user_id, fantasy, announcements')
+    .or('fantasy.eq.false,announcements.eq.false');
+  const desligou = (tipo: 'fantasy' | 'announcements') =>
+    new Set((preferencias ?? []).filter(p => !p[tipo]).map(p => p.user_id as string));
   const resultado: Record<string, unknown> = {};
 
   for (const aviso of avisos) {
     // push_log evita mandar o mesmo aviso duas vezes se o agendamento repetir.
     const { error } = await supabase.from('push_log').insert({ chave: aviso.chave, titulo: aviso.titulo });
     if (error) { resultado[aviso.chave] = 'já enviado antes'; continue; }
+    const fora = desligou(aviso.tipo);
+    const tokens = (aparelhos ?? []).filter(a => !a.user_id || !fora.has(a.user_id)).map(a => a.token);
     const { enviados, invalidos } = await enviar(conta, tokens, aviso);
     if (invalidos.length) await supabase.from('push_devices').delete().in('token', invalidos);
     resultado[aviso.chave] = { enviados, removidos: invalidos.length };

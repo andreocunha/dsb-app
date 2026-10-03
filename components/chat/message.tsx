@@ -8,9 +8,10 @@ import { shortName } from '@/lib/names';
 import { isNativeApp, shareNativeFile } from '@/lib/native-share';
 import { Avatar } from '../ui';
 import { useFileUrl } from './files';
+import { useAffiliation } from './affiliations';
 import { ALL_MENTIONABLE, MentionPeople, type MentionContext } from './mentions';
 import { LocationAttachment } from './location';
-import { authorLabel, isAudio, isImage, isLocation, isVideo, isVisual, replySnippet, time, type Message, type Played, type Reply } from './types';
+import { authorLabel, isAudio, isImage, isLocation, isVideo, isVisual, replySnippet, time, type Message, type Person, type Played, type Reply } from './types';
 import { VoiceMessage } from './voice-message';
 
 export type MenuMode = 'full' | 'menu' | 'reactions';
@@ -26,7 +27,7 @@ export const nameStyle = (id: string, userId: string | null) =>
   ({ '--q': id === userId ? 'var(--wa-green)' : `var(--wa-name-${nameColor(id)})` }) as React.CSSProperties;
 
 /** Uma linha da conversa: avatar, balão, reações e os gestos (segurar abre o menu, arrastar responde). */
-export function MessageRow({ message, first, userId, reply, flash, group, receipts, voice, onMenu, onReply, onOpen, onJump, onReactors, onStopLive }: {
+export function MessageRow({ message, first, userId, reply, flash, group, receipts, voice, onMenu, onReply, onOpen, onJump, onReactors, onStopLive, onPerson }: {
   message: Message; first: boolean; userId: string | null; reply: Reply | null; flash: boolean;
   /** group: mostra foto e nome de quem escreveu. receipts: tiques de entrega e leitura (só na particular). */
   group: boolean; receipts: Receipts | null; voice?: VoiceInfo;
@@ -34,6 +35,8 @@ export function MessageRow({ message, first, userId, reply, flash, group, receip
   onJump: (id: number) => void; onReactors: (message: Message) => void;
   /** Parar de compartilhar a sua localização em tempo real. */
   onStopLive?: (message: Message) => void;
+  /** Tocar na foto ou no nome de quem escreveu (no grupo): abre os dados da pessoa. */
+  onPerson?: (person: Person) => void;
 }) {
   const own = message.user_id === userId;
   const bubble = useRef<HTMLDivElement>(null);
@@ -107,12 +110,18 @@ export function MessageRow({ message, first, userId, reply, flash, group, receip
   }
 
   const emojis = [...new Set(message.reactions.map(r => r.emoji))].slice(0, 3);
+  const author: Person = { id: message.user_id, name: message.author_name, avatar_url: message.author_avatar };
   return <div id={`m-${message.id}`} className={`msg ${own ? 'own' : 'in'} ${first ? 'first' : ''} ${flash ? 'flash' : ''} ${message.reactions.length ? 'reacted' : ''}`}
     onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>
     {interactive && <span className="msg-swipe" ref={swipeIcon} aria-hidden><ReplyIcon size={18} /></span>}
-    {!own && group && (first ? <Avatar id={message.user_id} name={message.author_name} url={message.author_avatar} small /> : <span className="avatar-space" />)}
+    {!own && group && (!first ? <span className="avatar-space" />
+      : onPerson ? <button type="button" className="msg-avatar" onClick={() => onPerson(author)} aria-label={`Dados de ${shortName(message.author_name)}`}>
+          <Avatar id={message.user_id} name={message.author_name} url={message.author_avatar} small />
+        </button>
+      : <Avatar id={message.user_id} name={message.author_name} url={message.author_avatar} small />)}
     <div className="msg-main" ref={main}>
       <Bubble ref={bubble} message={message} first={first} userId={userId} reply={reply} group={group} receipts={receipts} voice={voice} onJump={onJump} onOpen={onOpen} onStopLive={onStopLive}
+        onAuthor={onPerson ? () => onPerson(author) : undefined}
         onContextMenu={onContextMenu} onKeyDown={onKeyDown}
         onChevron={interactive ? e => { const r = e.currentTarget.getBoundingClientRect(); openMenu('menu', { x: own ? r.right : r.left, y: r.bottom }); } : undefined} />
       {emojis.length > 0 && <button className="reactions" onClick={() => onReactors(message)} aria-label={`${message.reactions.length} ${message.reactions.length === 1 ? 'reação' : 'reações'}. Ver quem reagiu`}>
@@ -128,12 +137,13 @@ export function MessageRow({ message, first, userId, reply, flash, group, receip
 }
 
 /** O balão em si. Também é desenhado de novo, por cima do fundo escurecido, quando o menu de toque longo abre. */
-export function Bubble({ ref, message, first, userId, reply, group, receipts, voice, onJump, onOpen, onStopLive, onChevron, onContextMenu, onKeyDown }: {
+export function Bubble({ ref, message, first, userId, reply, group, receipts, voice, onJump, onOpen, onStopLive, onAuthor, onChevron, onContextMenu, onKeyDown }: {
   ref?: React.Ref<HTMLDivElement>; message: Message; first: boolean; userId: string | null; reply: Reply | null; group: boolean; receipts: Receipts | null; voice?: VoiceInfo;
-  onJump?: (id: number) => void; onOpen?: (message: Message) => void; onStopLive?: (message: Message) => void; onChevron?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onJump?: (id: number) => void; onOpen?: (message: Message) => void; onStopLive?: (message: Message) => void; onAuthor?: () => void; onChevron?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (e: React.MouseEvent) => void; onKeyDown?: (e: React.KeyboardEvent) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const team = useAffiliation(message.user_id);
   const own = message.user_id === userId;
   const deleted = !!message.deleted_at;
   const file = !deleted && !!message.file_path;
@@ -156,7 +166,10 @@ export function Bubble({ ref, message, first, userId, reply, group, receipts, vo
     aria-label={onKeyDown && !deleted ? `Mensagem de ${own ? 'você' : shortName(message.author_name)}. Enter abre as ações` : undefined}
     onContextMenu={onContextMenu} onKeyDown={onKeyDown}>
     {first && !jumbo && <Tail />}
-    {!own && group && first && !jumbo && <b className="bubble-author" style={nameStyle(message.user_id, userId)}>{shortName(message.author_name)}</b>}
+    {!own && group && first && !jumbo && <b className="bubble-author" style={nameStyle(message.user_id, userId)}>
+      {onAuthor ? <button type="button" onClick={onAuthor}>{shortName(message.author_name)}</button> : <span>{shortName(message.author_name)}</span>}
+      {team && <small className="bubble-tag">{team}</small>}
+    </b>}
     {reply && !deleted && <Quote reply={reply} userId={userId} conversationId={message.conversation_id} onClick={onJump ? () => onJump(reply.id) : undefined} />}
     {audio ? <VoiceMessage message={message} own={own} played={voice?.played ?? (own ? 'sent' : 'played')} nextId={voice?.nextId ?? null} onPlayed={voice?.onPlayed ?? (() => {})} />
       : location ? <LocationAttachment message={message} own={own} meta={meta} onOpen={onOpen} onStop={onStopLive} />

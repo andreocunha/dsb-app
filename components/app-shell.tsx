@@ -16,7 +16,9 @@ import { hideSplash, listenBackButton, paintStatusBar } from '@/lib/system-ui';
 import { registerPush } from '@/lib/push';
 import { syncLiveSharing } from '@/lib/live-location';
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
-type AppValue = { theme: string; setTheme: (theme: string) => void; notify: (message: string) => void };
+/** action: botão no aviso (ex.: "Desfazer"); o aviso fica um pouco mais na tela para dar tempo de tocar. */
+type ToastAction = { label: string; run: () => void };
+type AppValue = { theme: string; setTheme: (theme: string) => void; notify: (message: string, action?: ToastAction) => void };
 const AppContext = createContext<AppValue>({ theme: 'light', setTheme: () => {}, notify: () => {} });
 export const useApp = () => useContext(AppContext);
 // Contexto separado: só quem mostra o contador re-renderiza quando alguém entra ou sai.
@@ -116,7 +118,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [menu, setMenu] = useState(false);
   const [installInfo, setInstallInfo] = useState(false);
   const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
-  const [toast, setToast] = useState('');
+  const [toastState, setToastState] = useState<{ message: string; action?: ToastAction } | null>(null);
+  const toast = toastState?.message ?? '';
+  const setToast = useCallback((message: string, action?: ToastAction) => setToastState(message ? { message, action } : null), []);
   const [offline, setOffline] = useState(false);
   const online = useOnlinePresence(userId);
   const { unread, mentions, markRead, dmUnread, refreshDm } = useUnread(userId);
@@ -127,7 +131,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // As conversas vão até a borda de cima (os topos do chat já descontam o notch); ver chat.css.
   const immersive = active('/comunidade/');
   useEffect(() => { document.documentElement.dataset.theme = theme; void paintStatusBar(theme); }, [theme]);
-  useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4200); return () => clearTimeout(id); }, [toast]);
+  useEffect(() => { if (!toastState) return; const id = setTimeout(() => setToastState(null), toastState.action ? 7000 : 4200); return () => clearTimeout(id); }, [toastState]);
   // Voltar do Android: fecha a camada aberta, senão vai para a home, senão sai do app.
   useEffect(() => listenBackButton(async () => {
     if (closeTopOverlay()) return;
@@ -149,7 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Tocar numa notificação de mensagem abre a conversa dela; o voltar leva à lista, como em qualquer conversa.
   useEffect(() => {
     void registerPush(setToast, conversa => router.push(`/comunidade/?c=${encodeURIComponent(conversa)}`));
-  }, [userId, router]);
+  }, [userId, router, setToast]);
   useEffect(() => {
     const updateOnline = () => setOffline(!navigator.onLine);
     const beforeInstall = (e: Event) => { e.preventDefault(); setInstallEvent(e as InstallEvent); };
@@ -230,6 +234,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <p className="footnote">Se a opção não aparecer, o app pode já estar instalado ou o navegador não oferecer instalação.</p>
       </div>
     </Sheet>
-    {toast && <div className="toast" role="status"><Check size={18} /><span>{toast}</span><button aria-label="Dispensar aviso" onClick={() => setToast('')}><X size={16} /></button></div>}
+    {toast && <div className="toast" role="status"><Check size={18} /><span>{toast}</span>
+      {toastState?.action && <button className="toast-action" onClick={() => { const action = toastState.action!; setToastState(null); action.run(); }}>{toastState.action.label}</button>}
+      <button aria-label="Dispensar aviso" onClick={() => setToastState(null)}><X size={16} /></button></div>}
   </UnreadContext.Provider></OnlineContext.Provider></AppContext.Provider>;
 }

@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Images, LogOut, MessageCircle, Moon, Pencil, Search, ShieldCheck, ShieldOff, Sun, ThumbsDown, UserMinus, UserPlus, Users, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Images, Info, LogOut, MessageCircle, Moon, Pencil, Search, ShieldCheck, ShieldOff, Sun, ThumbsDown, UserMinus, UserPlus, Users, X } from 'lucide-react';
 import { makeThumbnail } from '@/lib/media';
 import { shortName } from '@/lib/names';
 import { supabase, errorMessage } from '@/lib/supabase';
@@ -8,6 +8,7 @@ import { useApp, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar, Sheet } from '../ui';
 import { useFileUrl } from './files';
+import { MemberTag } from './affiliations';
 import { usePeople } from './mentions';
 import { MAX_GROUP, type GroupInfo, type Member, type Person } from './types';
 import type { Photo } from './viewer';
@@ -204,9 +205,11 @@ type Confirm = { title: string; text: string; label: string; run: () => void };
  * com os admins marcados, e as ações de admin (adicionar, remover, promover, editar).
  * mediaRow: a linha "Mídia, links e docs" do painel, igual à das outras conversas.
  */
-export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onMedia, onOpenPerson, onLeft, onChanged }: {
+export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onMedia, onOpenPerson, onContact, onLeft, onChanged }: {
   id: string; group: GroupInfo; members: Member[] | null; mediaRow: React.ReactNode;
   onPhoto: (photo: Photo) => void; onAdd: () => void; onMedia: () => void; onOpenPerson: (person: Person) => void;
+  /** Dados da pessoa (foto, equipe e situação), como o "Dados do contato" do WhatsApp. */
+  onContact: (person: Person) => void;
   onLeft: () => void; onChanged: () => void;
 }) {
   const { userId } = useAuth();
@@ -240,9 +243,10 @@ export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onM
     setUploading(false);
   }
 
-  function memberAction(target: Member, action: 'chat' | 'admin' | 'remove') {
+  function memberAction(target: Member, action: 'info' | 'chat' | 'admin' | 'remove') {
     setMember(null);
     const name = shortName(target.name);
+    if (action === 'info') onContact(target);
     if (action === 'chat') onOpenPerson(target);
     if (action === 'admin') void run(supabase.rpc('set_group_admin', { p_conversation: id, p_user: target.id, p_admin: !target.admin }),
       target.admin ? `${name} não é mais admin do grupo.` : `${name} agora é admin do grupo.`);
@@ -267,7 +271,7 @@ export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onM
     const mine = m.id === userId;
     const content = <>
       <Avatar id={m.id} name={m.name} url={m.avatar_url} letter />
-      <span><strong>{mine ? 'Você' : m.name}</strong><small>{onlineUsers.has(m.id) && !mine ? 'online' : 'Contato no DSB'}</small></span>
+      <span><strong>{mine ? 'Você' : m.name}</strong><MemberTag id={m.id} fallback={onlineUsers.has(m.id) && !mine ? 'online' : 'Contato no DSB'} /></span>
       {m.admin && <i className="admin-badge">Admin do grupo</i>}
     </>;
     return mine ? <div key={m.id} className="group-member">{content}</div>
@@ -314,6 +318,7 @@ export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onM
 
     <Sheet open={!!member} onClose={() => setMember(null)} title={member ? shortName(member.name) : ''} subtitle={member?.admin ? 'Admin do grupo' : undefined}>
       {member && <div className="sheet-menu">
+        <button className="group-row" onClick={() => memberAction(member, 'info')}><Info size={22} /><span><strong>Dados de {shortName(member.name)}</strong></span></button>
         <button className="group-row" onClick={() => memberAction(member, 'chat')}><MessageCircle size={22} /><span><strong>Conversar com {shortName(member.name)}</strong></span></button>
         {amAdmin && <>
           <button className="group-row" onClick={() => memberAction(member, 'admin')}>

@@ -4,7 +4,12 @@ import { supabase, errorMessage } from '@/lib/supabase';
 import { isNativeApp, listenNativeLogin, nativeSignIn } from '@/lib/native-auth';
 import { Sheet } from './ui';
 
-export type Profile = { id: string; name: string; avatar_url: string | null; role: string };
+export type Affiliation = 'team' | 'organization' | 'visitor';
+export type Profile = {
+  id: string; name: string; avatar_url: string | null; role: string;
+  /** Vínculo com o DSB (Configurações); nulo enquanto a pessoa não escolheu. */
+  affiliation: Affiliation | null; team_id: string | null; team_status: 'member' | 'alumni' | null;
+};
 type Provider = 'google' | 'apple' | 'email';
 type AuthValue = {
   userId: string | null;
@@ -18,7 +23,7 @@ const AuthContext = createContext<AuthValue>({ userId: null, profile: null, requ
 export const useAuth = () => useContext(AuthContext);
 
 const fetchProfile = async (id: string) =>
-  (await supabase.from('profiles').select('id, name, avatar_url, role').eq('id', id).maybeSingle()).data;
+  (await supabase.from('profiles').select('id, name, avatar_url, role, affiliation, team_id, team_status').eq('id', id).maybeSingle()).data as Profile | null;
 
 // O aceite acontece antes de haver sessão, e o login com Google recarrega a página.
 // A data fica guardada aqui até dar para registrá-la no perfil.
