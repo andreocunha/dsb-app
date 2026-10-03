@@ -118,25 +118,28 @@ export function Fantasy() {
       <button role="tab" aria-selected={view === 'ranking'} onClick={() => { setView('ranking'); void loadRanking(); }}>Ranking</button>
     </div>
 
-    {view === 'meu' ? <>
-      <div className="fx-round">
-        <button className="fx-arrow" disabled={index === 0} onClick={() => selectRace(races[index - 1].id)} aria-label="Prova anterior"><ChevronLeft size={20} /></button>
-        <button className="fx-round-title" onClick={() => setRaceList(true)} aria-haspopup="dialog">
-          <strong>{race.name}<ChevronDown size={15} /></strong>
-          {/* Cada pedaço quebra inteiro: nunca "Fecha em" numa linha e o prazo na outra. */}
-          <span className="fx-round-meta"><span>{raceDate(race).replace(' de ', ' ')} · {raceTime(race)}</span><em className={state.key}>{state.label}</em></span>
-        </button>
-        <button className="fx-arrow" disabled={index === races.length - 1} onClick={() => selectRace(races[index + 1].id)} aria-label="Próxima prova"><ChevronRight size={20} /></button>
+    {view === 'meu' ? <div className="fx-board">
+      {/* No desktop largo vira a coluna da esquerda, fixa enquanto a lista de barcos rola. */}
+      <div className="fx-main">
+        <div className="fx-round">
+          <button className="fx-arrow" disabled={index === 0} onClick={() => selectRace(races[index - 1].id)} aria-label="Prova anterior"><ChevronLeft size={20} /></button>
+          <button className="fx-round-title" onClick={() => setRaceList(true)} aria-haspopup="dialog">
+            <strong>{race.name}<ChevronDown size={15} /></strong>
+            {/* Cada pedaço quebra inteiro: nunca "Fecha em" numa linha e o prazo na outra. */}
+            <span className="fx-round-meta"><span>{raceDate(race).replace(' de ', ' ')} · {raceTime(race)}</span><em className={state.key}>{state.label}</em></span>
+          </button>
+          <button className="fx-arrow" disabled={index === races.length - 1} onClick={() => selectRace(races[index + 1].id)} aria-label="Próxima prova"><ChevronRight size={20} /></button>
+        </div>
+
+        <LineupSlots
+          race={race} locked={locked} loggedIn={!!userId} lineup={lineup} teams={teams} results={results}
+          saveState={saveState} canCopy={ahead > 0}
+          onAdd={() => poolRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          onLogin={login} onRemove={removeTeam} onTurbo={toggleTurbo} onCopy={() => setConfirmCopy(true)} />
       </div>
 
-      <LineupSlots
-        race={race} locked={locked} loggedIn={!!userId} lineup={lineup} teams={teams} results={results}
-        saveState={saveState} canCopy={ahead > 0}
-        onAdd={() => poolRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-        onLogin={login} onRemove={removeTeam} onTurbo={toggleTurbo} onCopy={() => setConfirmCopy(true)} />
-
       <BoatList ref={poolRef} race={race} teams={teams} results={results} lineup={lineup} locked={locked} onToggle={toggleTeam} />
-    </> : <Ranking ranking={ranking} userId={userId} />}
+    </div> : <Ranking ranking={ranking} userId={userId} />}
 
     <Sheet open={raceList} onClose={() => setRaceList(false)} title="Provas">
       <ul className="fx-race-list">
@@ -279,7 +282,7 @@ function BoatList({ ref, race, teams, results, lineup, locked, onToggle }: {
 function Ranking({ ranking, userId }: { ranking: RankingRow[] | null; userId: string | null }) {
   if (ranking === null) return <Skeleton rows />;
   if (ranking.length === 0) return <p className="fx-empty">Ninguém escalou ainda. Monte seu fantasy e abra o ranking.</p>;
-  return <section aria-label="Ranking geral">
+  return <section className="fx-ranking" aria-label="Ranking geral">
     <ol className="fx-list">
       {ranking.map(player => <li key={player.user_id} className={player.user_id === userId ? 'you' : ''}>
         <span className={`fx-pos ${player.position <= 3 ? `p${player.position}` : ''}`}>{player.position}</span>

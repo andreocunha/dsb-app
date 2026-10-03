@@ -108,6 +108,16 @@ div.fx-slot .fx-slot-logo.empty { color: var(--text-tertiary); }
 .fx-confirm { color: var(--text-secondary); }
 .fx-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
+/* Desktop largo: escalação fixa à esquerda e barcos à direita, para escolher vendo o time.
+   O ranking continua numa coluna central: lista larga demais fica difícil de ler. */
+@media (min-width: 1100px) {
+  .fantasy { max-width: 1040px; }
+  .fx-board { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 56px; }
+  .fx-main { position: sticky; top: 32px; }
+  .fx-board .fx-pool { margin-top: 24px; }
+  .fx-ranking, .fantasy > .fx-empty, .fantasy > .fx-skeleton { max-width: 640px; margin-inline: auto; }
+}
+
 /* Esqueleto de carregamento */
 .fx-skeleton { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
 .fx-skeleton .fx-slots { margin: 12px 0 16px; }
