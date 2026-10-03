@@ -7,8 +7,34 @@ import { chatFileUrl, supabase } from '@/lib/supabase';
 export const bucketFor = (conversationId: string | null) => conversationId ? 'dm' : 'chat';
 
 const TTL = 60 * 60; // segundos
+const STORAGE = 'dsb-signed-urls';
 const signed = new Map<string, { url: string; expires: number }>();
 const pending = new Map<string, Promise<string | null>>();
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Os links ainda válidos ficam guardados no aparelho: reabrir o app usa o mesmo endereço,
+// e a miniatura vem do cache do navegador em vez de baixar de novo.
+if (typeof window !== 'undefined') {
+  try {
+    for (const [key, hit] of JSON.parse(localStorage.getItem(STORAGE) ?? '[]') as [string, { url: string; expires: number }][])
+      if (hit.expires > Date.now()) signed.set(key, hit);
+  } catch { /* Sem armazenamento: os links vivem só na memória. */ }
+}
+
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORAGE, JSON.stringify([...signed].filter(([, hit]) => hit.expires > Date.now()))); }
+    catch { /* cheio ou bloqueado */ }
+  }, 1000);
+}
+
+/** Saiu da conta: os links das conversas particulares não ficam no aparelho. */
+export function forgetSignedUrls() {
+  clearTimeout(saveTimer);
+  signed.clear();
+  try { localStorage.removeItem(STORAGE); } catch { /* nada guardado */ }
+}
 
 function sign(path: string, download?: string) {
   const key = `${path}|${download ?? ''}`;
@@ -20,6 +46,7 @@ function sign(path: string, download?: string) {
     pending.delete(key);
     if (!data) return null;
     signed.set(key, { url: data.signedUrl, expires: Date.now() + (TTL - 120) * 1000 });
+    persist();
     return data.signedUrl;
   }));
   return pending.get(key)!;

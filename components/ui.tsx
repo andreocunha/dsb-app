@@ -4,6 +4,7 @@ import { registerOverlay } from '@/lib/overlays';
 import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import type { Team } from '@/lib/data';
+import { avatarImage } from '@/lib/images';
 export function Brand() {
   return <div className="brand">
     <Image src="/images/logo.png" width={40} height={40} alt="" className="brand-logo" />
@@ -18,7 +19,7 @@ export function TeamBadge({ team, small = false }: { team: Pick<Team, 'initials'
 /** letter: só a primeira letra, branca sobre cor forte, como a foto padrão das contas Google. */
 export function Avatar({ id, name, url, small = false, letter = false }: { id: string; name: string; url?: string | null; small?: boolean; letter?: boolean }) {
   const className = `avatar ${small ? 'small' : ''} ${letter ? 'letter' : ''}`;
-  if (url) return <img className={className} src={url} alt="" loading="lazy" referrerPolicy="no-referrer" />;
+  if (url) return <img className={className} src={avatarImage(url)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />;
   const colors = ['green', 'gold', 'blue', 'orange', 'purple', 'cyan'];
   const color = colors[[...id].reduce((sum, c) => sum + c.charCodeAt(0), 0) % colors.length];
   const initials = name.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, letter ? 1 : 2).toUpperCase();

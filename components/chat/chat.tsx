@@ -17,6 +17,7 @@ import { Avatar, Sheet } from '../ui';
 import { Compose, type ComposeContext } from './compose';
 import { EmojiPicker } from './emoji-picker';
 import { useGeneralReceipts } from './general-receipts';
+import { cacheConversation, cachedConversation } from './cache';
 import { bucketFor } from './files';
 import { InfoPanel } from './group-info';
 import { GroupAvatar, useGroupMembers } from './groups';
@@ -30,7 +31,8 @@ import { Reactors } from './reactors';
 import { canEdit, eventText, isAudio, isImage, targetKey, toReply, type GroupEvent, type Message, type Person, type Reaction, type Reply, type Row, type Target } from './types';
 import { Viewer } from './viewer';
 
-const PAGE = 50;
+// Abre com as últimas 100 mensagens; as anteriores carregam de 100 em 100 ao subir.
+const PAGE = 100;
 const TYPING_EVERY = 3000;
 const TYPING_TTL = 5000;
 const MAX_JUMP_PAGES = 10;
@@ -85,9 +87,11 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const [mentionedMe, setMentionedMe] = useState<number[]>([]);
   // Quem foi escolhido na lista do @ para a mensagem que está sendo escrita.
   const picked = useRef<Person[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [hasMore, setHasMore] = useState(false);
+  // Conversa aberta há pouco: aparece na hora com o que ficou guardado, e o banco atualiza por baixo.
+  const [cached] = useState(() => cachedConversation(userId, key));
+  const [messages, setMessages] = useState<Message[]>(() => cached?.messages ?? []);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(cached ? 'ready' : 'loading');
+  const [hasMore, setHasMore] = useState(cached?.hasMore ?? false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [text, setText] = useState('');
   const [context, setContext] = useState<ComposeContext>(null);
@@ -123,6 +127,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const stickToBottom = useRef(true);
   const prependFrom = useRef<number | null>(null);
   const initialScroll = useRef(false);
+  // A primeira página já veio do banco (até lá, o que aparece pode ser só o cache).
+  const loaded = useRef(false);
   const jumpTarget = useRef<number | null>(null);
   const channel = useRef<RealtimeChannel | null>(null);
   const lastTyping = useRef(0);
@@ -148,9 +154,21 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   }, [conversationId, key, userId, markRead, refreshDm, onSeen]);
 
   const applyPage = useCallback((page: Message[] | null, before?: number) => {
-    if (!page) { if (before) notify('Não foi possível carregar as mensagens anteriores.'); else setStatus('error'); return; }
+    if (!page) {
+      if (before) notify('Não foi possível carregar as mensagens anteriores.');
+      // Sem conexão, mas com a conversa guardada: continua mostrando o que tinha.
+      else { loaded.current = true; setStatus(current => current === 'ready' ? current : 'error'); }
+      return;
+    }
     if (before) prependFrom.current = list.current?.scrollHeight ?? null;
-    setMessages(current => before ? [...page.filter(m => !current.some(c => c.id === m.id)), ...current] : page);
+    else loaded.current = true;
+    const newest = page[page.length - 1]?.id ?? 0;
+    setMessages(current => {
+      if (before) { const ids = new Set(current.map(c => c.id)); return [...page.filter(m => !ids.has(m.id)), ...current]; }
+      // Primeira página: troca o cache pelo banco, sem perder o que chegou pelo tempo real ou está enviando.
+      const ids = new Set(page.map(m => m.id));
+      return sorted([...page, ...current.filter(m => m.pending || (m.id > newest && !ids.has(m.id)))]);
+    });
     setHasMore(page.length === PAGE);
     setStatus('ready');
     if (!before && page.length) {
@@ -163,6 +181,11 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     known.current = new Set(messages.map(m => m.id));
     latestId.current = messages.findLast(m => !m.pending)?.id ?? 0;
   }, [messages]);
+
+  // Guarda as últimas mensagens para a próxima abertura (só depois que o banco respondeu).
+  useEffect(() => {
+    if (status === 'ready' && loaded.current) cacheConversation(userId, key, messages, hasMore);
+  }, [messages, hasMore, status, userId, key]);
 
   // Voltou para a aba ou para o app com a conversa no fim: agora sim, lida.
   useEffect(() => {
@@ -284,9 +307,13 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     if (!el) return;
     if (prependFrom.current !== null) { el.scrollTop += el.scrollHeight - prependFrom.current; prependFrom.current = null; }
     else if (!initialScroll.current && messages.length) {
-      initialScroll.current = true;
-      const divider = el.querySelector<HTMLElement>('.unread-divider');
-      el.scrollTop = divider ? divider.offsetTop - 64 : el.scrollHeight;
+      // Com o cache na tela, o lugar certo (a faixa de não lidas) só se sabe quando o banco responde.
+      // Se a pessoa já rolou nesse meio-tempo, fica onde está.
+      if (stickToBottom.current) {
+        const divider = el.querySelector<HTMLElement>('.unread-divider');
+        el.scrollTop = divider ? divider.offsetTop - 64 : el.scrollHeight;
+      }
+      if (loaded.current || !stickToBottom.current) initialScroll.current = true;
     } else if (stickToBottom.current) el.scrollTop = el.scrollHeight;
     if (jumpTarget.current !== null) {
       document.getElementById(`m-${jumpTarget.current}`)?.scrollIntoView({ block: 'center' });
@@ -308,7 +335,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     stickToBottom.current = bottom;
     // Como no WhatsApp, as anteriores carregam sozinhas ao chegar perto do topo.
-    if (el.scrollTop < 300 && hasMore && !loadingOlder) void loadOlder();
+    // (Só depois da primeira página do banco: antes disso, o que está na tela pode ser o cache.)
+    if (el.scrollTop < 300 && hasMore && !loadingOlder && loaded.current) void loadOlder();
     if (bottom === atBottom) return;
     setAtBottom(bottom);
     if (bottom) goToBottom();
