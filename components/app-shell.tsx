@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
-import { House, MessageCircle, Trophy, Menu, ChevronRight, Settings, ShieldCheck, Sun, Moon, LogIn, LogOut, Download, Check, X, WifiOff } from 'lucide-react';
+import { House, MessageCircle, Trophy, Menu, ChevronRight, Settings, ShieldCheck, LayoutDashboard, Sun, Moon, LogIn, LogOut, Download, Check, X, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Avatar, Brand, Sheet } from './ui';
 import { Dashboard } from './dashboard';
@@ -113,7 +113,7 @@ function useOnlinePresence(userId: string | null) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { userId, profile, requireLogin, signOut } = useAuth();
+  const { userId, profile, isAdmin, requireLogin, signOut } = useAuth();
   const [theme, setTheme] = useLocalState('dsb-theme', 'light');
   const [menu, setMenu] = useState(false);
   const [installInfo, setInstallInfo] = useState(false);
@@ -174,6 +174,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setToast('Você saiu da sua conta.');
   }
   const settingsActive = pathname.startsWith('/configuracoes');
+  const adminActive = pathname.startsWith('/admin');
   // A home monta na primeira visita e depois só se esconde (ver Dashboard).
   const home = pathname === '/';
   const [homeSeen, setHomeSeen] = useState(home);
@@ -191,6 +192,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         ))}
         <Link replace href="/configuracoes/" className={settingsActive ? 'active' : ''} aria-current={settingsActive ? 'page' : undefined}><Settings size={19} /><span>Configurações</span></Link>
+        {isAdmin && <Link replace href="/admin/" className={adminActive ? 'active' : ''} aria-current={adminActive ? 'page' : undefined}><LayoutDashboard size={19} /><span>Organização</span></Link>}
       </nav>
       <div className="sidebar-footer">
         <div className="sidebar-row"><span>Aparência</span><ThemeSwitch theme={theme} setTheme={setTheme} /></div>
@@ -214,13 +216,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {item.href === '/comunidade/' && badge > 0 && <span className="badge">{badge > 99 ? '99+' : badge}</span>}
         </Link>
       ))}
-      <button className={menu || settingsActive ? 'active' : ''} onClick={() => setMenu(true)} aria-haspopup="dialog"><Menu size={22} /><span>Menu</span></button>
+      <button className={menu || settingsActive || adminActive ? 'active' : ''} onClick={() => setMenu(true)} aria-haspopup="dialog"><Menu size={22} /><span>Menu</span></button>
     </nav>
     <Sheet open={menu} onClose={() => setMenu(false)} title="Seu espaço">
       {userId
         ? <div className="menu-profile"><Avatar id={userId} name={profile?.name ?? ''} url={profile?.avatar_url} /><div><h3>{profile ? shortName(profile.name) : '…'}</h3><p>Conectado</p></div></div>
         : <button className="menu-profile" onClick={() => { setMenu(false); requireLogin(); }}><span className="avatar"><LogIn size={16} /></span><div><h3>Entrar</h3><p>Para usar o chat e o fantasy</p></div></button>}
       <Link replace href="/configuracoes/" className="sheet-row" onClick={() => setMenu(false)}><Settings size={20} /><span>Configurações</span><ChevronRight size={18} /></Link>
+      {isAdmin && <Link replace href="/admin/" className="sheet-row" onClick={() => setMenu(false)}><LayoutDashboard size={20} /><span>Painel da organização</span><ChevronRight size={18} /></Link>}
       <div className="sheet-row"><Sun size={20} /><span>Aparência</span><ThemeSwitch theme={theme} setTheme={setTheme} /></div>
       {!native && <button className="sheet-row" onClick={() => { setMenu(false); void install(); }}><Download size={20} /><span>Instalar aplicativo</span><ChevronRight size={18} /></button>}
       {userId && <button className="sheet-row danger" onClick={() => void logout()}><LogOut size={20} /><span>Sair da conta</span></button>}

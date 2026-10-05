@@ -15,12 +15,14 @@ type Provider = 'google' | 'apple' | 'email';
 type AuthValue = {
   userId: string | null;
   profile: Profile | null;
+  /** Conta da organização (e-mail em admin_emails): vê o painel em /admin. Nulo enquanto confere. */
+  isAdmin: boolean | null;
   /** Abre o login explicando por que ele é necessário. */
   requireLogin: (reason?: string) => void;
   signOut: () => Promise<void>;
   reloadProfile: () => Promise<void>;
 };
-const AuthContext = createContext<AuthValue>({ userId: null, profile: null, requireLogin: () => {}, signOut: async () => {}, reloadProfile: async () => {} });
+const AuthContext = createContext<AuthValue>({ userId: null, profile: null, isAdmin: false, requireLogin: () => {}, signOut: async () => {}, reloadProfile: async () => {} });
 export const useAuth = () => useContext(AuthContext);
 
 const fetchProfile = async (id: string) =>
@@ -41,6 +43,7 @@ async function saveAcceptance() {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<Profile | null>(null);
+  const [admin, setAdmin] = useState<{ user: string; value: boolean } | null>(null);
   const [loginReason, setLoginReason] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<Provider | null>(null);
@@ -68,7 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const reloadProfile = useCallback(async () => {
     if (userId) setLoaded(await fetchProfile(userId));
   }, [userId]);
-  useEffect(() => { if (userId) { void fetchProfile(userId).then(setLoaded); void saveAcceptance(); } }, [userId]);
+  useEffect(() => {
+    if (!userId) return;
+    void fetchProfile(userId).then(setLoaded);
+    void saveAcceptance();
+    void supabase.rpc('is_admin').then(({ data }) => setAdmin({ user: userId, value: !!data }));
+  }, [userId]);
   const profile = loaded && loaded.id === userId ? loaded : null;
 
   async function signIn(provider: 'google' | 'apple') {
@@ -98,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthValue = {
     userId,
     profile,
+    isAdmin: !userId ? false : admin?.user === userId ? admin.value : null,
     requireLogin: reason => { setError(''); setLoginReason(reason ?? 'Entre para participar do chat e do fantasy.'); },
     // As conversas guardadas no aparelho saem junto com a conta.
     signOut: async () => { await supabase.auth.signOut(); clearChatCache(); },

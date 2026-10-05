@@ -150,6 +150,12 @@ export type Database = {
         Update: { active?: boolean; article_delivered?: boolean; color?: string; docs_delivered?: number; id?: string; initials?: string; logo?: string | null; name?: string; university?: string }
         Relationships: []
       }
+      event_settings: {
+        Row: { id: boolean; live_url: string; updated_at: string; updated_by: string | null }
+        Insert: { id?: boolean; live_url?: string; updated_at?: string; updated_by?: string | null }
+        Update: { id?: boolean; live_url?: string; updated_at?: string; updated_by?: string | null }
+        Relationships: []
+      }
       user_blocks: {
         Row: { blocked_id: string; blocker_id: string; created_at: string }
         Insert: { blocked_id: string; blocker_id?: string; created_at?: string }
@@ -309,6 +315,22 @@ export type Database = {
       update_live_location: { Args: { p_lat: number; p_lng: number; p_accuracy?: number; p_heading?: number }; Returns: number }
       stop_live_location: { Args: { p_message_id?: number }; Returns: undefined }
       my_live_locations: { Args: never; Returns: { message_id: number; conversation_id: string | null; live_until: string }[] }
+      is_admin: { Args: never; Returns: boolean }
+      set_live_url: { Args: { p_url: string }; Returns: undefined }
+      admin_add_lap: { Args: { p_race_id: string; p_team_id: string; p_at?: string | null }; Returns: string }
+      admin_remove_lap: { Args: { p_race_id: string; p_team_id: string; p_at: string }; Returns: undefined }
+      admin_set_race_start: { Args: { p_race_id: string; p_at: string | null }; Returns: undefined }
+      admin_set_race_status: { Args: { p_race_id: string; p_team_id: string; p_status: string; p_position?: number | null; p_note?: string }; Returns: undefined }
+      admin_save_duel: {
+        Args: { p_race_id: string; p_stage: string; p_slot: number; p_team_a: string | null; p_team_b: string | null; p_time_a?: number | null; p_time_b?: number | null }
+        Returns: undefined
+      }
+      admin_delete_duel: { Args: { p_race_id: string; p_stage: string; p_slot: number }; Returns: undefined }
+      admin_set_team_extras: { Args: { p_team_id: string; p_docs: number; p_article: boolean }; Returns: undefined }
+      admin_add_penalty: { Args: { p_team_id: string; p_points: number; p_reason: string; p_race_id?: string | null }; Returns: number }
+      admin_delete_penalty: { Args: { p_id: number }; Returns: undefined }
+      send_announcement: { Args: { p_title: string; p_body: string }; Returns: undefined }
+      recent_announcements: { Args: { p_limit?: number }; Returns: { title: string; sent_at: string }[] }
     }
     Enums: { [_ in never]: never }
     CompositeTypes: { [_ in never]: never }

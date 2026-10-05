@@ -39,9 +39,9 @@ A home usa estilos isolados em `components/dashboard.module.css`; o cabeçalho, 
 Edite `lib/event-config.ts`:
 
 - `trackingUrl`: `https://dsb-rastreio.vercel.app/`, incorporado como iframe.
-- `youtubeUrl`: vazio por enquanto. Aceita URLs `youtube.com/watch?v=...`, `youtube.com/live/...` e `youtu.be/...` e converte para o player do YouTube.
+- `youtubeUrl`: reserva, usada só se o banco não responder. Aceita URLs `youtube.com/watch?v=...`, `youtube.com/live/...` e `youtu.be/...` e converte para o player do YouTube.
 
-Também é possível definir `NEXT_PUBLIC_YOUTUBE_LIVE_URL` em `.env.local` antes do build. Depois de mudar o link, gere um novo build. Sem link, a live mostra “A transmissão começa em breve”. Mapa e vídeo dependem de internet e da disponibilidade dos serviços externos.
+O link da live é trocado pela organização no app, em `/admin/` → Live (tabela `event_settings`), e muda na hora para quem está assistindo, sem novo build. `NEXT_PUBLIC_YOUTUBE_LIVE_URL` em `.env.local` só vale enquanto o banco não responde. Sem link, a live mostra “A transmissão começa em breve”. Mapa e vídeo dependem de internet e da disponibilidade dos serviços externos.
 
 ## Telas
 
@@ -49,6 +49,7 @@ Também é possível definir `NEXT_PUBLIC_YOUTUBE_LIVE_URL` em `.env.local` ante
 - `/comunidade/`: chat em grupo com mensagens locais e emojis.
 - `/fantasy/`: escalação de três equipes com orçamento de 100 sóis, capitã com pontos em dobro, confirmação e ranking ilustrativo.
 - `/configuracoes/`: nome, tema e preferências locais.
+- `/admin/`: painel da organização (só e-mails em `admin_emails`): voltas, situação dos barcos, Match Race, pontos extras, penalidades, notificação geral e link da live. Ver `docs/resultados.md`.
 - Menu: bottom sheet com configurações, aparência, instalação e saída do perfil demo.
 
 No desktop há navegação horizontal no cabeçalho e uma home em duas colunas: card compacto da próxima prova à esquerda e painel principal de acompanhamento à direita, com abas discretas. O chat tem largura limitada para leitura, e o fantasy mantém a escalação ao lado das equipes. No mobile, a home permanece empilhada e a barra inferior fica fixa, com ícones e detalhe amarelo na página e aba ativas. O layout considera `safe-area-inset` e `dvh`. Os diálogos prendem o foco, fecham com Escape e devolvem o foco ao controle que os abriu.

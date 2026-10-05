@@ -1,6 +1,12 @@
 # Lançar resultados
 
-Tudo é preenchido no Table Editor do Supabase. Os pontos são calculados sozinhos pela tabela do edital (item 10.2) e aparecem no app na hora, sem precisar publicar nada.
+O jeito mais rápido é o **painel da organização** no próprio app (`/admin/`, ou Menu → Painel da organização): voltas com um toque, largada real, DNF/DNS, duelos do Match Race, documentação, artigo, penalidades, notificação para todos e o link da live. Ele aparece só para os e-mails cadastrados em `admin_emails`:
+
+```sql
+insert into public.admin_emails (email) values ('pessoa@exemplo.com');
+```
+
+Tudo abaixo também pode ser preenchido no Table Editor do Supabase. Os pontos são calculados sozinhos pela tabela do edital (item 10.2) e aparecem no app na hora, sem precisar publicar nada.
 
 ## Antes do evento
 
