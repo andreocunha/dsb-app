@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bracketColumns, closingWindowMinutes, duelWinner, formatDuel, formatDuration, lapSplits, pointsIntensity, sortRace, sortStandings } from '../lib/scoring.ts';
+import { bracketColumns, closingWindowMinutes, duelWinner, formatDuel, formatDuration, lapSplits, parseDuel, pointsIntensity, sortRace, sortStandings } from '../lib/scoring.ts';
 
 const duel = (stage, slot, team_a, team_b, time_a = null, time_b = null) => ({ race_id: 'match-race', stage, slot, team_a, team_b, time_a, time_b });
 const score = (team_id, status, position, laps = 0) => ({ race_id: 'r', team_id, status, position, laps, note: '', last_lap_at: null, stage: null, duel_time: null, points: 0 });
@@ -61,4 +61,12 @@ test('intensidade da cor vai de 50 a 150 pontos', () => {
   assert.equal(pointsIntensity(150), 1);
   assert.equal(pointsIntensity(100), .5);
   assert.equal(pointsIntensity(20), 0);
+});
+
+test('lê o tempo do X1 digitado no painel', () => {
+  assert.equal(parseDuel('3:02,4'), 182.4);
+  assert.equal(parseDuel('182.4'), 182.4);
+  assert.equal(parseDuel(' 182,45 '), 182.45);
+  assert.equal(parseDuel('0:59'), 59);
+  for (const text of ['', 'abc', '3:75', '0', '-12', '1:2:3']) assert.equal(parseDuel(text), null);
 });

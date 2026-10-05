@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import type { Team } from './data';
 import type { Duel, Penalty, Score } from './scoring';
@@ -35,19 +35,26 @@ async function loadResults(): Promise<ResultsData> {
   };
 }
 
-/** Classificação, pontos por prova, chave e penalidades, atualizados ao vivo enquanto `active`. */
-export function useResults(active = true) {
+/**
+ * Classificação, pontos por prova, chave e penalidades, atualizados ao vivo enquanto `active`.
+ * `channel`: nome do canal de tempo real (o painel da organização usa o seu, separado do da home).
+ */
+export function useResults(active = true, channel = 'resultados') {
   const [data, setData] = useState<ResultsData | null>(null);
   const [error, setError] = useState(false);
+  const reloadRef = useRef(() => {});
   useEffect(() => {
     if (!active) return;
     let alive = true;
     const reload = () => loadResults().then(next => { if (alive) { setData(next); setError(false); } }, () => { if (alive) setError(true); });
+    reloadRef.current = () => void reload();
     void reload();
-    const stop = onResultsChange('resultados', [{ table: 'race_laps' }, { table: 'race_status' }, { table: 'match_duels' }, { table: 'penalties' }], reload);
-    return () => { alive = false; stop(); };
-  }, [active]);
-  return { data, error };
+    const stop = onResultsChange(channel, [{ table: 'race_laps' }, { table: 'race_status' }, { table: 'match_duels' }, { table: 'penalties' }], reload);
+    return () => { alive = false; reloadRef.current = () => {}; stop(); };
+  }, [active, channel]);
+  // Documentação e artigo (tabela teams) não chegam pelo tempo real: o painel recarrega depois de salvar.
+  const reload = useCallback(() => reloadRef.current(), []);
+  return { data, error, reload };
 }
 
 /** Horários das voltas de uma prova, por barco (ms). */

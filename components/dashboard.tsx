@@ -5,6 +5,7 @@ import { CalendarDays, Clock3, Maximize2, PictureInPicture2, Radio, Trophy, X } 
 import { useRaces } from '@/lib/data';
 import { hasStarted, nextRace, raceDate, raceTime, useNow } from '@/lib/races';
 import { eventConfig, youtubeEmbedUrl } from '@/lib/event-config';
+import { useLiveUrl } from '@/lib/live-url';
 import { ResultsSheet } from './results';
 
 // A live fica em tela cheia sobre o mapa ou num mini player (PiP) no canto.
@@ -59,7 +60,7 @@ type Box = { x: number; y: number; w: number };
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
 
 function Live({ mode, raceName, setMode }: { mode: Exclude<LiveMode, 'off'>; raceName: string; setMode: (mode: LiveMode) => void }) {
-  const embedUrl = youtubeEmbedUrl(eventConfig.youtubeUrl);
+  const embedUrl = youtubeEmbedUrl(useLiveUrl());
   const ref = useRef<HTMLElement>(null);
   // Posição e largura do mini player dentro do mapa; null = canto padrão do CSS.
   const [box, setBox] = useState<Box | null>(null);

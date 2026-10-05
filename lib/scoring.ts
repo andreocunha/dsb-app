@@ -64,6 +64,14 @@ export function formatDuel(seconds: number) {
   const tenths = Math.round(seconds * 10);
   return `${Math.floor(tenths / 600)}:${pad(Math.floor(tenths % 600 / 10))},${tenths % 10}`;
 }
+/** Tempo de X1 digitado no painel (3:02,4 · 182.4 · 182,4) → segundos; null se não der para ler. */
+export function parseDuel(text: string) {
+  const match = text.trim().replace(',', '.').match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const seconds = Number(match[1] ?? 0) * 60 + Number(match[2]);
+  if (match[1] && Number(match[2]) >= 60) return null;
+  return seconds > 0 && seconds < 100_000 ? Math.round(seconds * 100) / 100 : null;
+}
 
 /** Mesmo critério do banco: sem adversário passa direto; vence o menor tempo; sem tempo, perde. */
 export function duelWinner(duel: Duel): 'a' | 'b' | null {

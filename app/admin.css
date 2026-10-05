@@ -1,0 +1,91 @@
+/* ---------- Painel da organização (/admin) ---------- */
+.admin-tabs { margin-bottom: 20px; }
+.admin-tabs button { flex: 1; }
+.admin-race-select { display: flex; margin-bottom: 16px; }
+.admin-race-select select { width: 100%; }
+
+.admin-list { padding: 0; list-style: none; }
+.admin-list > li + li { border-top: 1px solid var(--border); }
+.admin-row { display: flex; align-items: center; gap: 8px; padding-right: 12px; }
+.admin-row-info { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; min-height: 60px; padding: 10px 4px 10px 12px; text-align: left; }
+.admin-row-info:hover .admin-row-main strong { color: var(--brand); }
+.admin-row:not(:has(.lap-button)) .admin-row-info { padding-right: 0; }
+.admin-row-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.admin-row-main strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.admin-row-main small { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-row-points { flex-shrink: 0; color: var(--text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* Botão grande: é tocado várias vezes durante a prova, às vezes com o barco passando. */
+.lap-button { flex-shrink: 0; min-width: 92px; min-height: 44px; border-color: transparent; background: var(--brand-soft); color: var(--brand); font-size: 14px; font-weight: 600; }
+.lap-button:hover { background: var(--brand); color: var(--on-brand); }
+.lap-button:disabled { opacity: .5; }
+
+.admin-sheet-section { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 20px; }
+.admin-sheet-section + .admin-sheet-section, .admin-sheet-section + form.admin-sheet-section { padding-top: 20px; border-top: 1px solid var(--border); }
+.admin-sheet-section h3 { font-size: 14px; font-weight: 600; }
+.admin-sheet-section .settings-hint { margin: -4px 0 0; }
+.admin-status { width: 100%; }
+.admin-status button { flex: 1; }
+
+.lap-list { padding: 0; list-style: none; }
+.lap-list li { display: flex; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.lap-number { display: inline-grid; flex-shrink: 0; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--surface-hover); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.lap-time { flex: 1; font-weight: 500; }
+.lap-split { color: var(--text-secondary); font-size: 13px; }
+
+.admin-form { display: flex; flex-direction: column; gap: 12px; }
+.admin-inline-form { display: flex; align-items: flex-end; gap: 8px; }
+.admin-inline-form .admin-field { flex: 1; }
+.admin-inline-form .button { height: 42px; }
+.admin-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.admin-field > span { display: flex; justify-content: space-between; gap: 8px; color: var(--text-secondary); font-size: 13px; }
+.admin-field > span small { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+/* 16px evita o zoom automático do iOS ao focar o campo. */
+.admin-field input, .admin-field select, .admin-field textarea { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-subtle); color: var(--text); font: inherit; font-size: 16px; transition: border-color .15s, box-shadow .15s; }
+.admin-field textarea { padding: 10px 12px; resize: vertical; }
+.admin-field input:focus, .admin-field select:focus, .admin-field textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.admin-field input:disabled { opacity: .6; }
+.admin-duel-fields { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; }
+.admin-form .button:disabled, .admin-sheet-section .button:disabled { opacity: .45; }
+
+.admin-duel { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; text-align: left; }
+.admin-duel:hover { background: var(--surface-hover); }
+.admin-duel > svg { flex-shrink: 0; color: var(--text-tertiary); }
+.admin-duel-sides { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.duel-side { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 14px; }
+.duel-side > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duel-side small { flex-shrink: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.duel-side.won { color: var(--text); font-weight: 600; }
+.admin-new { width: 100%; min-height: 44px; margin-bottom: 24px; }
+
+.admin-extra { min-height: 48px; }
+.admin-extra > div:first-child { display: flex; flex-direction: column; }
+.admin-extra strong { font-size: 14px; font-weight: 500; }
+.admin-extra small { color: var(--text-secondary); font-size: 12px; }
+.stepper { display: flex; flex-shrink: 0; align-items: center; gap: 4px; padding: 2px; border: 1px solid var(--border); border-radius: 10px; }
+.stepper span { min-width: 40px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stepper .icon-button:disabled { opacity: .35; }
+
+.penalty-list { padding: 0; list-style: none; }
+.penalty-list li { display: flex; align-items: center; gap: 12px; min-height: 48px; border-bottom: 1px solid var(--border); }
+.penalty-list strong { flex-shrink: 0; min-width: 40px; color: var(--danger); font-variant-numeric: tabular-nums; }
+.penalty-list span { display: flex; flex: 1; flex-direction: column; min-width: 0; font-size: 14px; }
+.penalty-list small { color: var(--text-tertiary); font-size: 12px; }
+
+/* Prévia no formato da notificação do celular. */
+.push-preview { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle); }
+.push-preview img { flex-shrink: 0; border-radius: 9px; }
+.push-preview div { min-width: 0; }
+.push-preview strong { display: block; color: var(--text); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.push-preview p { margin-top: 2px; color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
+.admin-when { flex-shrink: 0; color: var(--text-tertiary); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.live-state { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--surface-hover); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.live-state.on { background: var(--danger-soft); color: var(--danger); }
+.admin .settings-row p { overflow-wrap: anywhere; }
+.admin-live-preview { overflow: hidden; aspect-ratio: 16 / 9; border-radius: 10px; background: #000; }
+.admin-live-preview iframe { width: 100%; height: 100%; border: 0; }
+
+@media (max-width: 479px) {
+  .admin-duel-fields { grid-template-columns: minmax(0, 1fr) 96px; }
+  .admin-inline-form { flex-direction: column; align-items: stretch; }
+}
