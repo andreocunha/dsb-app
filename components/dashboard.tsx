@@ -7,6 +7,8 @@ import { hasStarted, nextRace, raceDate, raceTime, useNow } from '@/lib/races';
 import { eventConfig, youtubeEmbedUrl } from '@/lib/event-config';
 import { useLiveUrl } from '@/lib/live-url';
 import { ResultsSheet } from './results';
+import { useAuth } from './auth';
+import { supabase } from '@/lib/supabase';
 
 // A live fica em tela cheia sobre o mapa ou num mini player (PiP) no canto.
 type LiveMode = 'off' | 'full' | 'pip';
@@ -19,6 +21,25 @@ export function Dashboard({ visible }: { visible: boolean }) {
   const now = useNow();
   const { data: races } = useRaces();
   const race = races?.length ? nextRace(races, now) : null;
+  const { isAdmin } = useAuth();
+  const frame = useRef<HTMLIFrameElement>(null);
+  const trackerOrigin = new URL(eventConfig.trackingUrl).origin;
+  // Quem é da organização (admin_emails) vê o botão "Organização" no mapa.
+  const mapUrl = isAdmin ? `${eventConfig.trackingUrl}${eventConfig.trackingUrl.includes('?') ? '&' : '?'}admin=1` : eventConfig.trackingUrl;
+
+  // O painel do mapa entra com a própria conta do app: ele pede a sessão e o app só responde
+  // ao iframe do rastreamento, só para a organização. O servidor do mapa confere de novo no Supabase.
+  useEffect(() => {
+    const answer = async (event: MessageEvent) => {
+      if (event.origin !== trackerOrigin || event.source !== frame.current?.contentWindow || event.data?.type !== 'dsb-tracker:token?') return;
+      const reply = (data: { token?: string; error?: string }) => frame.current?.contentWindow?.postMessage({ type: 'dsb-tracker:token', ...data }, trackerOrigin);
+      if (!isAdmin) return reply({ error: 'Esta conta não faz parte da organização.' });
+      const { data } = await supabase.auth.getSession();
+      reply(data.session ? { token: data.session.access_token } : { error: 'Entre no app com a conta da organização.' });
+    };
+    window.addEventListener('message', answer);
+    return () => window.removeEventListener('message', answer);
+  }, [isAdmin, trackerOrigin]);
 
   return (
     <div className={`home fill ${live === 'pip' ? 'has-pip' : ''}`} hidden={!visible}>
@@ -41,8 +62,9 @@ export function Dashboard({ visible }: { visible: boolean }) {
 
       <div className="home-stage">
         <iframe
+          ref={frame}
           className="map-frame"
-          src={eventConfig.trackingUrl}
+          src={mapUrl}
           title="Rastreamento das embarcações do Desafio Solar Brasil"
           allow="fullscreen"
           allowFullScreen
