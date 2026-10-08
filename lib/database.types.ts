@@ -67,7 +67,7 @@ export type Database = {
         Relationships: []
       }
       conversation_members: {
-        Row: { conversation_id: string; user_id: string; admin: boolean; added_by: string | null; joined_at: string; since_id: number; left_at: string | null }
+        Row: { conversation_id: string; user_id: string; admin: boolean; added_by: string | null; joined_at: string; since_id: number; left_at: string | null; removed: boolean }
         Insert: never
         Update: never
         Relationships: []
@@ -260,6 +260,12 @@ export type Database = {
       set_group_admin: { Args: { p_conversation: string; p_user: string; p_admin: boolean }; Returns: undefined }
       update_group: { Args: { p_conversation: string; p_name: string; p_description: string }; Returns: undefined }
       set_group_photo: { Args: { p_conversation: string; p_path: string | null }; Returns: undefined }
+      group_invite: { Args: { p_conversation: string; p_reset?: boolean }; Returns: string }
+      group_invite_info: {
+        Args: { p_code: string }
+        Returns: { id: string; name: string; description: string | null; photo_path: string | null; members: number; joined: boolean }[]
+      }
+      join_group_by_invite: { Args: { p_code: string }; Returns: string }
       group_members: {
         Args: { p_conversation: string }
         Returns: { user_id: string; name: string; avatar_url: string | null; admin: boolean; joined_at: string }[]
