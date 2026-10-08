@@ -39,7 +39,8 @@ export function Fantasy() {
   const results = useRaceResults();
   const [lineups, setLineups] = useState<Lineups>({});
   const [ranking, setRanking] = useState<RankingRow[] | null>(null);
-  const [view, setView] = useState<'meu' | 'ranking'>('meu');
+  // Abre no ranking: é o que a maioria vem conferir; escalar fica a um toque.
+  const [view, setView] = useState<'ranking' | 'meu' | 'resumo'>('ranking');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rules, setRules] = useState(false);
   const [raceList, setRaceList] = useState(false);
@@ -60,7 +61,7 @@ export function Fantasy() {
     <button className="icon-button" onClick={() => setRules(true)} aria-label="Como jogar"><CircleHelp size={20} /></button>
   </div>;
 
-  if (!races || !teams || !results) return <div className="page fantasy">{heading}<Skeleton /></div>;
+  if (!races || !teams || !results) return <div className="page fantasy">{heading}<Skeleton rows={view === 'ranking'} /></div>;
 
   const race = races.find(r => r.id === selectedId) ?? nextRace(races, now);
   const lineup = (userId && lineups[race.id]) || empty;
@@ -114,11 +115,17 @@ export function Fantasy() {
     {heading}
 
     <div className="fx-tabs" role="tablist" aria-label="Seções do fantasy">
-      <button role="tab" aria-selected={view === 'meu'} onClick={() => setView('meu')}>Meu fantasy</button>
       <button role="tab" aria-selected={view === 'ranking'} onClick={() => { setView('ranking'); void loadRanking(); }}>Ranking</button>
+      <button role="tab" aria-selected={view === 'meu'} onClick={() => setView('meu')}>Meu fantasy</button>
+      <button role="tab" aria-selected={view === 'resumo'} onClick={() => setView('resumo')}>Resumo</button>
     </div>
 
-    {view === 'meu' ? <div className="fx-board">
+    {view === 'ranking' && <Ranking ranking={ranking} userId={userId} />}
+
+    {view === 'resumo' && <Summary races={races} teams={teams} results={results} lineups={userId ? lineups : null} now={now}
+      onOpen={id => { selectRace(id); setView('meu'); window.scrollTo({ top: 0 }); }} onLogin={login} />}
+
+    {view === 'meu' && <div className="fx-board">
       {/* No desktop largo vira a coluna da esquerda, fixa enquanto a lista de barcos rola. */}
       <div className="fx-main">
         <div className="fx-round">
@@ -139,7 +146,7 @@ export function Fantasy() {
       </div>
 
       <BoatList ref={poolRef} race={race} teams={teams} results={results} lineup={lineup} locked={locked} onToggle={toggleTeam} />
-    </div> : <Ranking ranking={ranking} userId={userId} />}
+    </div>}
 
     <Sheet open={raceList} onClose={() => setRaceList(false)} title="Provas">
       <ul className="fx-race-list">
@@ -292,6 +299,52 @@ function Ranking({ ranking, userId }: { ranking: RankingRow[] | null; userId: st
       </li>)}
     </ol>
     <p className="footnote">{ranking.length} {ranking.length === 1 ? 'participante' : 'participantes'}. Pontos com o Turbo solar já contado em dobro.</p>
+  </section>;
+}
+
+/** Todas as provas numa lista: os barcos escalados em cada uma, com o 2x marcado, e os pontos quando há resultado.
+ * Tocar numa prova abre a escalação dela. */
+function Summary({ races, teams, results, lineups, now, onOpen, onLogin }: {
+  races: Race[]; teams: Team[]; results: RaceResult[]; lineups: Lineups | null; now: number; onOpen: (raceId: string) => void; onLogin: () => void;
+}) {
+  if (!lineups) return <div className="fx-empty">
+    <p>Entre para ver os barcos que você escalou em cada prova.</p>
+    <button className="button primary" onClick={onLogin}>Entrar</button>
+  </div>;
+
+  const scored = new Set(results.map(r => r.race_id));
+  const filled = races.filter(r => lineups[r.id]?.team_ids.length).length;
+  const total = races.reduce((sum, r) => sum + (lineups[r.id] ? lineupPoints(lineups[r.id], results, r.id) : 0), 0);
+
+  return <section className="fx-summary" aria-label="Resumo das escalações">
+    <p className="fx-summary-head">
+      <span>{filled} de {races.length} provas escaladas</span>
+      <strong>{total}<small> pts</small></strong>
+    </p>
+    <ol className="fx-summary-list">
+      {races.map(race => {
+        const lineup = lineups[race.id] ?? empty;
+        const picks = lineup.team_ids.map(id => teams.find(t => t.id === id)).filter(t => t !== undefined);
+        const state = raceState(race, now, results);
+        return <li key={race.id}>
+          <button onClick={() => onOpen(race.id)} aria-label={`Abrir escalação de ${race.name}`}>
+            <span className="fx-summary-race">
+              <span className="fx-summary-title"><strong>{race.number}. {race.name}</strong>{state.key !== 'open' && <small>{state.label}</small>}</span>
+              {scored.has(race.id) && <span className="fx-summary-points">{lineupPoints(lineup, results, race.id)}<small> pts</small></span>}
+            </span>
+            {picks.length ? <span className="fx-summary-picks">
+              {picks.map(team => <span key={team.id} className={`fx-summary-pick ${lineup.double_team_id === team.id ? 'turbo' : ''}`}>
+                <span className="fx-summary-logo">
+                  <TeamBadge team={team} small />
+                  {lineup.double_team_id === team.id && <span className="fx-x2 on mini" aria-label="Turbo solar">2x</span>}
+                </span>
+                <span className="fx-summary-name">{team.name}</span>
+              </span>)}
+            </span> : <span className="fx-summary-none">{hasStarted(race, now) ? 'Sem escalação' : 'Ainda não escalou'}</span>}
+          </button>
+        </li>;
+      })}
+    </ol>
   </section>;
 }
 

@@ -1,5 +1,5 @@
 /*
- * FANTASY — abas Meu fantasy / Ranking.
+ * FANTASY — abas Ranking / Meu fantasy / Resumo.
  * Sem cartões: uma coluna central, tipografia e linhas finas. --brand só no que está escolhido.
  */
 .fantasy { max-width: 640px; margin-inline: auto; }
@@ -89,6 +89,29 @@ div.fx-slot .fx-slot-logo.empty { color: var(--text-tertiary); }
 .fx-list strong { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .fx-list strong small { color: var(--text-tertiary); font-weight: 400; }
 .fx-empty { padding: 48px 0; color: var(--text-tertiary); text-align: center; }
+.fx-empty .button { margin-top: 16px; }
+
+/* Resumo: uma linha por prova, com os barcos escalados e o 2x marcado. */
+.fx-summary-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 20px 0 8px; color: var(--text-tertiary); font-size: 13px; }
+.fx-summary-head strong { color: var(--text); font-size: 20px; font-weight: 700; letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
+.fx-summary-head strong small, .fx-summary-points small { color: var(--text-tertiary); font-size: 12px; font-weight: 400; letter-spacing: 0; }
+.fx-summary-list { padding: 0; list-style: none; }
+.fx-summary-list li { border-top: 1px solid var(--border); }
+.fx-summary-list button { display: flex; flex-direction: column; gap: 10px; width: calc(100% + 16px); margin: 0 -8px; padding: 14px 8px; border-radius: 10px; text-align: left; transition: background .15s; }
+.fx-summary-race { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.fx-summary-title { display: flex; flex-direction: column; min-width: 0; }
+.fx-summary-title strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.fx-summary-title small { color: var(--text-tertiary); font-size: 12px; }
+.fx-summary-points { flex-shrink: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fx-summary-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fx-summary-pick { display: flex; align-items: center; gap: 12px; min-width: 0; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.fx-summary-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-summary-logo { position: relative; flex-shrink: 0; }
+.fx-summary-pick .team-badge.small { flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; font-size: 10px; }
+.fx-summary-pick.turbo { color: var(--text); font-weight: 600; }
+.fx-summary-pick.turbo .team-badge { box-shadow: 0 0 0 2px var(--background), 0 0 0 3.5px var(--brand); }
+.fx-summary-logo .fx-x2.mini { position: absolute; right: -8px; bottom: -6px; height: 16px; margin: 0; padding: 0 4px; box-shadow: 0 0 0 2px var(--background); font-size: 9px; }
+.fx-summary-none { color: var(--text-tertiary); font-size: 13px; }
 
 /* Lista de provas (sheet) */
 .fx-race-list button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 10px; border-radius: 10px; text-align: left; }
@@ -115,7 +138,7 @@ div.fx-slot .fx-slot-logo.empty { color: var(--text-tertiary); }
   .fx-board { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 56px; }
   .fx-main { position: sticky; top: 32px; }
   .fx-board .fx-pool { margin-top: 24px; }
-  .fx-ranking, .fantasy > .fx-empty, .fantasy > .fx-skeleton { max-width: 640px; margin-inline: auto; }
+  .fx-ranking, .fx-summary, .fantasy > .fx-empty, .fantasy > .fx-skeleton { max-width: 640px; margin-inline: auto; }
 }
 
 /* Esqueleto de carregamento */
@@ -130,7 +153,7 @@ div.fx-slot .fx-slot-logo.empty { color: var(--text-tertiary); }
 /* No celular o :hover gruda no último elemento tocado; os realces de mouse ficam só onde há mouse.
    No toque, o retorno é o :active, que dura só enquanto o dedo está na tela. */
 button.fx-slot:active .fx-slot-logo.empty { background: var(--brand-soft); }
-.fx-boat:not(:disabled):active, .fx-race-list button:active { background: var(--surface-hover); }
+.fx-boat:not(:disabled):active, .fx-race-list button:active, .fx-summary-list button:active { background: var(--surface-hover); }
 @media (hover: hover) {
   .fx-tabs button:hover { color: var(--text-secondary); }
   .fx-arrow:not(:disabled):hover { background: var(--surface-hover); color: var(--text); }
@@ -140,5 +163,5 @@ button.fx-slot:active .fx-slot-logo.empty { background: var(--brand-soft); }
   button.fx-x2.on:hover { color: var(--on-brand); }
   .fx-link:hover { color: var(--text); }
   .fx-boat:not(:disabled):hover { background: var(--surface-hover); }
-  .fx-race-list button:hover { background: var(--surface-hover); }
+  .fx-race-list button:hover, .fx-summary-list button:hover { background: var(--surface-hover); }
 }
