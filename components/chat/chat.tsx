@@ -89,6 +89,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const picked = useRef<Person[]>([]);
   // Conversa aberta há pouco: aparece na hora com o que ficou guardado, e o banco atualiza por baixo.
   const [cached] = useState(() => cachedConversation(userId, key));
+  const [fromCache] = useState(() => new Set(cached?.messages.map(m => m.id) ?? []));
   const [messages, setMessages] = useState<Message[]>(() => cached?.messages ?? []);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(cached ? 'ready' : 'loading');
   const [hasMore, setHasMore] = useState(cached?.hasMore ?? false);
@@ -166,8 +167,9 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     setMessages(current => {
       if (before) { const ids = new Set(current.map(c => c.id)); return [...page.filter(m => !ids.has(m.id)), ...current]; }
       // Primeira página: troca o cache pelo banco, sem perder o que chegou pelo tempo real ou está enviando.
+      // O que veio do cache e não voltou do banco foi apagado lá (mesmo com a página vazia, quando newest é 0).
       const ids = new Set(page.map(m => m.id));
-      return sorted([...page, ...current.filter(m => m.pending || (m.id > newest && !ids.has(m.id)))]);
+      return sorted([...page, ...current.filter(m => m.pending || (m.id > newest && !ids.has(m.id) && !fromCache.has(m.id)))]);
     });
     setHasMore(page.length === PAGE);
     setStatus('ready');
@@ -175,7 +177,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
       setUnreadUpTo(page[page.length - 1].id);
       markSeen(page[page.length - 1].id);
     }
-  }, [markSeen, notify]);
+  }, [markSeen, notify, fromCache]);
 
   useEffect(() => {
     known.current = new Set(messages.map(m => m.id));
