@@ -103,9 +103,13 @@ div.fx-slot .fx-slot-logo.empty { color: var(--text-tertiary); }
 .fx-summary-title strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .fx-summary-title small { color: var(--text-tertiary); font-size: 12px; }
 .fx-summary-points { flex-shrink: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.fx-summary-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fx-summary-picks { display: grid; gap: 8px; }
 .fx-summary-pick { display: flex; align-items: center; gap: 12px; min-width: 0; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
-.fx-summary-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-summary-name { min-width: 0; overflow-wrap: anywhere; }
+@media (min-width: 560px) {
+  .fx-summary-picks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fx-summary-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
 .fx-summary-logo { position: relative; flex-shrink: 0; }
 .fx-summary-pick .team-badge.small { flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; font-size: 10px; }
 .fx-summary-pick.turbo { color: var(--text); font-weight: 600; }
