@@ -11,13 +11,13 @@ import { useApp, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar, TeamBadge } from '../ui';
 import { useFileUrl } from './files';
-import { AddMembers, GroupDetails } from './groups';
+import { AddMembers, GroupDetails, GroupInvite } from './groups';
 import { affiliationLine, MemberTag, useAffiliationOf } from './affiliations';
 import { usePeople } from './mentions';
 import { isVideo, type Member, type Message, type Person, type Target } from './types';
 import { PhotoViewer, type Photo } from './viewer';
 
-type View = 'info' | 'media' | 'rules' | 'blocked' | 'add' | 'members' | 'contact';
+type View = 'info' | 'media' | 'rules' | 'blocked' | 'add' | 'invite' | 'members' | 'contact';
 
 const contato = 'andreoliveiracunha20@gmail.com';
 const COLUMNS = 'id, user_id, author_name, author_avatar, body, file_path, file_name, file_type, file_size, thumb_path, width, height, created_at, deleted_at, deleted_by, reply_to, edited_at, conversation_id, duration_ms, waveform, event';
@@ -102,7 +102,7 @@ export function InfoPanel({ target, open, initialView, initialContact = null, on
   const personBlocked = !!person && blocked.includes(person.id);
   const visible = preview.filter(m => !blocked.includes(m.user_id) || !!person).slice(0, 4);
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
-  const titles: Record<View, string> = { info: person ? 'Dados do contato' : 'Dados do grupo', media: 'Mídia, links e docs', rules: 'Regras do chat', blocked: 'Pessoas bloqueadas', add: 'Adicionar participantes', members: 'Participantes', contact: 'Dados do contato' };
+  const titles: Record<View, string> = { info: person ? 'Dados do contato' : 'Dados do grupo', media: 'Mídia, links e docs', rules: 'Regras do chat', blocked: 'Pessoas bloqueadas', add: 'Adicionar participantes', invite: 'Link de convite do grupo', members: 'Participantes', contact: 'Dados do contato' };
   const back = view === 'info' || (view === 'contact' && !contact?.from) ? onClose
     : view === 'contact' ? () => setView(contact!.from!) : () => setView('info');
   const closing = view === 'info' || (view === 'contact' && !contact?.from);
@@ -143,11 +143,13 @@ export function InfoPanel({ target, open, initialView, initialContact = null, on
         onBlock={userId && contact.person.id !== userId ? () => blocked.includes(contact.person.id) ? onUnblock(contact.person.id) : onBlock(contact.person) : undefined} />}
 
       {view === 'info' && target.kind === 'group' && <GroupDetails id={target.id} group={target.group} members={members} mediaRow={mediaRow}
-        onPhoto={setPhoto} onAdd={() => setView('add')} onMedia={() => setView('media')} onChanged={onMembersChanged}
+        onPhoto={setPhoto} onAdd={() => setView('add')} onInvite={() => setView('invite')} onMedia={() => setView('media')} onChanged={onMembersChanged}
         onOpenPerson={p => { onClose(); onOpenPerson(p); }} onContact={showContact} onLeft={() => { onClose(); onLeft(); }} />}
 
       {view === 'add' && target.kind === 'group' && members && <AddMembers id={target.id} members={members} blocked={blocked}
         onDone={() => { onMembersChanged(); setView('info'); }} />}
+
+      {view === 'invite' && target.kind === 'group' && <GroupInvite id={target.id} group={target.group} />}
 
       {view === 'info' && target.kind === 'general' && <>
         <section className="group-hero">

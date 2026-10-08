@@ -13,7 +13,7 @@ import { Avatar } from '../ui';
 import { forgetConversation } from './cache';
 import { Conversation } from './chat';
 import { useGeneralReceipts } from './general-receipts';
-import { GroupAvatar, NewGroup } from './groups';
+import { GroupAvatar, JoinGroup, NewGroup } from './groups';
 import { eventText, GROUP_KEY, targetKey, type GroupEvent, type GroupInfo, type Person, type Target } from './types';
 import { useWide, WIDE } from './use-wide';
 
@@ -43,6 +43,8 @@ function ChatsScreen() {
   const router = useRouter();
   const params = useSearchParams();
   const open = params.get('c');
+  // Link de convite de um grupo (?convite=): a folha "Entrar no grupo" aparece por cima das conversas.
+  const invite = params.get('convite');
   const { userId, requireLogin } = useAuth();
   const { notify } = useApp();
   const { unread: groupUnread, mentions: groupMentions } = useChatUnread();
@@ -186,6 +188,13 @@ function ChatsScreen() {
     go(id);
   }
 
+  /** Entrou (ou já participava) pelo link de convite: a conversa do grupo abre no lugar do convite. */
+  function joinedGroup(id: string, group: GroupInfo) {
+    setExtra({ kind: 'group', id, group });
+    loadChats();
+    router.replace(`/comunidade/?c=${id}`);
+  }
+
   /** Você saiu do grupo por aqui: some da lista na hora, sem esperar o tempo real. */
   function leftGroup(id: string) {
     forgetConversation(userId, id);
@@ -233,6 +242,8 @@ function ChatsScreen() {
         : open && userId ? <div className="chats-intro"><span className="spinner" /></div>
         : <Intro onGroup={() => go(GROUP_KEY)} />}
     </div>
+    {invite && <JoinGroup key={invite} code={invite} onJoined={joinedGroup}
+      onClose={() => router.replace(open ? `/comunidade/?c=${open}` : '/comunidade/')} />}
   </section>;
 }
 

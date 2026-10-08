@@ -1,8 +1,9 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Images, Info, LogOut, MessageCircle, Moon, Pencil, Search, ShieldCheck, ShieldOff, Sun, ThumbsDown, UserMinus, UserPlus, Users, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Copy, Images, Info, Link2, LogOut, MessageCircle, Moon, Pencil, RotateCcw, Search, Share2, ShieldCheck, ShieldOff, Sun, ThumbsDown, UserMinus, UserPlus, Users, X } from 'lucide-react';
 import { makeThumbnail } from '@/lib/media';
 import { shortName } from '@/lib/names';
+import { shareLink } from '@/lib/native-share';
 import { supabase, errorMessage } from '@/lib/supabase';
 import { useApp, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
@@ -205,9 +206,9 @@ type Confirm = { title: string; text: string; label: string; run: () => void };
  * com os admins marcados, e as ações de admin (adicionar, remover, promover, editar).
  * mediaRow: a linha "Mídia, links e docs" do painel, igual à das outras conversas.
  */
-export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onMedia, onOpenPerson, onContact, onLeft, onChanged }: {
+export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onInvite, onMedia, onOpenPerson, onContact, onLeft, onChanged }: {
   id: string; group: GroupInfo; members: Member[] | null; mediaRow: React.ReactNode;
-  onPhoto: (photo: Photo) => void; onAdd: () => void; onMedia: () => void; onOpenPerson: (person: Person) => void;
+  onPhoto: (photo: Photo) => void; onAdd: () => void; onInvite: () => void; onMedia: () => void; onOpenPerson: (person: Person) => void;
   /** Dados da pessoa (foto, equipe e situação), como o "Dados do contato" do WhatsApp. */
   onContact: (person: Person) => void;
   onLeft: () => void; onChanged: () => void;
@@ -261,7 +262,7 @@ export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onM
       title: `Sair do grupo "${group.name}"?`,
       text: count <= 1 ? 'Você é a última pessoa do grupo: ao sair, ele e as mensagens são apagados.'
         : amAdmin && !others.some(m => m.admin) ? 'Você é o único admin: outra pessoa do grupo vira admin quando você sair.'
-        : 'Você deixa de receber as mensagens deste grupo. Para voltar, um admin precisa adicionar você.',
+        : 'Você deixa de receber as mensagens deste grupo. Para voltar, um admin precisa adicionar você ou mandar o link de convite.',
       label: 'Sair do grupo',
       run: async () => { if (await run(supabase.rpc('leave_group', { p_conversation: id }))) onLeft(); },
     });
@@ -305,6 +306,9 @@ export function GroupDetails({ id, group, members, mediaRow, onPhoto, onAdd, onM
     <p className="group-label">{members ? `${count} ${count === 1 ? 'participante' : 'participantes'}` : 'Participantes'}</p>
     {amAdmin && <button className="group-row" onClick={onAdd}>
       <span className="round-icon"><UserPlus size={20} /></span><span><strong>Adicionar participantes</strong></span><ChevronRight size={20} className="only-mobile" />
+    </button>}
+    {amAdmin && <button className="group-row" onClick={onInvite}>
+      <span className="round-icon"><Link2 size={20} /></span><span><strong>Convidar via link</strong></span><ChevronRight size={20} className="only-mobile" />
     </button>}
     {!members ? <p className="group-empty"><span className="spinner" /></p> : <>
       {me && memberRow(me)}
@@ -397,4 +401,123 @@ export function AddMembers({ id, members, blocked, onDone }: { id: string; membe
       {saving ? <span className="spinner" /> : <Check size={26} />}
     </button>}
   </div>;
+}
+
+/** Endereço do convite: abre as conversas com a folha "Entrar no grupo" (no site e no app, que carrega o site). */
+export const inviteUrl = (code: string) => `${window.location.origin}/comunidade/?convite=${encodeURIComponent(code)}`;
+
+/**
+ * "Link de convite do grupo" (só admins), como no WhatsApp: o link aparece na hora (é criado na primeira vez)
+ * e dá para enviar, copiar ou redefinir. Redefinir desativa o link anterior para quem ainda não entrou.
+ */
+export function GroupInvite({ id, group }: { id: string; group: GroupInfo }) {
+  const { notify } = useApp();
+  const [code, setCode] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const url = code ? inviteUrl(code) : '';
+
+  useEffect(() => {
+    let alive = true;
+    void supabase.rpc('group_invite', { p_conversation: id }).then(({ data, error }) => {
+      if (!alive) return;
+      if (error) notify(errorMessage(error)); else setCode(data);
+    });
+    return () => { alive = false; };
+  }, [id, notify]);
+
+  async function copy() {
+    try { await navigator.clipboard.writeText(url); notify('Link copiado.'); }
+    catch { notify('Não foi possível copiar. Segure o link para copiar.'); }
+  }
+
+  async function send() {
+    const shared = await shareLink({ title: group.name, text: `Siga este link para entrar no grupo "${group.name}" no DSB:`, url });
+    if (!shared) await copy();
+  }
+
+  async function reset() {
+    setConfirm(false);
+    setResetting(true);
+    const { data, error } = await supabase.rpc('group_invite', { p_conversation: id, p_reset: true });
+    setResetting(false);
+    if (error) { notify(errorMessage(error)); return; }
+    setCode(data);
+    notify('Link redefinido. O link anterior não funciona mais.');
+  }
+
+  return <>
+    <section className="group-hero">
+      <GroupAvatar id={id} group={group} />
+      <h1>{group.name}</h1>
+      {code ? <p className="invite-url">{url}</p> : <p><span className="spinner" /></p>}
+    </section>
+    <p className="group-footnote invite-note">Qualquer pessoa com o DSB pode seguir este link para entrar no grupo. Compartilhe só com quem você confia.</p>
+    <hr />
+    <button className="group-row" onClick={() => void send()} disabled={!code}><Share2 size={22} /><span><strong>Enviar link</strong></span></button>
+    <button className="group-row" onClick={() => void copy()} disabled={!code}><Copy size={22} /><span><strong>Copiar link</strong></span></button>
+    <button className="group-row" onClick={() => setConfirm(true)} disabled={!code || resetting}>
+      {resetting ? <span className="spinner" /> : <RotateCcw size={22} />}<span><strong>Redefinir link</strong><small>Quem ainda não entrou pelo link atual não vai conseguir usar ele.</small></span>
+    </button>
+    <Sheet open={confirm} onClose={() => setConfirm(false)} title="Redefinir o link?">
+      <div className="confirm">
+        <p>O link atual deixa de funcionar e o grupo ganha um novo. Quem já entrou continua no grupo.</p>
+        <div><button className="button" onClick={() => setConfirm(false)}>Cancelar</button>
+          <button className="button danger-solid" onClick={() => void reset()}>Redefinir link</button></div>
+      </div>
+    </Sheet>
+  </>;
+}
+
+type Invite = { id: string; name: string; description: string | null; photo_path: string | null; members: number; joined: boolean };
+
+/**
+ * Quem abre um link de convite, como no WhatsApp: a foto, o nome, a descrição e quantas pessoas participam,
+ * com o botão de entrar. Sem conta, o botão pede o login; já participando, só abre a conversa.
+ */
+export function JoinGroup({ code, onClose, onJoined }: { code: string; onClose: () => void; onJoined: (id: string, group: GroupInfo) => void }) {
+  const { userId, requireLogin } = useAuth();
+  const { notify } = useApp();
+  // undefined: carregando; null: link inválido ou redefinido.
+  const [invite, setInvite] = useState<Invite | null | undefined>(undefined);
+  const [joining, setJoining] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void supabase.rpc('group_invite_info', { p_code: code }).then(({ data }) => { if (alive) setInvite(data?.[0] ?? null); });
+    return () => { alive = false; };
+  }, [code, userId]);
+
+  async function join() {
+    if (!invite || joining) return;
+    if (!userId) { requireLogin('Entre para participar do grupo.'); return; }
+    const group = { name: invite.name, photo_path: invite.photo_path, description: invite.description };
+    if (invite.joined) { onJoined(invite.id, group); return; }
+    setJoining(true);
+    const { data, error } = await supabase.rpc('join_group_by_invite', { p_code: code });
+    setJoining(false);
+    if (error || !data) { notify(errorMessage(error)); return; }
+    onJoined(data, group);
+  }
+
+  return <Sheet open onClose={onClose} title={invite === null ? 'Link de convite inválido' : 'Convite para grupo'}>
+    {invite === undefined ? <p className="group-empty"><span className="spinner" /></p>
+      : invite === null ? <div className="confirm">
+        <p>Este link não é válido. Ele pode ter sido redefinido por um admin do grupo: peça um link novo a quem convidou você.</p>
+        <div><button className="button primary" onClick={onClose}>OK</button></div>
+      </div>
+      : <div className="join-group">
+        <GroupAvatar id={invite.id} group={invite} />
+        <h3>{invite.name}</h3>
+        <p>Grupo · {invite.members} {invite.members === 1 ? 'participante' : 'participantes'}</p>
+        {invite.description && <p className="join-group-description">{invite.description}</p>}
+        {invite.joined && <p className="join-group-note">Você já participa deste grupo.</p>}
+        <div className="confirm"><div>
+          <button className="button" onClick={onClose}>Cancelar</button>
+          <button className="button primary" onClick={() => void join()} disabled={joining}>
+            {joining ? 'Entrando…' : invite.joined ? 'Abrir conversa' : userId ? 'Entrar no grupo' : 'Entrar na conta'}
+          </button>
+        </div></div>
+      </div>}
+  </Sheet>;
 }

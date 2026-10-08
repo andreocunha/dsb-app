@@ -16,7 +16,7 @@ export type Member = Person & { admin: boolean };
 export const MAX_GROUP = 256;
 export type Row = Database['public']['Tables']['messages']['Row'];
 /** Aviso no meio do grupo ("Fulano adicionou Ciclano"), salvo em messages.event. */
-export type GroupEvent = { type: 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'description' | 'photo'; users?: { id: string; name: string }[]; name?: string };
+export type GroupEvent = { type: 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'description' | 'photo' | 'joined'; users?: { id: string; name: string }[]; name?: string };
 /** Resumo da mensagem citada, como vem de chat_messages. */
 export type Reply = { id: number; user_id: string; author_name: string; body: string | null; file_type: string | null; file_name: string | null; thumb_path: string | null; duration_ms?: number | null; location?: unknown; deleted: boolean };
 /**
@@ -80,5 +80,6 @@ export function eventText(event: GroupEvent, actor: { user_id: string; author_na
     case 'renamed': return `${who} mudou o nome do grupo para "${event.name ?? ''}"`;
     case 'description': return `${who} mudou a descrição do grupo`;
     case 'photo': return `${who} mudou a foto do grupo`;
+    case 'joined': return `${who} entrou usando o link de convite deste grupo`;
   }
 }

@@ -1,5 +1,6 @@
 'use client';
 import { use, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Ban, Camera, Check, CheckCheck, ChevronDown, Clock3, Download, FileText, MapPin, Mic, Play, Reply as ReplyIcon, SmilePlus, Video } from 'lucide-react';
 import { formatMessage, jumboEmoji, nameColor, preview, type Token } from '@/lib/chat-format';
 import { asPlace, hasPlaceText } from '@/lib/location';
@@ -205,12 +206,26 @@ export function Formatted({ text, plain = false, ids, all = false }: { text: str
   return <Tokens tokens={formatMessage(text, people)} plain={plain} mentions={mentions} />;
 }
 
+/** Link do próprio DSB (um convite de grupo, por exemplo) abre dentro do app, não numa aba nova. */
+function internalPath(href: string) {
+  if (typeof window === 'undefined') return null;
+  try {
+    const url = new URL(href);
+    return url.origin === window.location.origin ? url.pathname + url.search + url.hash : null;
+  } catch { return null; }
+}
+
 function Tokens({ tokens, plain, mentions }: { tokens: Token[]; plain: boolean; mentions: MentionContext }) {
   const { me, onOpen } = mentions;
   return tokens.map((token, i) => {
     switch (token.type) {
       case 'text': return token.text;
-      case 'link': return plain ? token.text : <a key={i} className="bubble-link" href={token.href} target="_blank" rel="noopener noreferrer nofollow" onClick={e => e.stopPropagation()}>{token.text}</a>;
+      case 'link': {
+        if (plain) return token.text;
+        const path = internalPath(token.href);
+        return path ? <Link key={i} className="bubble-link" href={path} onClick={e => e.stopPropagation()}>{token.text}</Link>
+          : <a key={i} className="bubble-link" href={token.href} target="_blank" rel="noopener noreferrer nofollow" onClick={e => e.stopPropagation()}>{token.text}</a>;
+      }
       case 'mention': return plain || !onOpen || token.id === me || token.id === ALL_MENTIONABLE.id ? <span key={i} className="mention">@{token.text}</span>
         : <button key={i} type="button" className="mention" onClick={e => { e.stopPropagation(); onOpen(token.id); }}>@{token.text}</button>;
       case 'code': return <code key={i}>{token.text}</code>;

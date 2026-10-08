@@ -416,6 +416,17 @@ a.group-member:hover, .group-member.me { background: var(--wa-hover); }
 .group-row strong.green { color: var(--wa-green-strong); }
 .group-row > .round-icon { flex: 0 0 40px; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--wa-green); color: #fff; }
 .group-search { margin: 12px 0; }
+/* Link de convite do grupo */
+.group-hero .invite-url { max-width: 100%; margin-top: 10px; color: var(--wa-green-strong); font-size: 15px; overflow-wrap: anywhere; user-select: all; }
+.invite-note { margin-top: 4px; text-align: center; }
+.group-row > .spinner { flex-shrink: 0; width: 22px; height: 22px; color: var(--wa-icon); }
+.join-group { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.join-group > .avatar { width: 96px; height: 96px; margin-bottom: 14px; border-radius: 50%; object-fit: cover; }
+.join-group h3 { max-width: 100%; color: var(--wa-text); font-size: 20px; font-weight: 500; overflow-wrap: anywhere; }
+.join-group > p { margin-top: 2px; color: var(--wa-text-2); font-size: 15px; }
+.join-group .join-group-description { max-height: 9.5em; margin-top: 12px; overflow-y: auto; color: var(--wa-text); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.join-group .join-group-note { margin-top: 12px; }
+.join-group .confirm { align-self: stretch; margin-top: 24px; }
 /* Avatar sem foto também é um span: não pode esticar como o texto ao lado. */
 .group-member > .avatar { flex: 0 0 48px; display: grid; }
 .group-member .avatar.letter { font-size: 24px; font-weight: 400; }
