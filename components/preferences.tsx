@@ -37,7 +37,8 @@ function useTeamOptions() {
   const [teams, setTeams] = useState<TeamOption[] | null>(null);
   useEffect(() => {
     let alive = true;
-    void supabase.from('teams').select('id, name, initials, color, logo, active').order('name')
+    // Jet ski de resgate e barco de apoio (rastreio) não são equipes.
+    void supabase.from('teams').select('id, name, initials, color, logo, active').in('boat_hull', ['cat', 'mono']).order('name')
       .then(({ data }) => { if (alive) setTeams((data ?? []) as TeamOption[]); });
     return () => { alive = false; };
   }, []);
