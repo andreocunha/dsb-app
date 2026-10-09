@@ -81,8 +81,8 @@ export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => 
         </div>
       </div>
       {!race ? <Standings races={races} data={data} standings={standings} onTeam={setTeamId} />
-        : race.kind === 'bracket' ? <MatchRace key={race.id} race={race} data={data} onTeam={setTeamId} />
-        : <LapRace key={race.id} race={race} data={data} onTeam={setTeamId} />}
+        : race.kind === 'bracket' ? <MatchRace key={race.id} race={race} data={data} />
+        : <LapRace key={race.id} race={race} data={data} />}
       <TeamSheet team={selected} standings={standings} races={races} data={data} onClose={() => setTeamId(null)} />
       <ShareArt open={sharing} onClose={() => setSharing(false)} race={race} data={data} />
     </>}
@@ -236,13 +236,14 @@ function formatTick(ms: number) {
   return `${Math.floor(minutes / 60)}h${minutes % 60 ? String(minutes % 60).padStart(2, '0') : ''}`;
 }
 
-const LapRace = memo(function LapRace({ race, data, onTeam }: { race: Race; data: ResultsData; onTeam: (id: string) => void }) {
+const LapRace = memo(function LapRace({ race, data }: { race: Race; data: ResultsData }) {
   const laps = useRaceLaps(race.id);
   const now = useNow();
   const [open, setOpen] = useState<string | null>(null);
-  const scores = sortRace(data.scores.filter(s => s.race_id === race.id));
-  // Sem nenhuma volta ainda: só a situação da prova e quem vai largar.
-  if (!scores.length) return <><RaceHeader race={race} /><Entrants teams={data.teams} onTeam={onTeam} /></>;
+  const published = sortRace(data.scores.filter(s => s.race_id === race.id));
+  // Antes da primeira volta, o formato da prova já aparece: as faixas de cada barco e a lista de inscritas.
+  const pending = !published.length;
+  const scores = pending ? waitingRows(race, data.teams) : published;
 
   const teams = new Map(data.teams.map(t => [t.id, t]));
   const start = Date.parse(race.started_at ?? race.starts_at);
@@ -253,7 +254,7 @@ const LapRace = memo(function LapRace({ race, data, onTeam }: { race: Race; data
   const splits = new Map(scores.map(s => [s.team_id, lapSplits(timesOf(s.team_id), start)]));
   const bests = scores.flatMap(s => { const list = splits.get(s.team_id)!; return list.length ? [{ team: s.team_id, ms: Math.min(...list) }] : []; });
   const best = bests.sort((a, b) => a.ms - b.ms)[0];
-  const leader = scores[0]?.status === 'ok' ? scores[0] : null;
+  const leader = !pending && scores[0]?.status === 'ok' ? scores[0] : null;
   const leaderLast = leader?.last_lap_at ? Date.parse(leader.last_lap_at) : null;
 
   const lastTime = Math.max(start + (duration ?? 0), ...scores.map(s => s.last_lap_at ? Date.parse(s.last_lap_at) : start));
@@ -264,6 +265,7 @@ const LapRace = memo(function LapRace({ race, data, onTeam }: { race: Race; data
   const ticks = Array.from({ length: Math.floor(span / step) + 1 }, (_, i) => i * step);
 
   function detail(score: Score) {
+    if (pending) return 'Aguardando a largada';
     if (score.status === 'dns') return 'Não largou';
     const voltas = `${score.laps} ${score.laps === 1 ? 'volta' : 'voltas'}`;
     if (score.status === 'dnf') return `Não terminou · ${voltas}`;
@@ -278,18 +280,21 @@ const LapRace = memo(function LapRace({ race, data, onTeam }: { race: Race; data
 
   return <>
     <RaceHeader race={race} />
-    <div className="lap-layout">
+    <div className={`lap-layout ${pending ? 'is-pending' : ''}`}>
     <div className="lap-side">
     <div className="race-summary">
       <div><span>{live ? 'Liderando' : 'Vencedor'}</span><strong className="name">{leader ? teams.get(leader.team_id)?.name : '–'}</strong><small>{leader ? `${leader.laps} voltas` : 'a definir'}</small></div>
       <div><span>Melhor volta</span><strong>{best ? formatDuration(best.ms) : '–'}</strong><small>{best ? teams.get(best.team)?.name : 'a definir'}</small></div>
-      <div><span>Terminaram</span><strong>{scores.filter(s => s.status === 'ok').length}/{scores.length}</strong><small>{scores.filter(s => s.status === 'dnf').length} DNF · {scores.filter(s => s.status === 'dns').length} DNS</small></div>
+      {pending
+        ? <div><span>Inscritas</span><strong>{scores.length}</strong><small>equipes</small></div>
+        : <div><span>Terminaram</span><strong>{scores.filter(s => s.status === 'ok').length}/{scores.length}</strong><small>{scores.filter(s => s.status === 'dnf').length} DNF · {scores.filter(s => s.status === 'dns').length} DNS</small></div>}
     </div>
     {live && <p className="live-note"><span className="live-dot" /> Parcial: a prova ainda está acontecendo.</p>}
 
-    {laps && laps.size > 0 && <section className="card lap-chart" aria-label="Voltas ao longo da prova">
+    {(pending || (laps && laps.size > 0)) && <section className="card lap-chart" aria-label="Voltas ao longo da prova">
       <div className="lap-chart-title"><h2>Voltas ao longo da prova</h2><small>cada ponto é uma volta</small></div>
-      <div className="lap-lanes">
+      <div className={`lap-lanes ${pending ? 'empty' : ''}`}>
+        {pending && <p className="lap-empty">As voltas aparecem aqui durante a prova, no horário em que cada barco fechar a volta.</p>}
         {duration && <div className="lap-overlay" aria-hidden="true"><span className="lap-flag" style={{ left: x(start + duration) }} /></div>}
         {scores.filter(s => s.status !== 'dns').map(s => {
           const times = timesOf(s.team_id);
@@ -307,7 +312,7 @@ const LapRace = memo(function LapRace({ race, data, onTeam }: { race: Race; data
           </div>;
         })}
       </div>
-      <div className="lap-ticks" aria-hidden="true">{ticks.map(ms => <span key={ms} style={{ left: x(start + ms) }}>{ms ? formatTick(ms) : '0'}</span>)}</div>
+      {(!pending || duration) && <div className="lap-ticks" aria-hidden="true">{ticks.map(ms => <span key={ms} style={{ left: x(start + ms) }}>{ms ? formatTick(ms) : '0'}</span>)}</div>}
       <div className="results-legend">
         <span><span className="lap-dot static" /> volta</span>
         <span><span className="lap-dot static best" /> melhor volta da equipe</span>
@@ -330,7 +335,7 @@ const LapRace = memo(function LapRace({ race, data, onTeam }: { race: Race; data
               <PositionBadge score={score} />
               {team && <TeamBadge team={team} small />}
               <span className="race-row-main"><strong>{team?.name ?? score.team_id}</strong><small>{detail(score)}{score.note && ` · ${score.note}`}</small></span>
-              <span className="race-row-points"><strong>{score.points}</strong><small>pts</small></span>
+              <span className="race-row-points"><strong>{pending ? '–' : score.points}</strong><small>pts</small></span>
               {list.length > 0 && <ChevronDown size={16} className="race-row-chevron" />}
             </button>
             {isOpen && <div className="lap-splits">
@@ -349,12 +354,10 @@ const LapRace = memo(function LapRace({ race, data, onTeam }: { race: Race; data
 // fica na altura do meio dos dois que o alimentam.
 const CARD_W = 176, CARD_H = 64, GAP_X = 36, SLOT = 80, HEAD = 28;
 
-const MatchRace = memo(function MatchRace({ race, data, onTeam }: { race: Race; data: ResultsData; onTeam: (id: string) => void }) {
+const MatchRace = memo(function MatchRace({ race, data }: { race: Race; data: ResultsData }) {
   const duels = data.duels.filter(d => d.race_id === race.id);
   const published = sortRace(data.scores.filter(s => s.race_id === race.id));
   const pending = !published.length;
-  // Sem chave montada nem resultado: só a situação da prova e quem vai disputar.
-  if (pending && !duels.length) return <><RaceHeader race={race} /><Entrants teams={data.teams} onTeam={onTeam} /></>;
   const scores = pending ? waitingRows(race, data.teams) : published;
 
   const teams = new Map(data.teams.map(t => [t.id, t]));

@@ -348,6 +348,9 @@ img.avatar { object-fit: cover; }
   .lap-side { display: contents; }
   .lap-main { order: 1; }
   .lap-side .lap-chart { order: 2; margin: 12px 0 0; }
+  /* Antes da largada o gráfico vazio é o que mostra o formato da prova: vem antes da lista. */
+  .lap-layout.is-pending .lap-main { order: 3; }
+  .lap-layout.is-pending .lap-side .lap-chart { margin: 0 0 12px; }
 }
 .lap-chart-title { display: flex; align-items: baseline; justify-content: space-between; }
 .lap-chart-title h2 { font-size: 14px; }
