@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { CalendarDays, Clock3, Maximize2, PictureInPicture2, Radio, Trophy, X } from 'lucide-react';
-import { useRaces } from '@/lib/data';
-import { hasStarted, nextRace, raceDate, raceTime, useNow } from '@/lib/races';
+import { Maximize2, PictureInPicture2, Radio, Trophy, X } from 'lucide-react';
+import { useNow } from '@/lib/races';
+import { featured, phases } from '@/lib/schedule';
+import { useSchedule } from '@/lib/use-schedule';
 import { eventConfig, youtubeEmbedUrl } from '@/lib/event-config';
 import { useLiveUrl } from '@/lib/live-url';
 import { ResultsSheet } from './results';
+import { ScheduleCard } from './schedule';
 import { useAuth } from './auth';
 import { supabase } from '@/lib/supabase';
 
@@ -19,8 +21,9 @@ export function Dashboard({ visible }: { visible: boolean }) {
   const [results, setResults] = useState(false);
   const [live, setLive] = useState<LiveMode>('off');
   const now = useNow();
-  const { data: races } = useRaces();
-  const race = races?.length ? nextRace(races, now) : null;
+  const { items } = useSchedule();
+  // Nome do que está acontecendo (ou vem a seguir), para a barra da live.
+  const current = items && now ? featured(phases(items, now)) : null;
   const { isAdmin } = useAuth();
   const frame = useRef<HTMLIFrameElement>(null);
   const trackerOrigin = new URL(eventConfig.trackingUrl).origin;
@@ -44,20 +47,10 @@ export function Dashboard({ visible }: { visible: boolean }) {
   return (
     <div className={`home fill ${live === 'pip' ? 'has-pip' : ''}`} hidden={!visible}>
       <div className="home-hud">
-        <section className="hud-card race-card" aria-label="Próxima prova">
-          {race ? <>
-            <span className="eyebrow">{hasStarted(race, now) ? 'Última prova' : 'Próxima prova'} · Prova {race.number}</span>
-            <h1>{race.name}</h1>
-            <p>
-              <span><CalendarDays size={14} /><time dateTime={race.starts_at}>{raceDate(race)}</time></span>
-              <span><Clock3 size={14} /><time dateTime={race.starts_at}>{raceTime(race)}</time></span>
-            </p>
-          </> : <><span className="eyebrow">Desafio Solar Brasil</span><h1>Carregando provas…</h1><p>&nbsp;</p></>}
-          <div className="hud-actions">
-            <button aria-haspopup="dialog" onClick={() => setResults(true)}><Trophy size={16} /> Resultado</button>
-            <button aria-pressed={live !== 'off'} onClick={() => setLive(live === 'off' ? 'full' : 'off')}><Radio size={16} /> Live</button>
-          </div>
-        </section>
+        <ScheduleCard items={items} actions={<div className="hud-actions">
+          <button aria-haspopup="dialog" onClick={() => setResults(true)}><Trophy size={16} /> Resultado</button>
+          <button aria-pressed={live !== 'off'} onClick={() => setLive(live === 'off' ? 'full' : 'off')}><Radio size={16} /> Live</button>
+        </div>} />
       </div>
 
       <div className="home-stage">
@@ -71,7 +64,7 @@ export function Dashboard({ visible }: { visible: boolean }) {
           referrerPolicy="strict-origin-when-cross-origin"
         />
         {/* A live sai junto com a home, para o áudio não seguir tocando escondido. */}
-        {visible && live !== 'off' && <Live mode={live} raceName={race?.name ?? 'Desafio Solar Brasil'} setMode={setLive} />}
+        {visible && live !== 'off' && <Live mode={live} raceName={current?.item.title ?? 'Desafio Solar Brasil'} setMode={setLive} />}
       </div>
       <ResultsSheet open={results} onClose={() => setResults(false)} />
     </div>

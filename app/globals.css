@@ -131,9 +131,42 @@ img.avatar { object-fit: cover; }
 .home-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #1d2a1e; }
 .map-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .hud-card { border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: var(--shadow); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-.race-card h1 { margin: 1px 0 3px; font-size: 18px; font-weight: 700; letter-spacing: -.4px; line-height: 1.2; }
-.race-card p { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-secondary); font-size: 12px; }
-.race-card p span { display: flex; align-items: center; gap: 5px; }
+.race-card { position: relative; overflow: hidden; }
+/* O topo do card abre a programação inteira. */
+.race-card-main { display: block; width: 100%; min-width: 0; color: inherit; text-align: left; }
+.race-card-main:disabled { cursor: default; }
+.race-card .eyebrow { display: flex; align-items: center; gap: 6px; }
+.race-card h1 { display: flex; align-items: center; gap: 2px; margin: 1px 0 3px; font-size: 18px; font-weight: 700; letter-spacing: -.4px; line-height: 1.2; }
+.race-card h1 svg { flex-shrink: 0; color: var(--text-tertiary); }
+.race-card p { color: var(--text-secondary); font-size: 12px; }
+.race-card s { color: var(--text-tertiary); }
+/* Quanto da prova já passou: linha fina no pé do card. */
+.race-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--brand); transform: scaleX(var(--p)); transform-origin: left; transition: transform 1s linear; }
+.countdown { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+.tag { display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; vertical-align: 1px; }
+.tag-warn { background: var(--team-gold-bg); color: var(--team-gold); }
+.tag-muted { background: var(--surface-hover); color: var(--text-secondary); }
+.tag-live { background: var(--danger-soft); color: var(--danger); }
+.tag .live-dot { width: 6px; height: 6px; }
+
+/* Programação: um bloco por dia, o item atual em destaque. */
+.schedule, .schedule ol { padding: 0; list-style: none; }
+.schedule { display: grid; gap: 14px; }
+.schedule-day { position: sticky; top: 0; z-index: 1; padding: 4px 0 6px; background: var(--surface); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.schedule-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.schedule ol > .schedule-row:last-child { border-bottom: 0; }
+.schedule-time { display: grid; font-size: 14px; font-variant-numeric: tabular-nums; line-height: 1.35; }
+.schedule-time strong { font-weight: 600; }
+.schedule-time s { color: var(--text-tertiary); font-size: 12px; }
+.schedule-main { display: grid; gap: 1px; min-width: 0; }
+.schedule-main strong { font-size: 15px; font-weight: 600; line-height: 1.3; }
+.schedule-main small { color: var(--text-secondary); font-size: 12px; }
+.schedule-main .schedule-shift { color: var(--team-gold); }
+.schedule-status { display: grid; justify-items: end; gap: 3px; padding-top: 1px; }
+.schedule-status small { color: var(--text-tertiary); font-size: 12px; }
+.schedule-status .countdown { color: var(--text-secondary); font-size: 13px; }
+.schedule-row.is-done .schedule-time, .schedule-row.is-done .schedule-main { opacity: .5; }
+.schedule-row.is-current { margin: 0 -12px; padding: 10px 12px; border-bottom-color: transparent; border-radius: 12px; background: var(--brand-soft); }
 .hud-actions { display: flex; gap: 6px; }
 .hud-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); font-size: 13px; font-weight: 500; }
 .hud-actions button:hover { background: var(--surface-hover); }
@@ -171,7 +204,7 @@ img.avatar { object-fit: cover; }
 @media (max-width: 899px) {
   .home-hud { position: relative; z-index: 4; }
   .race-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: center; padding: 10px 12px; border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
-  .race-card .hud-actions { grid-column: 2; grid-row: 1 / 4; }
+  .race-card .hud-actions { grid-column: 2; grid-row: 1; }
   .race-card .hud-actions button { padding: 0 10px; }
   .live-bar button span { display: none; }
 }

@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { ChevronDown, Clock3, Share2, Trophy } from 'lucide-react';
 import { useRaces, type Race, type Team } from '@/lib/data';
 import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
-import { hasStarted, raceDate, raceTime, useNow } from '@/lib/races';
+import { closingMinutes, hasStarted, raceDate, raceTime, useNow } from '@/lib/races';
 import {
-  DOC_ITEMS, ITEM_POINTS, bracketColumns, closingWindowMinutes, duelWinner, formatDuel, formatDuration,
+  DOC_ITEMS, ITEM_POINTS, bracketColumns, duelWinner, formatDuel, formatDuration,
   lapSplits, pointsIntensity, sortRace, sortStandings, stageLabel, type Duel, type Score,
 } from '@/lib/scoring';
 import { Sheet, TeamBadge } from './ui';
@@ -136,7 +136,7 @@ function RaceHeader({ race }: { race: Race }) {
   const rule = race.kind === 'bracket'
     ? 'Duelos X1 eliminatórios: passa quem fizer o menor tempo. Quem cai na mesma fase é ordenado pelo tempo.'
     : minutes
-      ? `${minutes} min de prova, com até ${Math.round(closingWindowMinutes(minutes))} min para fechar a última volta. Vence quem completar mais voltas.`
+      ? `${minutes} min de prova, com até ${Math.round(closingMinutes(race))} min para fechar a última volta. Vence quem completar mais voltas.`
       : 'Vence quem completar mais voltas; no empate, quem fechou a última volta primeiro.';
   return <header className="race-header">
     <span>Prova {race.number} · {dayMonth.format(new Date(race.starts_at))} · {raceTime(race)}</span>
@@ -178,7 +178,7 @@ function LapRace({ race, data }: { race: Race; data: ResultsData }) {
   const teams = new Map(data.teams.map(t => [t.id, t]));
   const start = Date.parse(race.started_at ?? race.starts_at);
   const duration = race.duration_minutes ? race.duration_minutes * 60_000 : null;
-  const deadline = race.duration_minutes ? start + duration! + closingWindowMinutes(race.duration_minutes) * 60_000 : null;
+  const deadline = race.duration_minutes ? start + duration! + closingMinutes(race) * 60_000 : null;
   const live = deadline !== null && now >= start && now < deadline;
   const timesOf = (teamId: string) => laps?.get(teamId) ?? [];
   const splits = new Map(scores.map(s => [s.team_id, lapSplits(timesOf(s.team_id), start)]));

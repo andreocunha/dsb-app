@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Flag, LogIn, Megaphone, Minus, Plus, Radio, RotateCcw, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import { useApp } from './app-shell';
+import { SchedulePanel } from './admin-schedule';
 import { useAuth } from './auth';
 import { Sheet, TeamBadge } from './ui';
 import { supabase, errorMessage } from '@/lib/supabase';
@@ -14,9 +15,9 @@ import {
   type Duel, type DuelStage, type Score, type Status,
 } from '@/lib/scoring';
 
-type Tab = 'races' | 'teams' | 'notify' | 'live';
+type Tab = 'races' | 'agenda' | 'teams' | 'notify' | 'live';
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'races', label: 'Provas' }, { id: 'teams', label: 'Equipes' }, { id: 'notify', label: 'Notificação' }, { id: 'live', label: 'Live' },
+  { id: 'races', label: 'Provas' }, { id: 'agenda', label: 'Agenda' }, { id: 'teams', label: 'Equipes' }, { id: 'notify', label: 'Notificação' }, { id: 'live', label: 'Live' },
 ];
 const STAGES: DuelStage[] = ['r32', 'r16', 'qf', 'sf', 'third', 'final'];
 const STATUS: { id: Status; label: string }[] = [{ id: 'ok', label: 'Normal' }, { id: 'dnf', label: 'DNF' }, { id: 'dns', label: 'DNS' }];
@@ -42,7 +43,7 @@ export function Admin() {
   const [races, reloadRaces] = useAdminRaces();
   const { data, error, reload } = useResults(isAdmin === true, 'resultados-admin');
 
-  const heading = <div className="page-heading"><div><h1>Organização</h1><p>Voltas, pontos, notificações e a transmissão ao vivo.</p></div></div>;
+  const heading = <div className="page-heading"><div><h1>Organização</h1><p>Voltas, horários, pontos, notificações e a transmissão ao vivo.</p></div></div>;
   if (!userId || isAdmin === false) return <div className="page settings admin">
     {heading}
     <div className="settings-card settings-signin">
@@ -63,6 +64,7 @@ export function Admin() {
     {isAdmin === null || !races || !data
       ? <p className="panel-note">{error ? 'Não foi possível carregar. Confira sua conexão.' : 'Carregando…'}</p>
       : tab === 'races' ? <RacesPanel races={races} data={data} onRaceChanged={reloadRaces} />
+      : tab === 'agenda' ? <SchedulePanel />
       : tab === 'teams' ? <TeamsPanel races={races} data={data} onChanged={reload} />
       : tab === 'notify' ? <NotifyPanel />
       : <LivePanel />}

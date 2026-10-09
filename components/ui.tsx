@@ -31,7 +31,7 @@ const EASE = 'cubic-bezier(.2, .8, .2, 1)';
 
 /**
  * Bottom sheet no mobile, modal centralizado a partir de 640px (ver .sheet no CSS).
- * Abre e fecha com animação; no mobile, arrastar o topo para baixo fecha.
+ * Abre e fecha com animação; no mobile, arrastar para baixo (em qualquer lugar, com a lista no topo) fecha.
  */
 export function Sheet({ open, onClose, title, subtitle, actions, size = 'default', children }: {
   open: boolean; onClose: () => void; title: string; subtitle?: string; actions?: React.ReactNode;
@@ -49,18 +49,23 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
       if (!dialog.open) return;
       // Fecha a partir de onde estiver (inclusive no meio de um arraste).
       const from = getComputedStyle(dialog).transform;
-      const done = () => { if (!dialog.open) return; dialog.style.transform = ''; dialog.style.transition = ''; dialog.close(); };
+      // Reabrir antes de terminar cancela o fechamento (senão a garantia abaixo fecharia o sheet reaberto).
+      let cancelled = false;
+      const done = () => { if (cancelled || !dialog.open) return; dialog.style.transform = ''; dialog.style.transition = ''; dialog.close(); };
       if (reduceMotion()) { done(); return; }
       const frames = isModal()
         ? [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px) scale(.98)' }]
         : [{ transform: from === 'none' ? 'translateY(0)' : from }, { transform: 'translateY(100%)' }];
       dialog.animate(frames, { duration: isModal() ? 140 : 220, easing: EASE, fill: 'forwards' }).finished.then(done, done);
       // Garantia: com a aba em segundo plano a animação não avança, mas o diálogo precisa fechar.
-      setTimeout(done, 400);
+      const timer = setTimeout(done, 400);
       try { dialog.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, pseudoElement: '::backdrop', fill: 'forwards' }); } catch { /* sem suporte: o fundo some junto */ }
-      return;
+      return () => { cancelled = true; clearTimeout(timer); };
     }
-    dialog.getAnimations().forEach(animation => animation.cancel());
+    // subtree: inclui o fundo (::backdrop), que também estava sumindo.
+    dialog.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    dialog.style.transform = '';
+    dialog.style.transition = '';
     if (!dialog.open) {
       dialog.showModal();
       // O foco vai para o sheet, não para o primeiro botão (evita o anel no X ao abrir com o mouse).
@@ -74,27 +79,87 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
   // Desmontado aberto (ex.: troca de tela): some sem animação.
   useEffect(() => { const dialog = ref.current; return () => dialog?.close(); }, []);
 
-  // Arrastar para baixo pela alça ou pelo título.
+  // Solta o arraste: fecha se desceu o bastante ou foi um puxão rápido para baixo; senão volta.
+  function release(dy: number, speed: number) {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (speed > -.2 && (dy > Math.min(140, dialog.offsetHeight * .25) || (dy > 24 && speed > .5))) { fechar.current(); return; }
+    dialog.style.transition = `transform .2s ${EASE}`;
+    dialog.style.transform = '';
+  }
+  // Para cima resiste; para baixo acompanha o dedo.
+  const follow = (dialog: HTMLElement, dy: number) => { dialog.style.transform = `translateY(${dy > 0 ? dy : dy / 6}px)`; };
+
+  // No toque, arrastar para baixo em qualquer lugar do sheet fecha, como nos apps nativos.
+  // Com uma lista rolada, o gesto rola a lista; só um novo arraste, com ela já no topo, puxa o sheet.
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    let gesture: { x: number; y: number; dy: number; lastY: number; lastT: number; speed: number; state: 'pending' | 'drag' | 'skip' } | null = null;
+    const onStart = (e: TouchEvent) => {
+      gesture = null;
+      const target = e.target as HTMLElement;
+      if (e.touches.length !== 1 || isModal() || target.closest('input, textarea, select, [contenteditable="true"], [data-no-sheet-drag]')) return;
+      // Algum trecho rolável entre o dedo e o sheet fora do topo: o gesto é da rolagem.
+      let scrolled = false;
+      for (let el: HTMLElement | null = target; el && el !== dialog; el = el.parentElement) {
+        if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight && /auto|scroll/.test(getComputedStyle(el).overflowY)) { scrolled = true; break; }
+      }
+      const touch = e.touches[0];
+      gesture = { x: touch.clientX, y: touch.clientY, dy: 0, lastY: touch.clientY, lastT: e.timeStamp, speed: 0, state: scrolled ? 'skip' : 'pending' };
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!gesture || gesture.state === 'skip') return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - gesture.x, dy = touch.clientY - gesture.y;
+      if (gesture.state === 'pending') {
+        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+        // Para cima ou para o lado (ex.: carrossel) fica com o conteúdo.
+        if (dy <= 0 || Math.abs(dx) > Math.abs(dy)) { gesture.state = 'skip'; return; }
+        gesture.state = 'drag';
+        dialog.style.transition = 'none';
+      }
+      e.preventDefault();
+      const dt = Math.max(e.timeStamp - gesture.lastT, 1);
+      gesture.speed = gesture.speed * .3 + (touch.clientY - gesture.lastY) / dt * .7;
+      gesture.lastY = touch.clientY; gesture.lastT = e.timeStamp; gesture.dy = dy;
+      follow(dialog, dy);
+    };
+    const onEnd = () => {
+      if (gesture?.state === 'drag') release(gesture.dy, gesture.speed);
+      gesture = null;
+    };
+    dialog.addEventListener('touchstart', onStart, { passive: true });
+    dialog.addEventListener('touchmove', onMove, { passive: false });
+    dialog.addEventListener('touchend', onEnd);
+    dialog.addEventListener('touchcancel', onEnd);
+    return () => {
+      dialog.removeEventListener('touchstart', onStart);
+      dialog.removeEventListener('touchmove', onMove);
+      dialog.removeEventListener('touchend', onEnd);
+      dialog.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+
+  // Com mouse (janela estreita no computador), arrasta pela alça ou pelo título.
   function startDrag(event: React.PointerEvent) {
     const dialog = ref.current;
-    if (!dialog || isModal() || event.button !== 0 || (event.target as HTMLElement).closest('button, select, a, input')) return;
-    const startY = event.clientY, startT = performance.now();
-    let dy = 0;
+    if (!dialog || event.pointerType !== 'mouse' || isModal() || event.button !== 0 || (event.target as HTMLElement).closest('button, select, a, input')) return;
+    const startY = event.clientY;
+    let dy = 0, lastY = startY, lastT = event.timeStamp, speed = 0;
     const handle = event.currentTarget as HTMLElement;
     handle.setPointerCapture(event.pointerId);
     dialog.style.transition = 'none';
     const onMove = (e: PointerEvent) => {
       dy = e.clientY - startY;
-      // Para cima resiste; para baixo acompanha o dedo.
-      dialog.style.transform = `translateY(${dy > 0 ? dy : dy / 6}px)`;
+      speed = (e.clientY - lastY) / Math.max(e.timeStamp - lastT, 1);
+      lastY = e.clientY; lastT = e.timeStamp;
+      follow(dialog, dy);
     };
     const onUp = () => {
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('lostpointercapture', onUp);
-      const speed = dy / Math.max(performance.now() - startT, 1);
-      if (dy > Math.min(140, dialog.offsetHeight * .25) || (dy > 24 && speed > .6)) { fechar.current(); return; }
-      dialog.style.transition = `transform .2s ${EASE}`;
-      dialog.style.transform = '';
+      release(dy, speed);
     };
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('lostpointercapture', onUp);

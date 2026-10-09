@@ -71,6 +71,15 @@
 .penalty-list span { display: flex; flex: 1; flex-direction: column; min-width: 0; font-size: 14px; }
 .penalty-list small { color: var(--text-tertiary); font-size: 12px; }
 
+/* Agenda: horário à esquerda, situação colorida. */
+.admin-agenda-time { flex-shrink: 0; width: 44px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.admin-row-info > svg { flex-shrink: 0; color: var(--text-tertiary); }
+.admin-row-main small.admin-agenda-live, .admin-row-main small.admin-agenda-closing { color: var(--danger); }
+.admin-row-main small.admin-agenda-late { color: var(--team-gold); }
+.admin-shift-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.admin-shift-chips .button { min-height: 38px; padding: 0 6px; }
+.admin-when-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
 /* Prévia no formato da notificação do celular. */
 .push-preview { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle); }
 .push-preview img { flex-shrink: 0; border-radius: 9px; }

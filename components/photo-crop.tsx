@@ -107,7 +107,7 @@ export function PhotoCrop({ file, onCancel, onConfirm, busy }: {
   const { w, h } = cover(view.zoom);
   return <Sheet open={file !== null} onClose={onCancel} title="Ajustar foto" subtitle="Arraste para enquadrar e use o zoom.">
     <div className="photo-crop">
-      <div ref={stage} className="photo-crop-stage" tabIndex={0} aria-label="Enquadramento da foto. Use as setas para mover e + ou - para o zoom."
+      <div ref={stage} className="photo-crop-stage" data-no-sheet-drag tabIndex={0} aria-label="Enquadramento da foto. Use as setas para mover e + ou - para o zoom."
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onKeyDown={onKeyDown}>
         {img && <img src={img.src} alt="" draggable={false}
           style={{ width: `${w * 100}%`, height: `${h * 100}%`, transform: `translate(-50%, -50%) translate(${view.x * 100 / w}%, ${view.y * 100 / h}%)` }} />}

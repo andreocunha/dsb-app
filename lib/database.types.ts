@@ -139,9 +139,21 @@ export type Database = {
         Relationships: []
       }
       races: {
-        Row: { duration_minutes: number | null; id: string; kind: string; name: string; number: number; started_at: string | null; starts_at: string }
-        Insert: { duration_minutes?: number | null; id: string; kind?: string; name: string; number: number; started_at?: string | null; starts_at: string }
-        Update: { duration_minutes?: number | null; id?: string; kind?: string; name?: string; number?: number; started_at?: string | null; starts_at?: string }
+        Row: { closing_minutes: number | null; duration_minutes: number | null; finished_at: string | null; id: string; kind: string; name: string; number: number; started_at: string | null; starts_at: string }
+        Insert: { closing_minutes?: number | null; duration_minutes?: number | null; finished_at?: string | null; id: string; kind?: string; name: string; number: number; started_at?: string | null; starts_at: string }
+        Update: { closing_minutes?: number | null; duration_minutes?: number | null; finished_at?: string | null; id?: string; kind?: string; name?: string; number?: number; started_at?: string | null; starts_at?: string }
+        Relationships: []
+      }
+      event_items: {
+        Row: { duration_minutes: number | null; id: string; starts_at: string; title: string }
+        Insert: { duration_minutes?: number | null; id: string; starts_at: string; title: string }
+        Update: { duration_minutes?: number | null; id?: string; starts_at?: string; title?: string }
+        Relationships: []
+      }
+      schedule_changes: {
+        Row: { changed_at: string; event_item_id: string | null; id: number; new_at: string; previous_at: string; race_id: string | null; reason: string }
+        Insert: { changed_at?: string; event_item_id?: string | null; new_at: string; previous_at: string; race_id?: string | null; reason?: string }
+        Update: { changed_at?: string; event_item_id?: string | null; new_at?: string; previous_at?: string; race_id?: string | null; reason?: string }
         Relationships: []
       }
       teams: {
@@ -326,6 +338,8 @@ export type Database = {
       admin_add_lap: { Args: { p_race_id: string; p_team_id: string; p_at?: string | null }; Returns: string }
       admin_remove_lap: { Args: { p_race_id: string; p_team_id: string; p_at: string }; Returns: undefined }
       admin_set_race_start: { Args: { p_race_id: string; p_at: string | null }; Returns: undefined }
+      admin_set_race_finish: { Args: { p_race_id: string; p_at: string | null }; Returns: undefined }
+      admin_reschedule: { Args: { p_kind: string; p_id: string; p_at: string; p_reason?: string }; Returns: undefined }
       admin_set_race_status: { Args: { p_race_id: string; p_team_id: string; p_status: string; p_position?: number | null; p_note?: string }; Returns: undefined }
       admin_save_duel: {
         Args: { p_race_id: string; p_stage: string; p_slot: number; p_team_a: string | null; p_team_b: string | null; p_time_a?: number | null; p_time_b?: number | null }
