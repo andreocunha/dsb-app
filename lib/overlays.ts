@@ -21,11 +21,14 @@ export function onOverlaysChange(ouvinte: (abertas: number) => void) {
   return () => { ouvintes.delete(ouvinte); };
 }
 
-/** Fecha a camada mais recente. Devolve false quando não havia nenhuma. */
+/**
+ * Voltar na camada mais recente: fecha, ou volta uma página dentro dela (sheet com detalhe aberto).
+ * Não tira da pilha aqui: cada camada sai sozinha quando fecha de verdade (o retorno de registerOverlay).
+ * Devolve false quando não havia nenhuma.
+ */
 export function closeTopOverlay() {
-  const fechar = abertas.pop();
-  if (!fechar) return false;
-  avisar();
-  fechar();
+  const voltar = abertas[abertas.length - 1];
+  if (!voltar) return false;
+  voltar();
   return true;
 }

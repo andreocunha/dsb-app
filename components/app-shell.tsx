@@ -6,7 +6,7 @@ import { House, MessageCircle, Trophy, Menu, ChevronRight, Settings, ShieldCheck
 import { Capacitor } from '@capacitor/core';
 import { Avatar, Brand, Sheet } from './ui';
 import { Dashboard } from './dashboard';
-import { useAuth } from './auth';
+import { LoginOptions, useAuth } from './auth';
 import { useLocalState } from '@/lib/local-state';
 import { supabase } from '@/lib/supabase';
 import { shortName } from '@/lib/names';
@@ -116,6 +116,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { userId, profile, isAdmin, requireLogin, signOut } = useAuth();
   const [theme, setTheme] = useLocalState('dsb-theme', 'light');
   const [menu, setMenu] = useState(false);
+  // Entrar e Instalar abrem como páginas dentro do menu (nunca um sheet por cima do outro).
+  const [menuPage, setMenuPage] = useState<'menu' | 'login' | 'install'>('menu');
+  const openMenu = () => { setMenuPage('menu'); setMenu(true); };
+  // Entrou pela página de login do menu: volta para o menu, já com o perfil.
+  if (userId && menuPage === 'login') setMenuPage('menu');
   const [installInfo, setInstallInfo] = useState(false);
   const [installEvent, setInstallEvent] = useState<InstallEvent | null>(null);
   const [toastState, setToastState] = useState<{ message: string; action?: ToastAction } | null>(null);
@@ -216,29 +221,38 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {item.href === '/comunidade/' && badge > 0 && <span className="badge">{badge > 99 ? '99+' : badge}</span>}
         </Link>
       ))}
-      <button className={menu || settingsActive || adminActive ? 'active' : ''} onClick={() => setMenu(true)} aria-haspopup="dialog"><Menu size={22} /><span>Menu</span></button>
+      <button className={menu || settingsActive || adminActive ? 'active' : ''} onClick={openMenu} aria-haspopup="dialog"><Menu size={22} /><span>Menu</span></button>
     </nav>
-    <Sheet open={menu} onClose={() => setMenu(false)} title="Seu espaço">
+    <Sheet open={menu} onClose={() => setMenu(false)} page={menuPage} depth={menuPage === 'menu' ? 0 : 1}
+      onBack={menuPage === 'menu' ? undefined : () => setMenuPage('menu')}
+      title={menuPage === 'login' ? 'Entrar no DSB' : menuPage === 'install' ? 'Leve o DSB com você' : 'Seu espaço'}>
+      {menuPage === 'login' ? <LoginOptions reason="Entre para participar do chat e do fantasy." />
+      : menuPage === 'install' ? <InstallHelp />
+      : <>
       {userId
         ? <div className="menu-profile"><Avatar id={userId} name={profile?.name ?? ''} url={profile?.avatar_url} /><div><h3>{profile ? shortName(profile.name) : '…'}</h3><p>Conectado</p></div></div>
-        : <button className="menu-profile" onClick={() => { setMenu(false); requireLogin(); }}><span className="avatar"><LogIn size={16} /></span><div><h3>Entrar</h3><p>Para usar o chat e o fantasy</p></div></button>}
+        : <button className="menu-profile" onClick={() => setMenuPage('login')}><span className="avatar"><LogIn size={16} /></span><div><h3>Entrar</h3><p>Para usar o chat e o fantasy</p></div></button>}
       <Link replace href="/configuracoes/" className="sheet-row" onClick={() => setMenu(false)}><Settings size={20} /><span>Configurações</span><ChevronRight size={18} /></Link>
       {isAdmin && <Link replace href="/admin/" className="sheet-row" onClick={() => setMenu(false)}><LayoutDashboard size={20} /><span>Painel da organização</span><ChevronRight size={18} /></Link>}
       <div className="sheet-row"><Sun size={20} /><span>Aparência</span><ThemeSwitch theme={theme} setTheme={setTheme} /></div>
-      {!native && <button className="sheet-row" onClick={() => { setMenu(false); void install(); }}><Download size={20} /><span>Instalar aplicativo</span><ChevronRight size={18} /></button>}
+      {!native && <button className="sheet-row" onClick={() => { if (installEvent) { setMenu(false); void install(); } else setMenuPage('install'); }}><Download size={20} /><span>Instalar aplicativo</span><ChevronRight size={18} /></button>}
       {userId && <button className="sheet-row danger" onClick={() => void logout()}><LogOut size={20} /><span>Sair da conta</span></button>}
       <Link href="/privacidade/" className="sheet-row" onClick={() => setMenu(false)}><ShieldCheck size={20} /><span>Privacidade</span><ChevronRight size={18} /></Link>
       <p className="footnote">DSB · Desafio Solar Brasil · Versão 0.1.0</p>
+      </>}
     </Sheet>
-    <Sheet open={installInfo} onClose={() => setInstallInfo(false)} title="Leve o DSB com você">
-      <div className="prose">
-        <p>No iPhone, abra no Safari, toque em <strong>Compartilhar</strong> e depois em <strong>Adicionar à Tela de Início</strong>.</p>
-        <p>No Android ou desktop, abra o menu do navegador e procure <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.</p>
-        <p className="footnote">Se a opção não aparecer, o app pode já estar instalado ou o navegador não oferecer instalação.</p>
-      </div>
-    </Sheet>
+    <Sheet open={installInfo} onClose={() => setInstallInfo(false)} title="Leve o DSB com você"><InstallHelp /></Sheet>
     {toast && <div className="toast" role="status"><Check size={18} /><span>{toast}</span>
       {toastState?.action && <button className="toast-action" onClick={() => { const action = toastState.action!; setToastState(null); action.run(); }}>{toastState.action.label}</button>}
       <button aria-label="Dispensar aviso" onClick={() => setToastState(null)}><X size={16} /></button></div>}
   </UnreadContext.Provider></OnlineContext.Provider></AppContext.Provider>;
+}
+
+/** Como instalar o site como app, quando o navegador não oferece o botão direto. */
+function InstallHelp() {
+  return <div className="prose">
+    <p>No iPhone, abra no Safari, toque em <strong>Compartilhar</strong> e depois em <strong>Adicionar à Tela de Início</strong>.</p>
+    <p>No Android ou desktop, abra o menu do navegador e procure <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.</p>
+    <p className="footnote">Se a opção não aparecer, o app pode já estar instalado ou o navegador não oferecer instalação.</p>
+  </div>;
 }

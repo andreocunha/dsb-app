@@ -626,6 +626,8 @@ button.race-row:disabled { cursor: default; }
 .sheet-handle { display: block; width: 36px; height: 4px; margin: 0 auto 8px; border-radius: 4px; background: var(--border-strong); }
 .sheet-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 -8px 12px 0; }
 .sheet-title > div:first-child { min-width: 0; }
+.sheet-back { flex-shrink: 0; margin: 0 -6px 0 -8px; }
+.sheet-title > .sheet-back + div { flex: 1; min-width: 0; }
 .sheet-title h2 { font-size: 17px; font-weight: 600; }
 .sheet-title p { margin-top: 1px; color: var(--text-secondary); font-size: 12px; }
 .sheet-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }

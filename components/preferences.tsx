@@ -177,6 +177,7 @@ function ProfilePhoto({ userId, profile, onChanged }: { userId: string; profile:
   const [file, setFile] = useState<File | null>(null);
   const [menu, setMenu] = useState(false);
   // Remover pede confirmação numa segunda tela: tocar em "Remover foto" sozinho não apaga nada.
+  // Confirmar a remoção é uma página do próprio menu, não outro sheet por cima.
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [busy, setBusy] = useState(false);
   // Foto que veio com o login (Google): dá para voltar para ela a qualquer momento.
@@ -195,7 +196,7 @@ function ProfilePhoto({ userId, profile, onChanged }: { userId: string; profile:
 
   function choose() { setMenu(false); input.current?.click(); }
   // Sem foto e sem foto da conta, o menu só teria "escolher": abre a galeria direto.
-  function openMenu() { if (current || canUseAccount) setMenu(true); else input.current?.click(); }
+  function openMenu() { if (current || canUseAccount) { setConfirmRemove(false); setMenu(true); } else input.current?.click(); }
 
   function pick(picked: File | undefined) {
     if (!picked) return;
@@ -247,7 +248,7 @@ function ProfilePhoto({ userId, profile, onChanged }: { userId: string; profile:
   }
 
   // Remover não apaga o arquivo: o "Desfazer" do aviso precisa dele. Ele sai na próxima troca de foto.
-  const remove = () => { setConfirmRemove(false); void apply(() => supabase.rpc('update_avatar', { p_path: null }), 'Foto removida.', current); };
+  const remove = () => { setMenu(false); void apply(() => supabase.rpc('update_avatar', { p_path: null }), 'Foto removida.', current); };
   const useAccount = () => { setMenu(false); void apply(() => supabase.rpc('use_account_avatar'), 'Voltamos para a foto da sua conta.', current); };
 
   return <div className="settings-row profile-photo">
@@ -263,24 +264,24 @@ function ProfilePhoto({ userId, profile, onChanged }: { userId: string; profile:
       </div>
     </div>
     <input ref={input} type="file" accept="image/*" hidden onChange={e => { pick(e.target.files?.[0]); e.target.value = ''; }} />
-    <Sheet open={menu} onClose={() => setMenu(false)} title="Foto do perfil">
+    <Sheet open={menu} onClose={() => setMenu(false)} page={confirmRemove ? 'remove' : 'menu'} depth={confirmRemove ? 1 : 0}
+      onBack={confirmRemove ? () => setConfirmRemove(false) : undefined} title={confirmRemove ? 'Remover foto do perfil?' : 'Foto do perfil'}>
+      {confirmRemove ? <div className="prose">
+        <div className="photo-menu-preview"><Avatar id={userId} name={profile?.name ?? ''} url={current} /></div>
+        <p>No lugar da foto vão aparecer as iniciais do seu nome, no chat e no ranking do fantasy.</p>
+        <div className="account-actions">
+          <button className="button" onClick={() => setConfirmRemove(false)}>Cancelar</button>
+          <button className="button danger-solid" disabled={busy} onClick={remove}><Trash2 size={16} /> Remover foto</button>
+        </div>
+      </div> : <>
       <div className="photo-menu-preview"><Avatar id={userId} name={profile?.name ?? ''} url={current} /></div>
       <button className="sheet-row" onClick={choose}><ImagePlus size={20} /><span>Escolher nova foto</span><ChevronRight size={18} /></button>
       {canUseAccount && <button className="sheet-row" onClick={useAccount}>
         <img className="avatar small" src={accountPhoto!} alt="" referrerPolicy="no-referrer" />
         <span>{account?.google ? 'Usar a foto da conta Google' : 'Usar a foto da sua conta'}</span><ChevronRight size={18} />
       </button>}
-      {current && <button className="sheet-row danger" onClick={() => { setMenu(false); setConfirmRemove(true); }}><Trash2 size={20} /><span>Remover foto</span></button>}
-    </Sheet>
-    <Sheet open={confirmRemove} onClose={() => setConfirmRemove(false)} title="Remover foto do perfil?">
-      <div className="prose">
-        <div className="photo-menu-preview"><Avatar id={userId} name={profile?.name ?? ''} url={current} /></div>
-        <p>No lugar da foto vão aparecer as iniciais do seu nome, no chat e no ranking do fantasy.</p>
-        <div className="account-actions">
-          <button className="button" onClick={() => setConfirmRemove(false)} autoFocus>Cancelar</button>
-          <button className="button danger-solid" disabled={busy} onClick={remove}><Trash2 size={16} /> Remover foto</button>
-        </div>
-      </div>
+      {current && <button className="sheet-row danger" onClick={() => setConfirmRemove(true)}><Trash2 size={20} /><span>Remover foto</span></button>}
+      </>}
     </Sheet>
     <PhotoCrop file={file} busy={busy} onCancel={() => { if (!busy) setFile(null); }} onConfirm={blob => void save(blob)} />
   </div>;

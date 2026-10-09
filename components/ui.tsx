@@ -1,8 +1,8 @@
 'use client';
 import Image from 'next/image';
 import { registerOverlay } from '@/lib/overlays';
-import { useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { ArrowLeft, X } from 'lucide-react';
 import type { Team } from '@/lib/data';
 import { avatarImage } from '@/lib/images';
 export function Brand() {
@@ -32,15 +32,38 @@ const EASE = 'cubic-bezier(.2, .8, .2, 1)';
 /**
  * Bottom sheet no mobile, modal centralizado a partir de 640px (ver .sheet no CSS).
  * Abre e fecha com animação; no mobile, arrastar para baixo (em qualquer lugar, com a lista no topo) fecha.
+ *
+ * Detalhes abrem DENTRO do mesmo sheet, nunca outro por cima: `page` identifica o conteúdo atual e,
+ * com `onBack`, aparece a seta de voltar (o voltar do Android e o Esc também voltam em vez de fechar).
+ * `depth` diz o sentido da troca (mais fundo desliza da direita); cada página guarda a própria rolagem.
  */
-export function Sheet({ open, onClose, title, subtitle, actions, size = 'default', children }: {
-  open: boolean; onClose: () => void; title: string; subtitle?: string; actions?: React.ReactNode;
+export function Sheet({ open, onClose, onBack, page = '', depth = 0, title, subtitle, actions, size = 'default', children }: {
+  open: boolean; onClose: () => void; onBack?: () => void; page?: string; depth?: number;
+  title: string; subtitle?: string; actions?: React.ReactNode;
   size?: 'default' | 'large'; children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   // Guardado em ref para o efeito não depender da identidade da função e reabrir o diálogo a cada render.
   const fechar = useRef(onClose);
   useEffect(() => { fechar.current = onClose; }, [onClose]);
+  const voltar = useRef(onBack);
+  useEffect(() => { voltar.current = onBack; }, [onBack]);
+
+  // Troca de página: rolagem de cada uma guardada e o conteúdo novo desliza do lado certo.
+  const body = useRef<HTMLDivElement>(null);
+  const rolagens = useRef(new Map<string, number>());
+  const atual = useRef({ page, depth });
+  useLayoutEffect(() => {
+    const anterior = atual.current;
+    if (anterior.page === page) return;
+    atual.current = { page, depth };
+    const el = body.current;
+    if (!el) return;
+    el.scrollTop = rolagens.current.get(page) ?? 0;
+    if (reduceMotion()) return;
+    const lado = depth >= anterior.depth ? 1 : -1;
+    el.animate([{ opacity: 0, transform: `translateX(${lado * 28}px)` }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE });
+  }, [page, depth]);
   // Fechado por arraste: o sheet já saiu deslizando no próprio toque; o efeito só tira da tela.
   const arrastadoParaFora = useRef(false);
 
@@ -80,7 +103,8 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
     }
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const solta = registerOverlay(() => fechar.current());
+    // Voltar do Android: com uma página aberta dentro do sheet, volta para a anterior.
+    const solta = registerOverlay(() => (voltar.current ? voltar.current() : fechar.current()));
     return () => { document.body.style.overflow = overflow; solta(); };
   }, [open]);
   // Desmontado aberto (ex.: troca de tela): some sem animação.
@@ -186,16 +210,19 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
     handle.addEventListener('lostpointercapture', onUp);
   }
 
-  return <dialog ref={ref} tabIndex={-1} className={`sheet ${size}`} onCancel={e => { e.preventDefault(); onClose(); }} onClick={e => { if (e.target === e.currentTarget) onClose(); }} aria-label={title}>
+  return <dialog ref={ref} tabIndex={-1} className={`sheet ${size}`} onCancel={e => { e.preventDefault(); e.stopPropagation(); (onBack ?? onClose)(); }}
+    // O Esc é deste sheet: não chega aos painéis de baixo (dados do grupo fecham com Esc na janela).
+    onKeyDown={e => { if (e.key === 'Escape') e.stopPropagation(); }} onClick={e => { if (e.target === e.currentTarget) onClose(); }} aria-label={title}>
     <div className="sheet-content">
       <div className="sheet-grab" onPointerDown={startDrag}>
         <span className="sheet-handle" />
         <div className="sheet-title">
+          {onBack && <button className="icon-button sheet-back" onClick={onBack} aria-label="Voltar"><ArrowLeft size={20} /></button>}
           <div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
           <div className="sheet-actions">{actions}<button className="icon-button" onClick={onClose} aria-label="Fechar"><X size={20} /></button></div>
         </div>
       </div>
-      <div className="sheet-body">{children}</div>
+      <div className="sheet-body" ref={body} onScroll={e => rolagens.current.set(atual.current.page, e.currentTarget.scrollTop)}>{children}</div>
     </div>
   </dialog>;
 }

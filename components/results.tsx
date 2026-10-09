@@ -1,5 +1,5 @@
 'use client';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Share2, Trophy } from 'lucide-react';
 import { useRaces, type Race, type Team } from '@/lib/data';
 import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
@@ -11,7 +11,7 @@ import {
   lapSplits, pointsIntensity, sortRace, sortStandings, stageLabel, type Duel, type Score,
 } from '@/lib/scoring';
 import { Sheet, TeamBadge } from './ui';
-import { ShareArt } from './share-art';
+import { ShareArt, shareArtSubtitle } from './share-art';
 import { Tag } from './schedule';
 
 const int = (n: number) => n.toLocaleString('pt-BR');
@@ -32,15 +32,17 @@ export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => 
   const now = useNow();
   // null: ainda não escolheu, vale a prova ao vivo (ou a geral).
   const [raceId, setRaceId] = useState<string | null>(null);
-  const [teamId, setTeamId] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
+  // Equipe e compartilhar abrem como páginas do mesmo sheet, com seta de voltar.
+  const [view, setView] = useState<{ kind: 'list' } | { kind: 'team'; id: string } | { kind: 'share' }>({ kind: 'list' });
+  const openTeam = useCallback((id: string) => setView({ kind: 'team', id }), []);
+  const back = useCallback(() => setView({ kind: 'list' }), []);
   const tabs = useRef<HTMLDivElement>(null);
 
   const liveRace = races && now ? races.find(r => isLive(r, now)) ?? null : null;
   const chosen = raceId ?? liveRace?.id ?? '';
   const race = races?.find(r => r.id === chosen) ?? null;
   const standings = useMemo(() => (data ? sortStandings(data.teams) : []), [data]);
-  const selected = standings.find(t => t.id === teamId) ?? null;
+  const selected = view.kind === 'team' ? standings.find(t => t.id === view.id) ?? null : null;
   const scoredRaces = data ? new Set(data.scores.map(s => s.race_id)).size : 0;
   const ready = !!(races && data);
 
@@ -51,7 +53,8 @@ export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => 
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) { setReadyAtOpen(ready); setSettled(false); }
+    // Reabre sempre na lista (fechar no detalhe não deixa o próximo abrir nele).
+    if (open) { setReadyAtOpen(ready); setSettled(false); setView({ kind: 'list' }); }
   }
   useEffect(() => {
     if (!open) return;
@@ -63,14 +66,21 @@ export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => 
   // A aba escolhida fica sempre à vista na faixa rolável.
   useEffect(() => {
     tabs.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
-  }, [chosen, ready]);
+  }, [chosen, ready, view.kind]);
 
-  return <Sheet open={open} onClose={onClose} size="large" title="Resultados"
-    subtitle={races ? `Macaé 2026 · ${scoredRaces} de ${races.length} provas apuradas` : 'Macaé 2026'}
-    actions={ready && <button className="icon-button" onClick={() => setSharing(true)} aria-label="Compartilhar como imagem" title="Compartilhar como imagem">
+  const page = view.kind === 'team' ? `team:${view.id}` : view.kind;
+  const sub = view.kind !== 'list' && show;
+  return <Sheet open={open} onClose={onClose} size="large" page={page} depth={sub ? 1 : 0} onBack={sub ? back : undefined}
+    title={view.kind === 'share' ? 'Compartilhar imagem' : selected?.name ?? 'Resultados'}
+    subtitle={view.kind === 'share' && data ? shareArtSubtitle(race, data) : view.kind === 'team' ? undefined
+      : races ? `Macaé 2026 · ${scoredRaces} de ${races.length} provas apuradas` : 'Macaé 2026'}
+    actions={ready && view.kind === 'list' && <button className="icon-button" onClick={() => setView({ kind: 'share' })} aria-label="Compartilhar como imagem" title="Compartilhar como imagem">
       <Share2 size={19} />
     </button>}>
-    {!show ? <p className="panel-note">{error ? 'Não foi possível carregar os resultados. Confira sua conexão.' : 'Carregando…'}</p> : <>
+    {!show ? <p className="panel-note">{error ? 'Não foi possível carregar os resultados. Confira sua conexão.' : 'Carregando…'}</p>
+      : view.kind === 'share' ? <ShareArt race={race} data={data} />
+      : selected ? <TeamDetail team={selected} standings={standings} races={races} data={data} />
+      : <>
       <div className="results-toolbar">
         <div className="results-tabs" ref={tabs} role="group" aria-label="Classificação">
           <button aria-pressed={!race} onClick={() => setRaceId('')}>Geral</button>
@@ -80,11 +90,9 @@ export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => 
           </button>)}
         </div>
       </div>
-      {!race ? <Standings races={races} data={data} standings={standings} onTeam={setTeamId} />
+      {!race ? <Standings races={races} data={data} standings={standings} onTeam={openTeam} />
         : race.kind === 'bracket' ? <MatchRace key={race.id} race={race} data={data} />
         : <LapRace key={race.id} race={race} data={data} />}
-      <TeamSheet team={selected} standings={standings} races={races} data={data} onClose={() => setTeamId(null)} />
-      <ShareArt open={sharing} onClose={() => setSharing(false)} race={race} data={data} />
     </>}
   </Sheet>;
 }
@@ -452,19 +460,17 @@ function DuelCard({ duel, teams, champion = false, style }: { duel: Duel | null;
   return <div className={`duel-card ${champion && decided ? 'champion' : ''}`} style={style}>{side('a')}{side('b')}</div>;
 }
 
-function TeamSheet({ team: current, standings, races, data, onClose }: { team: Team | null; standings: Team[]; races: Race[]; data: ResultsData; onClose: () => void }) {
-  const [last, setLast] = useState(current);
-  if (current && current !== last) setLast(current);
-  const team = current ?? last;
-  const position = team ? standings.findIndex(t => t.id === team.id) + 1 : 0;
+/** Detalhe de uma equipe: página dentro do sheet de resultados (não outro sheet por cima). */
+function TeamDetail({ team, standings, races, data }: { team: Team; standings: Team[]; races: Race[]; data: ResultsData }) {
+  const position = standings.findIndex(t => t.id === team.id) + 1;
+  const started = standings.some(t => t.points !== 0);
   const scores = new Map(data.scores.map(s => [scoreKey(s.race_id, s.team_id), s]));
-  const penalties = team ? data.penalties.filter(p => p.team_id === team.id) : [];
-  const positive = team ? Math.max(team.race_points + extrasOf(team), 1) : 1;
-  return <Sheet open={!!current} onClose={onClose} title={team?.name ?? 'Equipe'}>
-    {team && <div className="team-detail">
+  const penalties = data.penalties.filter(p => p.team_id === team.id);
+  const positive = Math.max(team.race_points + extrasOf(team), 1);
+  return <div className="team-detail">
       <div className="team-summary">
         <TeamBadge team={team} />
-        <div><strong>{position}º lugar</strong><span>{int(team.points)} pts</span></div>
+        <div><strong>{started ? `${position}º lugar` : 'Sem pontos ainda'}</strong><span>{int(team.points)} pts</span></div>
       </div>
 
       <section>
@@ -501,6 +507,5 @@ function TeamSheet({ team: current, standings, races, data, onClose }: { team: T
           })}
         </ol>
       </section>
-    </div>}
-  </Sheet>;
+    </div>;
 }

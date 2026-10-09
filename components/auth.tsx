@@ -23,6 +23,15 @@ type AuthValue = {
   reloadProfile: () => Promise<void>;
 };
 const AuthContext = createContext<AuthValue>({ userId: null, profile: null, isAdmin: false, requireLogin: () => {}, signOut: async () => {}, reloadProfile: async () => {} });
+
+/** Estado e ações do formulário de login, para mostrá-lo dentro de outro sheet (ver LoginOptions). */
+type LoginState = {
+  accepted: boolean; setAccepted: (v: boolean) => void; busy: Provider | null; error: string; setError: (v: string) => void;
+  emailForm: boolean; setEmailForm: (v: boolean) => void; email: string; setEmail: (v: string) => void;
+  password: string; setPassword: (v: string) => void;
+  signIn: (provider: 'google' | 'apple') => Promise<void>; signInWithEmail: (evento: React.FormEvent) => Promise<void>;
+};
+const LoginContext = createContext<LoginState | null>(null);
 export const useAuth = () => useContext(AuthContext);
 
 const fetchProfile = async (id: string) =>
@@ -113,33 +122,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     reloadProfile,
   };
 
-  return <AuthContext.Provider value={value}>
+  return <AuthContext.Provider value={value}><LoginContext.Provider value={{ accepted, setAccepted, busy, error, setError, emailForm, setEmailForm, email, setEmail, password, setPassword, signIn, signInWithEmail }}>
     {children}
     <Sheet open={loginReason !== null} onClose={() => setLoginReason(null)} title="Entrar no DSB">
-      <div className="login">
-        <p>{loginReason}</p>
-        <label className="terms-check">
-          <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} />
-          <span>
-            Li e aceito os <a className="text-link" href="/termos/">termos de uso</a> e a{' '}
-            <a className="text-link" href="/privacidade/">política de privacidade</a>.
-            O chat não tolera conteúdo ofensivo nem gente abusiva: quem publicar tem a conta banida.
-          </span>
-        </label>
-        <button className="login-button" disabled={!accepted || busy !== null} onClick={() => void signIn('google')}><GoogleIcon /> {busy === 'google' ? 'Entrando…' : 'Continuar com Google'}</button>
-        <button className="login-button apple" disabled={!accepted || busy !== null} onClick={() => void signIn('apple')}><AppleIcon /> {busy === 'apple' ? 'Entrando…' : 'Continuar com Apple'}</button>
-        {emailForm
-          ? <form className="email-login" onSubmit={evento => void signInWithEmail(evento)}>
-              <input type="email" required placeholder="E-mail" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />
-              <input type="password" required placeholder="Senha" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
-              <button className="button primary" type="submit" disabled={!accepted || busy !== null}>{busy === 'email' ? 'Entrando…' : 'Entrar'}</button>
-            </form>
-          : <button className="text-button" onClick={() => { setError(''); setEmailForm(true); }}>Entrar com e-mail</button>}
-        {error && <p className="form-error" role="alert">{error}</p>}
-        <p className="footnote">Navegar pelo app continua livre. A conta só é usada para o chat e o fantasy.</p>
-      </div>
+      <LoginOptions reason={loginReason ?? ''} />
     </Sheet>
-  </AuthContext.Provider>;
+  </LoginContext.Provider></AuthContext.Provider>;
+}
+
+/**
+ * Botões de entrar (Google, Apple, e-mail) com o aceite dos termos. Fica no sheet "Entrar no DSB" e também
+ * como página dentro de outro sheet (menu, convite de grupo), sem abrir um sheet por cima.
+ */
+export function LoginOptions({ reason }: { reason: string }) {
+  const login = useContext(LoginContext);
+  if (!login) return null;
+  const { accepted, setAccepted, busy, error, setError, emailForm, setEmailForm, email, setEmail, password, setPassword, signIn, signInWithEmail } = login;
+  return <div className="login">
+    <p>{reason}</p>
+    <label className="terms-check">
+      <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)} />
+      <span>
+        Li e aceito os <a className="text-link" href="/termos/">termos de uso</a> e a{' '}
+        <a className="text-link" href="/privacidade/">política de privacidade</a>.
+        O chat não tolera conteúdo ofensivo nem gente abusiva: quem publicar tem a conta banida.
+      </span>
+    </label>
+    <button className="login-button" disabled={!accepted || busy !== null} onClick={() => void signIn('google')}><GoogleIcon /> {busy === 'google' ? 'Entrando…' : 'Continuar com Google'}</button>
+    <button className="login-button apple" disabled={!accepted || busy !== null} onClick={() => void signIn('apple')}><AppleIcon /> {busy === 'apple' ? 'Entrando…' : 'Continuar com Apple'}</button>
+    {emailForm
+      ? <form className="email-login" onSubmit={evento => void signInWithEmail(evento)}>
+          <input type="email" required placeholder="E-mail" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />
+          <input type="password" required placeholder="Senha" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
+          <button className="button primary" type="submit" disabled={!accepted || busy !== null}>{busy === 'email' ? 'Entrando…' : 'Entrar'}</button>
+        </form>
+      : <button className="text-button" onClick={() => { setError(''); setEmailForm(true); }}>Entrar com e-mail</button>}
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <p className="footnote">Navegar pelo app continua livre. A conta só é usada para o chat e o fantasy.</p>
+  </div>;
 }
 
 function GoogleIcon() {

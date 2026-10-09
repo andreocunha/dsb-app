@@ -6,7 +6,7 @@ import { shortName } from '@/lib/names';
 import { shareLink } from '@/lib/native-share';
 import { supabase, errorMessage } from '@/lib/supabase';
 import { useApp, useOnlineUsers } from '../app-shell';
-import { useAuth } from '../auth';
+import { LoginOptions, useAuth } from '../auth';
 import { Avatar, Sheet } from '../ui';
 import { useFileUrl } from './files';
 import { MemberTag } from './affiliations';
@@ -476,11 +476,14 @@ type Invite = { id: string; name: string; description: string | null; photo_path
  * com o botão de entrar. Sem conta, o botão pede o login; já participando, só abre a conversa.
  */
 export function JoinGroup({ code, onClose, onJoined }: { code: string; onClose: () => void; onJoined: (id: string, group: GroupInfo) => void }) {
-  const { userId, requireLogin } = useAuth();
+  const { userId } = useAuth();
   const { notify } = useApp();
   // undefined: carregando; null: link inválido ou redefinido.
   const [invite, setInvite] = useState<Invite | null | undefined>(undefined);
   const [joining, setJoining] = useState(false);
+  // Sem conta, o login aparece dentro do próprio convite; ao entrar, volta para o convite.
+  const [login, setLogin] = useState(false);
+  if (login && userId) setLogin(false);
 
   useEffect(() => {
     let alive = true;
@@ -490,7 +493,7 @@ export function JoinGroup({ code, onClose, onJoined }: { code: string; onClose: 
 
   async function join() {
     if (!invite || joining) return;
-    if (!userId) { requireLogin('Entre para participar do grupo.'); return; }
+    if (!userId) { setLogin(true); return; }
     const group = { name: invite.name, photo_path: invite.photo_path, description: invite.description };
     if (invite.joined) { onJoined(invite.id, group); return; }
     setJoining(true);
@@ -500,8 +503,10 @@ export function JoinGroup({ code, onClose, onJoined }: { code: string; onClose: 
     onJoined(data, group);
   }
 
-  return <Sheet open onClose={onClose} title={invite === null ? 'Link de convite inválido' : 'Convite para grupo'}>
-    {invite === undefined ? <p className="group-empty"><span className="spinner" /></p>
+  return <Sheet open onClose={onClose} page={login ? 'login' : 'invite'} depth={login ? 1 : 0} onBack={login ? () => setLogin(false) : undefined}
+    title={login ? 'Entrar no DSB' : invite === null ? 'Link de convite inválido' : 'Convite para grupo'}>
+    {login ? <LoginOptions reason="Entre para participar do grupo." />
+      : invite === undefined ? <p className="group-empty"><span className="spinner" /></p>
       : invite === null ? <div className="confirm">
         <p>Este link não é válido. Ele pode ter sido redefinido por um admin do grupo: peça um link novo a quem convidou você.</p>
         <div><button className="button primary" onClick={onClose}>OK</button></div>
