@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Sheet } from './ui';
 import { useClock } from '@/lib/use-schedule';
@@ -18,7 +18,7 @@ function When({ item, shift, now }: { item: ScheduleItem; shift: Shift | null; n
 }
 
 /** Etiqueta de situação: atrasada, remarcada, acontecendo agora. */
-function Tag({ tone, children }: { tone: 'live' | 'warn' | 'muted'; children: React.ReactNode }) {
+export function Tag({ tone, children }: { tone: 'live' | 'warn' | 'muted'; children: React.ReactNode }) {
   return <span className={`tag tag-${tone}`}>{tone === 'live' && <span className="live-dot" />}{children}</span>;
 }
 
@@ -27,9 +27,13 @@ function Tag({ tone, children }: { tone: 'live' | 'warn' | 'muted'; children: Re
  * Tocar abre a programação inteira.
  */
 export function ScheduleCard({ items, actions }: { items: ScheduleItem[] | null; actions: React.ReactNode }) {
-  const now = useClock();
+  // Segundo a segundo só com algo valendo (relógio regressivo no card e na programação).
+  const coarse = useClock(false);
+  const counting = !!items && coarse > 0 && phases(items, coarse).some(({ phase }) => phase.kind === 'live' || phase.kind === 'closing');
+  const now = useClock(counting);
   const [open, setOpen] = useState(false);
-  const list = items && now ? phases(items, now) : [];
+  // Mesma lista enquanto dados e relógio não mudam: abrir e fechar o sheet não redesenha as linhas.
+  const list = useMemo(() => (items && now ? phases(items, now) : []), [items, now]);
   const current = featured(list);
 
   let body: React.ReactNode = <><span className="eyebrow">Desafio Solar Brasil</span><h1>Carregando programação…</h1><p>&nbsp;</p></>;
@@ -93,22 +97,24 @@ function ScheduleSheet({ open, onClose, list, now, currentKey }: {
     if (open) body.current?.querySelector('.schedule-row.is-current')?.scrollIntoView({ block: 'center' });
   }, [open]);
 
+  return <Sheet open={open} onClose={onClose} title="Programação" subtitle="Horário de Brasília">
+    <ol className="schedule" ref={body}><Days list={list} now={now} currentKey={currentKey} /></ol>
+  </Sheet>;
+}
+
+/** As linhas, separadas do sheet: o toque de abrir ou fechar não redesenha a lista (pesa em celular simples). */
+const Days = memo(function Days({ list, now, currentKey }: { list: Entry[]; now: number; currentKey: string | null }) {
   const days: { day: number; entries: Entry[] }[] = [];
   for (const entry of list) {
     const day = dayIndex(entry.item.startsAt);
     if (days.at(-1)?.day !== day) days.push({ day, entries: [] });
     days.at(-1)!.entries.push(entry);
   }
-
-  return <Sheet open={open} onClose={onClose} title="Programação" subtitle="Horário de Brasília">
-    <ol className="schedule" ref={body}>
-      {days.map(({ day, entries }) => <li key={day}>
-        <h3 className="schedule-day">{dayLabel(entries[0].item.startsAt, now) === 'Hoje' ? `Hoje · ${dayLabel(entries[0].item.startsAt)}` : dayLabel(entries[0].item.startsAt, now)}</h3>
-        <ol>{entries.map(entry => <Row key={entry.item.key} {...entry} now={now} current={entry.item.key === currentKey} />)}</ol>
-      </li>)}
-    </ol>
-  </Sheet>;
-}
+  return days.map(({ day, entries }) => <li key={day}>
+    <h3 className="schedule-day">{dayLabel(entries[0].item.startsAt, now) === 'Hoje' ? `Hoje · ${dayLabel(entries[0].item.startsAt)}` : dayLabel(entries[0].item.startsAt, now)}</h3>
+    <ol>{entries.map(entry => <Row key={entry.item.key} {...entry} now={now} current={entry.item.key === currentKey} />)}</ol>
+  </li>);
+});
 
 function Row({ item, phase, now, current }: Entry & { now: number; current: boolean }) {
   const shift = shiftOf(item);

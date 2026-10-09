@@ -1,6 +1,7 @@
 /* ---------- Painel da organização (/admin) ---------- */
-.admin-tabs { margin-bottom: 20px; }
-.admin-tabs button { flex: 1; }
+/* Cinco abas cabem em 360px: dividem a largura e encolhem o respiro em vez de alargar a página. */
+.admin-tabs { flex-shrink: 1; min-width: 0; margin-bottom: 20px; }
+.admin-tabs button { flex: 1 1 auto; min-width: 0; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; }
 .admin-race-select { display: flex; margin-bottom: 16px; }
 .admin-race-select select { width: 100%; }
 

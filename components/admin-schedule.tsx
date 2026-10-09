@@ -26,7 +26,7 @@ function phaseText(item: ScheduleItem, phase: Phase) {
 /** Aba Agenda do painel: atrasar ou remarcar qualquer item, largar e encerrar as provas. */
 export function SchedulePanel() {
   const { items, reload } = useSchedule('programacao-admin');
-  const now = useClock();
+  const now = useClock(false);
   const [selected, setSelected] = useState<{ key: string; open: boolean } | null>(null);
   if (!items || !now) return <p className="panel-note">Carregando…</p>;
   const list = phases(items, now);

@@ -1,78 +1,138 @@
 'use client';
-import { useState } from 'react';
-import { ChevronDown, Clock3, Share2, Trophy } from 'lucide-react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Share2, Trophy } from 'lucide-react';
 import { useRaces, type Race, type Team } from '@/lib/data';
 import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
-import { closingMinutes, hasStarted, raceDate, raceTime, useNow } from '@/lib/races';
+import { closingMinutes, nextRace, useNow } from '@/lib/races';
+import { clock, dayLabel, hhmm, itemFromRace, phaseOf, startsIn, LATE_AFTER } from '@/lib/schedule';
+import { useClock } from '@/lib/use-schedule';
 import {
   DOC_ITEMS, ITEM_POINTS, bracketColumns, duelWinner, formatDuel, formatDuration,
   lapSplits, pointsIntensity, sortRace, sortStandings, stageLabel, type Duel, type Score,
 } from '@/lib/scoring';
 import { Sheet, TeamBadge } from './ui';
 import { ShareArt } from './share-art';
+import { Tag } from './schedule';
 
 const int = (n: number) => n.toLocaleString('pt-BR');
 const minus = (n: number) => `−${int(Math.abs(n))}`;
 const extrasOf = (team: Team) => team.docs_delivered * ITEM_POINTS + (team.article_delivered ? ITEM_POINTS : 0);
 const scoreKey = (raceId: string, teamId: string) => `${raceId}:${teamId}`;
 
+/** Prova acontecendo agora (ou fechando a última volta), para abrir direto nela. */
+const isLive = (race: Race, now: number) => { const kind = phaseOf(itemFromRace(race), now).kind; return kind === 'live' || kind === 'closing'; };
+
 /**
  * Resultados do botão "Resultado" da home: bottom sheet no celular, modal grande no desktop.
- * Um seletor troca entre a classificação geral e cada prova.
+ * Abas no topo trocam entre a classificação geral e cada prova; abre na prova que estiver acontecendo.
  */
 export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: races } = useRaces();
   const { data, error } = useResults(open);
-  const [raceId, setRaceId] = useState('');
+  const now = useNow();
+  // null: ainda não escolheu, vale a prova ao vivo (ou a geral).
+  const [raceId, setRaceId] = useState<string | null>(null);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const tabs = useRef<HTMLDivElement>(null);
 
-  const race = races?.find(r => r.id === raceId) ?? null;
-  const standings = data ? sortStandings(data.teams) : [];
+  const liveRace = races && now ? races.find(r => isLive(r, now)) ?? null : null;
+  const chosen = raceId ?? liveRace?.id ?? '';
+  const race = races?.find(r => r.id === chosen) ?? null;
+  const standings = useMemo(() => (data ? sortStandings(data.teams) : []), [data]);
   const selected = standings.find(t => t.id === teamId) ?? null;
   const scoredRaces = data ? new Set(data.scores.map(s => s.race_id)).size : 0;
   const ready = !!(races && data);
 
+  // A lista pesada não entra no meio da subida do sheet (trava em celular simples): se os dados
+  // chegam durante a animação, esperam ela acabar. Já prontos no toque, entram junto com o sheet.
+  const [settled, setSettled] = useState(false);
+  const [readyAtOpen, setReadyAtOpen] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) { setReadyAtOpen(ready); setSettled(false); }
+  }
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => setSettled(true), 340);
+    return () => clearTimeout(timer);
+  }, [open]);
+  const show = ready && (readyAtOpen || settled);
+
+  // A aba escolhida fica sempre à vista na faixa rolável.
+  useEffect(() => {
+    tabs.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  }, [chosen, ready]);
+
   return <Sheet open={open} onClose={onClose} size="large" title="Resultados"
-    subtitle={races ? `Etapa Macaé 2026 · ${scoredRaces} de ${races.length} provas com resultado` : 'Etapa Macaé 2026'}
-    actions={ready && <button className="button share-button" onClick={() => setSharing(true)} aria-label="Compartilhar resultado como imagem">
-      <Share2 size={16} /><span>Compartilhar</span>
+    subtitle={races ? `Macaé 2026 · ${scoredRaces} de ${races.length} provas apuradas` : 'Macaé 2026'}
+    actions={ready && <button className="icon-button" onClick={() => setSharing(true)} aria-label="Compartilhar como imagem" title="Compartilhar como imagem">
+      <Share2 size={19} />
     </button>}>
-    {!ready ? <p className="panel-note">{error ? 'Não foi possível carregar os resultados. Confira sua conexão.' : 'Carregando…'}</p> : <>
+    {!show ? <p className="panel-note">{error ? 'Não foi possível carregar os resultados. Confira sua conexão.' : 'Carregando…'}</p> : <>
       <div className="results-toolbar">
-        <label className="view-select">
-          <span className="sr-only">Mostrar</span>
-          <select value={race?.id ?? ''} onChange={e => setRaceId(e.target.value)}>
-            <option value="">Classificação geral</option>
-            {races.map(r => <option key={r.id} value={r.id}>Prova {r.number} · {r.name}</option>)}
-          </select>
-          <ChevronDown size={16} aria-hidden="true" />
-        </label>
+        <div className="results-tabs" ref={tabs} role="group" aria-label="Classificação">
+          <button aria-pressed={!race} onClick={() => setRaceId('')}>Geral</button>
+          {races.map(r => <button key={r.id} aria-pressed={race?.id === r.id} onClick={() => setRaceId(r.id)}>
+            <span className="results-tab-number">{r.number}</span>{r.name}
+            {now > 0 && isLive(r, now) && <span className="live-dot" aria-label="acontecendo agora" />}
+          </button>)}
+        </div>
       </div>
       {!race ? <Standings races={races} data={data} standings={standings} onTeam={setTeamId} />
-        : race.kind === 'bracket' ? <MatchRace key={race.id} race={race} data={data} />
-        : <LapRace key={race.id} race={race} data={data} />}
+        : race.kind === 'bracket' ? <MatchRace key={race.id} race={race} data={data} onTeam={setTeamId} />
+        : <LapRace key={race.id} race={race} data={data} onTeam={setTeamId} />}
       <TeamSheet team={selected} standings={standings} races={races} data={data} onClose={() => setTeamId(null)} />
       <ShareArt open={sharing} onClose={() => setSharing(false)} race={race} data={data} />
     </>}
   </Sheet>;
 }
 
-function Standings({ races, data, standings, onTeam }: { races: Race[]; data: ResultsData; standings: Team[]; onTeam: (id: string) => void }) {
+/** Antes de haver pontos: as equipes inscritas, em grade compacta. */
+function Entrants({ teams, onTeam }: { teams: Team[]; onTeam: (id: string) => void }) {
+  const sorted = [...teams].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  return <section className="entrants" aria-label="Equipes inscritas">
+    <h2 className="entrants-title">{sorted.length} equipes inscritas</h2>
+    <ul>
+      {sorted.map(team => <li key={team.id}>
+        <button onClick={() => onTeam(team.id)}><TeamBadge team={team} small /><span>{team.name}</span></button>
+      </li>)}
+    </ul>
+  </section>;
+}
+
+// memo: abrir, fechar ou compartilhar não redesenha a classificação.
+const Standings = memo(function Standings({ races, data, standings, onTeam }: { races: Race[]; data: ResultsData; standings: Team[]; onTeam: (id: string) => void }) {
+  const now = useNow();
   const scores = new Map(data.scores.map(s => [scoreKey(s.race_id, s.team_id), s]));
   const started = standings.some(team => team.points !== 0);
 
+  if (!started) {
+    const first = now ? nextRace(races, now) : races[0];
+    return <>
+      {first && <div className="results-start">
+        <span className="results-start-icon"><Trophy size={18} /></span>
+        <div>
+          <strong>A pontuação começa na Prova {first.number}</strong>
+          <span>{first.name} · {dayLabel(Date.parse(first.starts_at), now).toLowerCase()}, às {hhmm(Date.parse(first.starts_at))}</span>
+        </div>
+      </div>}
+      <Entrants teams={standings} onTeam={onTeam} />
+    </>;
+  }
+
+  const leader = standings[0]?.points ?? 0;
   return <div className="standings-layout">
     <div className="standings-side">
-    {!started && <p className="results-note"><Trophy size={16} /> {standings.length} equipes inscritas. A pontuação começa na primeira prova.</p>}
-    {started && <div className="podium" aria-label="Pódio">
+    <div className="podium" aria-label="Pódio">
       {[1, 0, 2].map(i => standings[i] && <button key={standings[i].id} className={`podium-place p${i + 1}`} onClick={() => onTeam(standings[i].id)}>
         <TeamBadge team={standings[i]} />
         <strong>{standings[i].name}</strong>
         <small>{int(standings[i].points)} pts</small>
         <span className="podium-block">{i + 1}º</span>
       </button>)}
-    </div>}
+    </div>
     <Legend />
     </div>
 
@@ -82,27 +142,28 @@ function Standings({ races, data, standings, onTeam }: { races: Race[]; data: Re
         <span>Total</span>
       </div>
       <ol>
-        {standings.map((team, index) => <li key={team.id}>
-          <button className="standings-row" onClick={() => onTeam(team.id)}>
-            <span className="position">{started ? index + 1 : ''}</span>
-            <TeamBadge team={team} small />
-            <span className="standings-main">
-              <span className="standings-name">
-                <strong>{team.name}</strong>
-                {team.penalty_points < 0 && <span className="penalty-tag"><span className="sr-only">Penalidade </span>{minus(team.penalty_points)}</span>}
+        {standings.map((team, index) => {
+          const gap = leader - team.points;
+          return <li key={team.id}>
+            <button className="standings-row" onClick={() => onTeam(team.id)}>
+              <span className={`position ${index === 0 ? 'p1' : ''}`}>{index + 1}</span>
+              <TeamBadge team={team} small />
+              <span className="standings-main">
+                <span className="standings-name">
+                  <strong>{team.name}</strong>
+                  {team.penalty_points < 0 && <span className="penalty-tag"><span className="sr-only">Penalidade </span>{minus(team.penalty_points)}</span>}
+                </span>
+                <small className="standings-gap">{index === 0 ? 'Líder' : gap === 0 ? 'Empatada com o líder' : `${minus(gap)} do líder`}{extrasOf(team) > 0 && ` · +${extrasOf(team)} extras`}</small>
+                <span className="score-cells">{races.map(r => <ScoreCell key={r.id} race={r} score={scores.get(scoreKey(r.id, team.id))} />)}</span>
               </span>
-              <span className="score-cells">{races.map(r => <ScoreCell key={r.id} race={r} score={scores.get(scoreKey(r.id, team.id))} />)}</span>
-            </span>
-            <span className="standings-total">
-              <strong>{int(team.points)}</strong>
-              {extrasOf(team) > 0 && <small>+{extrasOf(team)} extras</small>}
-            </span>
-          </button>
-        </li>)}
+              <span className="standings-total"><strong>{int(team.points)}</strong><small>pts</small></span>
+            </button>
+          </li>;
+        })}
       </ol>
     </section>
   </div>;
-}
+});
 
 function Legend() {
   return <div className="results-legend">
@@ -128,30 +189,38 @@ function PositionBadge({ score }: { score: Score }) {
   return <span className={`position-badge ${tone}`}>{text}</span>;
 }
 
-const dayMonth = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
 
-/** Topo de cada prova, como na prévia: prova e data, nome grande e como ela é decidida. */
+/** Topo de cada prova: número, quando, nome, a situação agora e como ela é decidida. */
 function RaceHeader({ race }: { race: Race }) {
   const minutes = race.duration_minutes;
+  const start = Date.parse(race.starts_at);
   const rule = race.kind === 'bracket'
     ? 'Duelos X1 eliminatórios: passa quem fizer o menor tempo. Quem cai na mesma fase é ordenado pelo tempo.'
     : minutes
       ? `${minutes} min de prova, com até ${Math.round(closingMinutes(race))} min para fechar a última volta. Vence quem completar mais voltas.`
       : 'Vence quem completar mais voltas; no empate, quem fechou a última volta primeiro.';
   return <header className="race-header">
-    <span>Prova {race.number} · {dayMonth.format(new Date(race.starts_at))} · {raceTime(race)}</span>
+    <span>Prova {race.number} · {dayLabel(start)} · {hhmm(start)}</span>
     <h3>{race.name}</h3>
+    <RaceStatus race={race} />
     <p>{rule}</p>
   </header>;
 }
 
-/** Aviso de prova ainda sem resultado, com a largada. */
-function StartNotice({ race }: { race: Race }) {
-  const now = useNow();
-  const when = `${raceDate(race).toLowerCase()}, às ${raceTime(race)}`;
-  return <p className="results-note"><Clock3 size={16} /> {hasStarted(race, now)
-    ? `A prova largou ${when}. O resultado aparece aqui assim que sair.`
-    : `A prova ainda não começou. Largada ${when}.`}</p>;
+/** Situação da prova, com os mesmos estados da programação (e o relógio quando está valendo). */
+function RaceStatus({ race }: { race: Race }) {
+  const coarse = useClock(false);
+  const counting = coarse > 0 && ['live', 'closing'].includes(phaseOf(itemFromRace(race), coarse).kind);
+  const now = useClock(counting);
+  if (!now) return null;
+  const phase = phaseOf(itemFromRace(race), now);
+  switch (phase.kind) {
+    case 'upcoming': return <div className="race-status"><Tag tone="muted">Começa {startsIn(Date.parse(race.starts_at) - now)}</Tag></div>;
+    case 'late': return <div className="race-status"><Tag tone="warn">{phase.since < LATE_AFTER ? 'Largada em instantes' : 'Atrasada'}</Tag></div>;
+    case 'live': return <div className="race-status"><Tag tone="live">Agora</Tag>{phase.endsAt ? <>termina em <strong className="countdown">{clock(phase.endsAt - now)}</strong></> : `começou às ${hhmm(phase.startedAt)}`}</div>;
+    case 'closing': return <div className="race-status"><Tag tone="live">Última volta</Tag>fecha em <strong className="countdown">{clock(phase.limitAt - now)}</strong></div>;
+    default: return <div className="race-status"><Tag tone="muted">Encerrada</Tag></div>;
+  }
 }
 
 /** Antes do resultado, as equipes inscritas ocupam as linhas da prova, em ordem alfabética. */
@@ -167,13 +236,13 @@ function formatTick(ms: number) {
   return `${Math.floor(minutes / 60)}h${minutes % 60 ? String(minutes % 60).padStart(2, '0') : ''}`;
 }
 
-function LapRace({ race, data }: { race: Race; data: ResultsData }) {
+const LapRace = memo(function LapRace({ race, data, onTeam }: { race: Race; data: ResultsData; onTeam: (id: string) => void }) {
   const laps = useRaceLaps(race.id);
   const now = useNow();
   const [open, setOpen] = useState<string | null>(null);
-  const published = sortRace(data.scores.filter(s => s.race_id === race.id));
-  const pending = !published.length;
-  const scores = pending ? waitingRows(race, data.teams) : published;
+  const scores = sortRace(data.scores.filter(s => s.race_id === race.id));
+  // Sem nenhuma volta ainda: só a situação da prova e quem vai largar.
+  if (!scores.length) return <><RaceHeader race={race} /><Entrants teams={data.teams} onTeam={onTeam} /></>;
 
   const teams = new Map(data.teams.map(t => [t.id, t]));
   const start = Date.parse(race.started_at ?? race.starts_at);
@@ -184,7 +253,7 @@ function LapRace({ race, data }: { race: Race; data: ResultsData }) {
   const splits = new Map(scores.map(s => [s.team_id, lapSplits(timesOf(s.team_id), start)]));
   const bests = scores.flatMap(s => { const list = splits.get(s.team_id)!; return list.length ? [{ team: s.team_id, ms: Math.min(...list) }] : []; });
   const best = bests.sort((a, b) => a.ms - b.ms)[0];
-  const leader = !pending && scores[0]?.status === 'ok' ? scores[0] : null;
+  const leader = scores[0]?.status === 'ok' ? scores[0] : null;
   const leaderLast = leader?.last_lap_at ? Date.parse(leader.last_lap_at) : null;
 
   const lastTime = Math.max(start + (duration ?? 0), ...scores.map(s => s.last_lap_at ? Date.parse(s.last_lap_at) : start));
@@ -195,37 +264,32 @@ function LapRace({ race, data }: { race: Race; data: ResultsData }) {
   const ticks = Array.from({ length: Math.floor(span / step) + 1 }, (_, i) => i * step);
 
   function detail(score: Score) {
-    if (pending) return 'Aguardando a largada';
     if (score.status === 'dns') return 'Não largou';
     const voltas = `${score.laps} ${score.laps === 1 ? 'volta' : 'voltas'}`;
     if (score.status === 'dnf') return `Não terminou · ${voltas}`;
     const last = score.last_lap_at ? Date.parse(score.last_lap_at) : null;
-    let text = last ? `${voltas} · ${formatDuration(last - start)}` : voltas;
+    // Quem está voltas atrás mostra só a diferença em voltas; na mesma volta, o tempo atrás do líder.
     if (leader && score !== leader && leaderLast && last) {
       const behind = leader.laps - score.laps;
-      text += behind > 0 ? ` · −${behind} ${behind === 1 ? 'volta' : 'voltas'}` : ` · +${formatDuration(last - leaderLast)}`;
+      return `${voltas} · ${behind > 0 ? `−${behind} ${behind === 1 ? 'volta' : 'voltas'}` : `+${formatDuration(last - leaderLast)}`}`;
     }
-    return text;
+    return last ? `${voltas} · ${formatDuration(last - start)}` : voltas;
   }
 
   return <>
     <RaceHeader race={race} />
-    {pending && <StartNotice race={race} />}
     <div className="lap-layout">
     <div className="lap-side">
     <div className="race-summary">
-      <div><span>{live ? 'Liderando' : 'Vencedor'}</span><strong>{leader ? `${leader.laps} voltas` : '–'}</strong><small>{leader ? teams.get(leader.team_id)?.name : 'a definir'}</small></div>
+      <div><span>{live ? 'Liderando' : 'Vencedor'}</span><strong className="name">{leader ? teams.get(leader.team_id)?.name : '–'}</strong><small>{leader ? `${leader.laps} voltas` : 'a definir'}</small></div>
       <div><span>Melhor volta</span><strong>{best ? formatDuration(best.ms) : '–'}</strong><small>{best ? teams.get(best.team)?.name : 'a definir'}</small></div>
-      {pending
-        ? <div><span>Inscritas</span><strong>{scores.length}</strong><small>equipes</small></div>
-        : <div><span>Terminaram</span><strong>{scores.filter(s => s.status === 'ok').length}/{scores.length}</strong><small>{scores.filter(s => s.status === 'dnf').length} DNF · {scores.filter(s => s.status === 'dns').length} DNS</small></div>}
+      <div><span>Terminaram</span><strong>{scores.filter(s => s.status === 'ok').length}/{scores.length}</strong><small>{scores.filter(s => s.status === 'dnf').length} DNF · {scores.filter(s => s.status === 'dns').length} DNS</small></div>
     </div>
     {live && <p className="live-note"><span className="live-dot" /> Parcial: a prova ainda está acontecendo.</p>}
 
-    {(pending || (laps && laps.size > 0)) && <section className="card lap-chart" aria-label="Voltas ao longo da prova">
+    {laps && laps.size > 0 && <section className="card lap-chart" aria-label="Voltas ao longo da prova">
       <div className="lap-chart-title"><h2>Voltas ao longo da prova</h2><small>cada ponto é uma volta</small></div>
-      <div className={`lap-lanes ${pending ? 'empty' : ''}`}>
-        {pending && <p className="lap-empty">As voltas aparecem aqui durante a prova, no horário em que cada barco fechar a volta.</p>}
+      <div className="lap-lanes">
         {duration && <div className="lap-overlay" aria-hidden="true"><span className="lap-flag" style={{ left: x(start + duration) }} /></div>}
         {scores.filter(s => s.status !== 'dns').map(s => {
           const times = timesOf(s.team_id);
@@ -243,7 +307,7 @@ function LapRace({ race, data }: { race: Race; data: ResultsData }) {
           </div>;
         })}
       </div>
-      {(!pending || duration) && <div className="lap-ticks" aria-hidden="true">{ticks.map(ms => <span key={ms} style={{ left: x(start + ms) }}>{ms ? formatTick(ms) : '0'}</span>)}</div>}
+      <div className="lap-ticks" aria-hidden="true">{ticks.map(ms => <span key={ms} style={{ left: x(start + ms) }}>{ms ? formatTick(ms) : '0'}</span>)}</div>
       <div className="results-legend">
         <span><span className="lap-dot static" /> volta</span>
         <span><span className="lap-dot static best" /> melhor volta da equipe</span>
@@ -266,7 +330,7 @@ function LapRace({ race, data }: { race: Race; data: ResultsData }) {
               <PositionBadge score={score} />
               {team && <TeamBadge team={team} small />}
               <span className="race-row-main"><strong>{team?.name ?? score.team_id}</strong><small>{detail(score)}{score.note && ` · ${score.note}`}</small></span>
-              <span className="race-row-points"><strong>{pending ? '–' : score.points}</strong><small>pts</small></span>
+              <span className="race-row-points"><strong>{score.points}</strong><small>pts</small></span>
               {list.length > 0 && <ChevronDown size={16} className="race-row-chevron" />}
             </button>
             {isOpen && <div className="lap-splits">
@@ -279,16 +343,18 @@ function LapRace({ race, data }: { race: Race; data: ResultsData }) {
     </div>
   </div>
   </>;
-}
+});
 
 // Chave do Match Race desenhada em px: cada coluna é uma fase e o duelo seguinte
 // fica na altura do meio dos dois que o alimentam.
 const CARD_W = 176, CARD_H = 64, GAP_X = 36, SLOT = 80, HEAD = 28;
 
-function MatchRace({ race, data }: { race: Race; data: ResultsData }) {
+const MatchRace = memo(function MatchRace({ race, data, onTeam }: { race: Race; data: ResultsData; onTeam: (id: string) => void }) {
   const duels = data.duels.filter(d => d.race_id === race.id);
   const published = sortRace(data.scores.filter(s => s.race_id === race.id));
   const pending = !published.length;
+  // Sem chave montada nem resultado: só a situação da prova e quem vai disputar.
+  if (pending && !duels.length) return <><RaceHeader race={race} /><Entrants teams={data.teams} onTeam={onTeam} /></>;
   const scores = pending ? waitingRows(race, data.teams) : published;
 
   const teams = new Map(data.teams.map(t => [t.id, t]));
@@ -317,7 +383,6 @@ function MatchRace({ race, data }: { race: Race; data: ResultsData }) {
 
   return <>
     <RaceHeader race={race} />
-    {pending && <StartNotice race={race} />}
     <div className="match-layout">
     {final && finalWinner && <section className="final-card" aria-label="Final">
       <div className="final-card-title"><h2>Final</h2>{final.time_a !== null && final.time_b !== null && <small>diferença {Math.abs(final.time_a - final.time_b).toFixed(1).replace('.', ',')}s</small>}</div>
@@ -365,7 +430,7 @@ function MatchRace({ race, data }: { race: Race; data: ResultsData }) {
     </section>}
   </div>
   </>;
-}
+});
 
 function DuelCard({ duel, teams, champion = false, style }: { duel: Duel | null; teams: Map<string, Team>; champion?: boolean; style: React.CSSProperties }) {
   const winner = duel ? duelWinner(duel) : null;

@@ -42,6 +42,18 @@ export const LATE_AFTER = 5 * MINUTE;
 export const dayIndex = (time: number) => Math.floor((time + BRT) / DAY);
 const endOfDay = (time: number) => (dayIndex(time) + 1) * DAY - BRT;
 
+type RaceRow = {
+  id: string; number: number; name: string; starts_at: string; started_at: string | null; finished_at: string | null;
+  duration_minutes: number | null; closing_minutes: number | null;
+};
+const time = (iso: string | null) => (iso ? Date.parse(iso) : null);
+/** Prova como item da programação (as fases valem igual no card, na programação e nos resultados). */
+export const itemFromRace = (race: RaceRow, changes: ScheduleChange[] = []): ScheduleItem => ({
+  key: `race:${race.id}`, kind: 'race', id: race.id, title: race.name, label: `Prova ${race.number}`,
+  startsAt: Date.parse(race.starts_at), startedAt: time(race.started_at), finishedAt: time(race.finished_at),
+  durationMinutes: race.duration_minutes, closingMinutes: race.closing_minutes, changes,
+});
+
 /** Fase de um item sozinho. `later`: algum item seguinte já começou (encerra o que ficou esquecido). */
 export function phaseOf(item: ScheduleItem, now: number, later = false): Phase {
   if (item.finishedAt !== null && now >= item.finishedAt) return { kind: 'done' };

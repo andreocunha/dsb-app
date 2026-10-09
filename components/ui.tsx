@@ -41,6 +41,8 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
   // Guardado em ref para o efeito não depender da identidade da função e reabrir o diálogo a cada render.
   const fechar = useRef(onClose);
   useEffect(() => { fechar.current = onClose; }, [onClose]);
+  // Fechado por arraste: o sheet já saiu deslizando no próprio toque; o efeito só tira da tela.
+  const arrastadoParaFora = useRef(false);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -51,8 +53,13 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
       const from = getComputedStyle(dialog).transform;
       // Reabrir antes de terminar cancela o fechamento (senão a garantia abaixo fecharia o sheet reaberto).
       let cancelled = false;
-      const done = () => { if (cancelled || !dialog.open) return; dialog.style.transform = ''; dialog.style.transition = ''; dialog.close(); };
-      if (reduceMotion()) { done(); return; }
+      const done = () => {
+        if (cancelled || !dialog.open) return;
+        dialog.style.transform = ''; dialog.style.transition = ''; dialog.close();
+        // As animações de saída ficam presas (fill: forwards) até cancelar.
+        dialog.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+      };
+      if (reduceMotion() || arrastadoParaFora.current) { arrastadoParaFora.current = false; done(); return; }
       const frames = isModal()
         ? [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px) scale(.98)' }]
         : [{ transform: from === 'none' ? 'translateY(0)' : from }, { transform: 'translateY(100%)' }];
@@ -83,7 +90,19 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
   function release(dy: number, speed: number) {
     const dialog = ref.current;
     if (!dialog) return;
-    if (speed > -.2 && (dy > Math.min(140, dialog.offsetHeight * .25) || (dy > 24 && speed > .5))) { fechar.current(); return; }
+    if (speed > -.2 && (dy > Math.min(140, dialog.offsetHeight * .25) || (dy > 24 && speed > .5))) {
+      // Sai deslizando já, sem esperar o React (a troca de estado no meio travava 2 quadros no S10).
+      // Continua na velocidade do dedo: puxão rápido sai rápido.
+      const restante = Math.max(dialog.offsetHeight - dy, 0);
+      const ms = Math.round(Math.min(Math.max(restante / Math.max(speed, 1.4), 140), 260));
+      dialog.style.transition = '';
+      dialog.style.transform = 'translateY(100%)';
+      dialog.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(100%)' }], { duration: ms, easing: 'cubic-bezier(.25, .6, .35, 1)' });
+      try { dialog.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, pseudoElement: '::backdrop', fill: 'forwards' }); } catch { /* sem suporte: o fundo some junto */ }
+      arrastadoParaFora.current = true;
+      setTimeout(() => fechar.current(), ms);
+      return;
+    }
     dialog.style.transition = `transform .2s ${EASE}`;
     dialog.style.transform = '';
   }
@@ -118,6 +137,8 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
         if (dy <= 0 || Math.abs(dx) > Math.abs(dy)) { gesture.state = 'skip'; return; }
         gesture.state = 'drag';
         dialog.style.transition = 'none';
+        // Camada própria já no primeiro movimento: o sheet só desliza, sem redesenhar o conteúdo.
+        dialog.style.willChange = 'transform';
       }
       e.preventDefault();
       const dt = Math.max(e.timeStamp - gesture.lastT, 1);
@@ -126,7 +147,7 @@ export function Sheet({ open, onClose, title, subtitle, actions, size = 'default
       follow(dialog, dy);
     };
     const onEnd = () => {
-      if (gesture?.state === 'drag') release(gesture.dy, gesture.speed);
+      if (gesture?.state === 'drag') { release(gesture.dy, gesture.speed); dialog.style.willChange = ''; }
       gesture = null;
     };
     dialog.addEventListener('touchstart', onStart, { passive: true });

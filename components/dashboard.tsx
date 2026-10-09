@@ -11,6 +11,7 @@ import { ResultsSheet } from './results';
 import { ScheduleCard } from './schedule';
 import { useAuth } from './auth';
 import { supabase } from '@/lib/supabase';
+import { onOverlaysChange } from '@/lib/overlays';
 
 // A live fica em tela cheia sobre o mapa ou num mini player (PiP) no canto.
 type LiveMode = 'off' | 'full' | 'pip';
@@ -44,12 +45,30 @@ export function Dashboard({ visible }: { visible: boolean }) {
     return () => window.removeEventListener('message', answer);
   }, [isAdmin, trackerOrigin]);
 
+  // Com um sheet aberto por cima, o mapa desenha devagar: no Android ele divide o processo com o app,
+  // e a animação do sheet trava em celular mais simples se o mapa seguir a 15–60 quadros por segundo.
+  // O aviso de "descoberto" espera a animação de fechar terminar.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let covered = false;
+    const post = (value: boolean) => {
+      if (covered === value) return;
+      covered = value;
+      frame.current?.contentWindow?.postMessage({ type: 'dsb-tracker:covered', covered: value }, trackerOrigin);
+    };
+    const stop = onOverlaysChange(open => {
+      clearTimeout(timer);
+      if (open > 0) post(true); else timer = setTimeout(() => post(false), 350);
+    });
+    return () => { clearTimeout(timer); stop(); post(false); };
+  }, [trackerOrigin]);
+
   return (
     <div className={`home fill ${live === 'pip' ? 'has-pip' : ''}`} hidden={!visible}>
       <div className="home-hud">
         <ScheduleCard items={items} actions={<div className="hud-actions">
-          <button aria-haspopup="dialog" onClick={() => setResults(true)}><Trophy size={16} /> Resultado</button>
-          <button aria-pressed={live !== 'off'} onClick={() => setLive(live === 'off' ? 'full' : 'off')}><Radio size={16} /> Live</button>
+          <button className="hud-results" aria-haspopup="dialog" aria-label="Resultado" onClick={() => setResults(true)}><Trophy size={16} /><span>Resultado</span></button>
+          <button className="hud-live" aria-pressed={live !== 'off'} aria-label="Live" onClick={() => setLive(live === 'off' ? 'full' : 'off')}><Radio size={16} /><span>Live</span></button>
         </div>} />
       </div>
 

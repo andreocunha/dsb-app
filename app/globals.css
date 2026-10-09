@@ -120,6 +120,11 @@ img.avatar { object-fit: cover; }
 
 /* ---------- Páginas de conteúdo ---------- */
 .page { padding: 20px 16px 32px; }
+/* No app o conteúdo é desenhado por baixo da barra de status (transparente): nas telas que rolam
+   a página, uma faixa da cor do fundo cobre essa área para o texto não passar por trás dos ícones. */
+@media (max-width: 899px) {
+  .page::before { content: ''; position: fixed; top: 0; left: 0; right: 0; z-index: 25; height: env(safe-area-inset-top); background: var(--background); pointer-events: none; }
+}
 .page-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .page-heading h1 { font-size: 24px; font-weight: 700; letter-spacing: -.5px; }
 .page-heading p { margin-top: 4px; color: var(--text-secondary); }
@@ -203,12 +208,15 @@ img.avatar { object-fit: cover; }
 /* Mobile: barra compacta acima do mapa, para não cobrir os controles dele. */
 @media (max-width: 899px) {
   .home-hud { position: relative; z-index: 4; }
-  .race-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: center; padding: 10px 12px; border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
+  /* No celular o card fica acima do mapa, não sobre ele: sem o desfoque, que custa a cada quadro. */
+  .race-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: center; padding: 10px 12px; border-width: 0 0 1px; border-radius: 0; background: var(--surface); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
   .race-card .hud-actions { grid-column: 2; grid-row: 1; }
   .race-card .hud-actions button { padding: 0 10px; }
   .live-bar button span { display: none; }
 }
-@media (max-width: 380px) { .race-card .hud-actions button { width: 38px; padding: 0; font-size: 0; gap: 0; } }
+/* Tela estreita: primeiro o Live vira só ícone; só em tela bem estreita o Resultado também. */
+@media (max-width: 420px) { .race-card .hud-live { width: 38px; padding: 0; } .race-card .hud-live span { display: none; } }
+@media (max-width: 340px) { .race-card .hud-results { width: 38px; padding: 0; } .race-card .hud-results span { display: none; } }
 @media (min-width: 900px) {
   .home-stage { position: absolute; inset: 0; }
   .home-hud { position: absolute; top: 16px; left: 16px; z-index: 2; display: flex; flex-direction: column; gap: 10px; width: 330px; max-height: calc(100% - 32px); }
@@ -233,8 +241,29 @@ img.avatar { object-fit: cover; }
 
 /* ---------- Resultados (sheet do botão Resultado da home) ---------- */
 .sheet.large > .sheet-content > .sheet-body { container-type: inline-size; }
-.share-button { min-height: 36px; border-radius: 999px; }
-.results-toolbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 -2px; padding: 4px 2px 14px; background: var(--surface); }
+.results-toolbar { position: sticky; top: 0; z-index: 2; margin: 0 -20px 16px; padding: 2px 0 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+/* Abas roláveis de lado: Geral e uma por prova. */
+.results-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 20px; scroll-padding-inline: 20px; scrollbar-width: none; }
+.results-tabs::-webkit-scrollbar { display: none; }
+.results-tabs button { display: inline-flex; flex-shrink: 0; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-secondary); font-size: 13px; font-weight: 500; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+.results-tabs button:hover:not([aria-pressed="true"]) { color: var(--text); }
+.results-tabs button[aria-pressed="true"] { border-color: var(--brand); background: var(--brand); color: var(--on-brand); }
+.results-tab-number { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: -5px; border-radius: 50%; background: var(--surface-hover); color: var(--text-secondary); font-size: 11px; font-weight: 700; }
+.results-tabs [aria-pressed="true"] .results-tab-number { background: color-mix(in srgb, var(--on-brand) 22%, transparent); color: var(--on-brand); }
+.results-tabs .live-dot { width: 7px; height: 7px; }
+
+/* Antes da primeira prova: quando começa e quem está inscrito. */
+.results-start { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding: 14px; border-radius: 14px; background: var(--brand-soft); }
+.results-start-icon { display: grid; flex-shrink: 0; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--brand); color: var(--on-brand); }
+.results-start div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.results-start strong { color: var(--brand); font-size: 15px; font-weight: 600; }
+.results-start span { color: var(--text-secondary); font-size: 13px; }
+.entrants-title { margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.entrants ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; padding: 0; list-style: none; }
+.entrants button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 48px; padding: 6px 10px 6px 6px; border: 1px solid var(--border); border-radius: 12px; text-align: left; }
+.entrants button:hover { background: var(--surface-hover); }
+.entrants button span { overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.race-status { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; color: var(--text-secondary); font-size: 13px; }
 .view-select { position: relative; display: inline-flex; align-items: center; max-width: 100%; }
 /* 16px: o iOS não dá zoom ao abrir o seletor. */
 .view-select select { max-width: 100%; height: 42px; padding: 0 40px 0 14px; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-subtle); color: var(--text); font: inherit; font-size: 16px; font-weight: 600; text-overflow: ellipsis; appearance: none; -webkit-appearance: none; cursor: pointer; }
@@ -242,9 +271,9 @@ img.avatar { object-fit: cover; }
 .view-select select:focus, .view-select select:focus-visible { outline: none; }
 .view-select select:focus-visible { border-color: var(--brand); }
 .view-select svg { position: absolute; right: 14px; color: var(--text-secondary); pointer-events: none; }
-.race-header { margin-bottom: 14px; }
-.race-header span { color: var(--brand); font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; }
-.race-header h3 { margin: 2px 0 4px; font-size: 26px; font-weight: 700; letter-spacing: -.6px; line-height: 1.15; }
+.race-header { margin-bottom: 16px; }
+.race-header > span { color: var(--brand); font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; }
+.race-header h3 { margin: 2px 0 6px; font-size: 26px; font-weight: 700; letter-spacing: -.6px; line-height: 1.15; }
 .race-header p { max-width: 620px; color: var(--text-secondary); font-size: 13px; }
 .lap-lanes.empty .lap-track::before { content: ''; position: absolute; top: 9px; left: 0; right: 0; height: 2px; border-radius: 1px; background: repeating-linear-gradient(90deg, var(--border-strong) 0 6px, transparent 6px 12px); }
 .lap-empty { position: absolute; inset: 0 0 0 28px; z-index: 1; display: grid; place-items: center; padding: 0 24px; color: var(--text-secondary); font-size: 13px; font-weight: 500; text-align: center; }
@@ -272,20 +301,28 @@ img.avatar { object-fit: cover; }
 .standings ol { padding: 0; list-style: none; }
 .standings li + li { border-top: 1px solid var(--border); }
 .standings-head { display: flex; align-items: center; gap: 10px; padding: 4px 12px 6px calc(10px + 22px + 32px + 20px); color: var(--text-tertiary); font-family: var(--font-geist-mono), monospace; font-size: 11px; }
-.standings-head .score-cells { flex: 1; }
-.standings-head .score-cells span { width: 28px; text-align: center; }
-.standings-head > span:last-child { width: 64px; text-align: right; font-family: var(--font-geist-sans), sans-serif; }
+.standings-head .score-cells { flex: 1; min-width: 0; }
+.standings-head .score-cells span { text-align: center; }
+.standings-head > span:last-child { flex-shrink: 0; width: 64px; text-align: right; font-family: var(--font-geist-sans), sans-serif; }
 .standings-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px 10px 10px; text-align: left; }
 .standings-row:hover { background: var(--surface-hover); }
 .standings-main { display: flex; flex: 1; flex-direction: column; gap: 5px; min-width: 0; }
 .standings-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .standings-name strong { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .penalty-tag { flex-shrink: 0; padding: 1px 5px; border-radius: 5px; background: var(--danger-soft); color: var(--danger); font-family: var(--font-geist-mono), monospace; font-size: 10px; font-weight: 600; }
-.standings-total { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; width: 64px; }
+.standings-total { display: flex; flex-shrink: 0; flex-direction: column; align-items: flex-end; gap: 1px; width: 64px; }
 .standings-total strong { font-family: var(--font-geist-mono), monospace; font-size: 17px; font-weight: 600; letter-spacing: -.4px; }
-.standings-total small { font-size: 10px; white-space: nowrap; }
-.score-cells { display: flex; gap: 3px; }
-.score-cell { display: inline-grid; place-items: center; width: 28px; height: 20px; border-radius: 5px; background: color-mix(in srgb, var(--brand) calc(var(--t, 0) * 100%), var(--brand-soft)); color: var(--brand); font-family: var(--font-geist-mono), monospace; font-size: 10px; font-weight: 600; }
+.standings-total small { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
+.standings-gap { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+/* No celular a linha mostra total e distância para o líder; as células por prova ficam no detalhe da equipe. */
+@container (max-width: 519px) {
+  .standings-head, .standings .score-cells, .standings-side .results-legend { display: none; }
+  .standings-main { gap: 1px; }
+  .standings { padding: 0; }
+}
+/* Uma coluna por prova, iguais no cabeçalho e nas linhas: em tela estreita encolhem juntas. */
+.score-cells { display: grid; grid-auto-columns: minmax(0, 28px); grid-auto-flow: column; gap: 3px; }
+.score-cell { display: inline-grid; place-items: center; width: 100%; height: 20px; border-radius: 5px; background: color-mix(in srgb, var(--brand) calc(var(--t, 0) * 100%), var(--brand-soft)); color: var(--brand); font-family: var(--font-geist-mono), monospace; font-size: 10px; font-weight: 600; }
 .score-cell.strong { color: var(--on-brand); }
 .score-cell.dnf { background: var(--danger-soft); color: var(--danger); }
 .score-cell.dns, .score-cell.empty { background: var(--surface-hover); color: var(--text-tertiary); }
@@ -302,8 +339,16 @@ img.avatar { object-fit: cover; }
 .race-summary > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .race-summary span, .race-summary small { overflow: hidden; color: var(--text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .race-summary strong { font-family: var(--font-geist-mono), monospace; font-size: 17px; font-weight: 600; letter-spacing: -.4px; }
+.race-summary strong.name { overflow: hidden; font-family: inherit; font-size: 15px; letter-spacing: -.2px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
 .live-note { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--text-secondary); font-size: 13px; }
 .lap-chart { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; padding: 14px 12px 12px; }
+/* Celular: resumo, a classificação e só depois o gráfico. No modal largo, gráfico ao lado (grid abaixo). */
+@container (max-width: 759px) {
+  .lap-layout { display: flex; flex-direction: column; }
+  .lap-side { display: contents; }
+  .lap-main { order: 1; }
+  .lap-side .lap-chart { order: 2; margin: 12px 0 0; }
+}
 .lap-chart-title { display: flex; align-items: baseline; justify-content: space-between; }
 .lap-chart-title h2 { font-size: 14px; }
 .lap-lanes { position: relative; display: flex; flex-direction: column; gap: 2px; }
@@ -387,7 +432,7 @@ button.race-row:disabled { cursor: default; }
 @container (min-width: 760px) {
   .standings-layout, .lap-layout { display: grid; gap: 20px; align-items: start; }
   .standings-layout { grid-template-columns: 340px minmax(0, 1fr); }
-  .standings .score-cell, .standings-head .score-cells span { width: 36px; }
+  .standings-head .score-cells, .standings .score-cells { grid-auto-columns: minmax(0, 36px); }
   .standings .score-cell { height: 24px; font-size: 11px; }
   .standings-head .score-cells, .standings .score-cells { gap: 4px; }
   .standings-row { padding-block: 12px; }
@@ -596,6 +641,8 @@ button.race-row:disabled { cursor: default; }
   .sheet.large > .sheet-content { border-radius: 20px; }
   .sheet.large > .sheet-content > .sheet-grab { padding: 0 28px; }
   .sheet.large > .sheet-content > .sheet-body { padding: 0 28px 28px; }
+  .sheet.large .results-toolbar { margin-inline: -28px; }
+  .sheet.large .results-tabs { padding-inline: 28px; scroll-padding-inline: 28px; }
 }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
 .menu-profile { display: flex; align-items: center; gap: 12px; width: 100%; margin-bottom: 12px; padding: 12px; border-radius: 12px; background: var(--surface-hover); text-align: left; }

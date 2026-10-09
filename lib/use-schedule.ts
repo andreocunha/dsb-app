@@ -2,22 +2,15 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { supabase } from './supabase';
 import { setRaces, type Race } from './data';
-import type { ScheduleChange, ScheduleItem } from './schedule';
+import { itemFromRace, type ScheduleChange, type ScheduleItem } from './schedule';
 
 type EventItem = { id: string; title: string; starts_at: string; duration_minutes: number | null };
 type ChangeRow = ScheduleChange & { race_id: string | null; event_item_id: string | null };
 
-const time = (iso: string | null) => (iso ? Date.parse(iso) : null);
-
 function build(races: Race[], events: EventItem[], changes: ChangeRow[]): ScheduleItem[] {
   const changesOf = (pick: (row: ChangeRow) => boolean) => changes.filter(pick);
   return [
-    ...races.map(race => ({
-      key: `race:${race.id}`, kind: 'race' as const, id: race.id, title: race.name, label: `Prova ${race.number}`,
-      startsAt: Date.parse(race.starts_at), startedAt: time(race.started_at), finishedAt: time(race.finished_at),
-      durationMinutes: race.duration_minutes, closingMinutes: race.closing_minutes,
-      changes: changesOf(row => row.race_id === race.id),
-    })),
+    ...races.map(race => itemFromRace(race, changesOf(row => row.race_id === race.id))),
     ...events.map(event => ({
       key: `event:${event.id}`, kind: 'event' as const, id: event.id, title: event.title, label: '',
       startsAt: Date.parse(event.starts_at), startedAt: null, finishedAt: null,
@@ -66,8 +59,11 @@ export function useSchedule(channel = 'programacao') {
   return { items, reload };
 }
 
-// Relógio de segundos, só para os componentes que mostram contagem regressiva.
-const subscribeSecond = (tick: () => void) => { const id = setInterval(tick, 1000); return () => clearInterval(id); };
+// Relógio de segundos só enquanto há contagem regressiva na tela; fora disso, a cada 30s
+// (cada tique redesenha o card e a programação, o que pesa em celular mais simples).
+const ticker = (ms: number) => (tick: () => void) => { const id = setInterval(tick, ms); return () => clearInterval(id); };
+const everySecond = ticker(1000), everyHalfMinute = ticker(30_000);
 const second = () => Math.floor(Date.now() / 1000) * 1000;
-/** Instante atual, avançando a cada segundo; 0 no build estático. */
-export const useClock = () => useSyncExternalStore(subscribeSecond, second, () => 0);
+const halfMinute = () => Math.floor(Date.now() / 30_000) * 30_000;
+/** Instante atual: a cada segundo com `fast`, senão a cada 30s; 0 no build estático. */
+export const useClock = (fast = true) => useSyncExternalStore(fast ? everySecond : everyHalfMinute, fast ? second : halfMinute, () => 0);
