@@ -9,18 +9,14 @@ export async function paintStatusBar(theme: string) {
   const { StatusBar, Style } = await import('@capacitor/status-bar');
   const escuro = theme === 'dark';
   try {
-    if (Capacitor.getPlatform() === 'android') {
-      // O app desenha por baixo da barra de status em todas as versões, como já acontece
-      // sozinho no Android 15+. Com `overlay: false`, no Android 8–14 a página começava
-      // abaixo da barra E ainda recuava o espaço do notch: sobrava uma faixa em branco.
-      await StatusBar.setOverlaysWebView({ overlay: true });
-      await StatusBar.setStyle({ style: escuro ? Style.Dark : Style.Light });
-      watchNavigationBar();
-      return;
-    }
-    await StatusBar.setOverlaysWebView({ overlay: false });
+    // O app desenha por baixo da barra de status nas duas plataformas, e a página recua o
+    // espaço do notch pelo CSS. Com `overlay: false`, no Android 8–14 a página começava
+    // abaixo da barra E ainda recuava o notch (sobrava uma faixa em branco), e no iOS o
+    // plugin cobre a barra com um fundo preto, que esconde a hora e a bateria no tema claro.
+    await StatusBar.setOverlaysWebView({ overlay: true });
     // Style.Light = fundo claro, ícones escuros. Era isso que faltava no tema claro.
     await StatusBar.setStyle({ style: escuro ? Style.Dark : Style.Light });
+    if (Capacitor.getPlatform() === 'android') watchNavigationBar();
   } catch {
     // Em algumas versões do iOS a cor de fundo não é ajustável; o estilo já basta.
   }
