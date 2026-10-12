@@ -18,3 +18,20 @@ export const chatFileUrl = (path: string) => `${url}/storage/v1/object/public/ch
 /** Mensagem de erro amigável vinda de uma RPC (as funções já lançam textos em português). */
 export const errorMessage = (error: unknown) =>
   (error as { message?: string })?.message || 'Algo deu errado. Tente novamente.';
+
+/**
+ * Dispara uma chamada cuja resposta não interessa. As consultas do Supabase só saem quando alguém espera
+ * a resposta (await ou then): `void supabase.rpc(...)` sozinho não envia nada ao banco.
+ */
+export const fire = (query: PromiseLike<unknown>) => { void query.then(() => {}, () => {}); };
+
+/** No máximo uma execução a cada `ms`: a primeira sai na hora, e o que vier no intervalo vira uma só, no fim dele. */
+export function throttled(run: () => void, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined, again = false;
+  const go = () => {
+    if (timer) { again = true; return; }
+    run();
+    timer = setTimeout(() => { timer = undefined; if (again) { again = false; go(); } }, ms);
+  };
+  return go;
+}

@@ -6,7 +6,7 @@ import { SchedulePanel } from './admin-schedule';
 import { StatsPanel } from './admin-stats';
 import { useAuth } from './auth';
 import { Sheet, TeamBadge } from './ui';
-import { supabase, errorMessage } from '@/lib/supabase';
+import { fire, supabase, errorMessage } from '@/lib/supabase';
 import type { Race, Team } from '@/lib/data';
 import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
 import { hasStarted, useNow } from '@/lib/races';
@@ -473,7 +473,7 @@ function TeamExtras({ team, races, penalties, onChanged }: { team: Team; races: 
   async function removePenalty(p: ResultsData['penalties'][number]) {
     const { error } = await supabase.rpc('admin_delete_penalty', { p_id: p.id });
     if (error) { notify(errorMessage(error)); return; }
-    notify('Penalidade apagada.', { label: 'Desfazer', run: () => void supabase.rpc('admin_add_penalty', { p_team_id: p.team_id, p_points: Math.abs(p.points), p_reason: p.reason, p_race_id: p.race_id }) });
+    notify('Penalidade apagada.', { label: 'Desfazer', run: () => fire(supabase.rpc('admin_add_penalty', { p_team_id: p.team_id, p_points: Math.abs(p.points), p_reason: p.reason, p_race_id: p.race_id })) });
   }
 
   return <>

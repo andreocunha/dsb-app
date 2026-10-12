@@ -21,18 +21,26 @@ export function MessageMenu({ request, own, myReaction, actions, onAction, onRea
 }) {
   const box = useRef<HTMLDivElement>(null);
   const openedAt = useRef(0);
+  // No toque longo o dedo ainda está na tela quando o menu abre, e ao soltar o toque cairia no que apareceu
+  // embaixo dele (muitas vezes "Bloquear" ou "Banir"). Só vale o toque que começa com o menu já aberto.
+  const armed = useRef(request.mode !== 'full');
   const fechar = useRef(onClose);
   useEffect(() => { fechar.current = onClose; }, [onClose]);
   useEffect(() => {
     openedAt.current = performance.now();
     box.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
     const solta = registerOverlay(() => fechar.current());
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') fechar.current(); };
+    const arm = () => { armed.current = true; };
+    const onKey = (e: KeyboardEvent) => { arm(); if (e.key === 'Escape') fechar.current(); };
     const onResize = () => fechar.current();
+    window.addEventListener('pointerdown', arm, true);
     window.addEventListener('keydown', onKey);
     window.addEventListener('resize', onResize);
-    return () => { solta(); window.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); };
+    return () => { solta(); window.removeEventListener('pointerdown', arm, true); window.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); };
   }, []);
+
+  /** Soltar o dedo do toque longo não escolhe nada: nem ação, nem reação, nem fecha o menu. */
+  const ignoreRelease = (e: React.MouseEvent) => { if (!armed.current) { e.stopPropagation(); e.preventDefault(); } };
 
   // O mesmo toque que abriu o menu não pode fechá-lo ao soltar o dedo.
   const backdrop = (e: React.MouseEvent) => { if (e.target === e.currentTarget && performance.now() - openedAt.current > 350) onClose(); };
@@ -64,7 +72,7 @@ export function MessageMenu({ request, own, myReaction, actions, onAction, onRea
     const top = clamp(rect.top - BAR_H - GAP, EDGE, Math.max(EDGE, vh - EDGE - total));
     const width = Math.max(rect.width, BAR_W);
     const side = own ? { right: clamp(vw - rect.right, EDGE, vw - EDGE - width) } : { left: clamp(rect.left, EDGE, vw - EDGE - width) };
-    return <div className="menu-layer dim" onClick={backdrop}>
+    return <div className="menu-layer dim" onClickCapture={ignoreRelease} onClick={backdrop}>
       <div ref={box} className={`menu-stack ${own ? 'own' : ''}`} style={{ top, ...side }} onKeyDown={onKeyDown} onClick={backdrop}>
         {bar}
         <div className="menu-clone" style={{ width: rect.width + 16, maxHeight: cloneH }} aria-hidden>{children}</div>

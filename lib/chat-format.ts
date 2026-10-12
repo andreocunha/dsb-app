@@ -101,6 +101,17 @@ export function mentionsMe(row: { user_id: string; mentions?: string[] | null; m
   return !!userId && row.user_id !== userId && (!!row.mentions?.includes(userId) || !!row.mention_all);
 }
 
+/**
+ * Até onde a conversa estava lida, a partir do número de não lidas que a lista mostra: as últimas `unread`
+ * mensagens das outras pessoas são as que faltam ler. Devolve 0 quando não há nada para marcar.
+ */
+export function readUpTo(messages: { id: number; user_id: string }[], unread: number, userId: string | null) {
+  if (unread <= 0) return 0;
+  const others = messages.filter(m => m.user_id !== userId);
+  const first = others[Math.max(others.length - unread, 0)];
+  return first ? first.id - 1 : 0;
+}
+
 /** Quem foi marcado no texto (sem repetir), na ordem em que aparece. Vai junto com a mensagem para o banco avisar. */
 export function mentionedIds(text: string, people: Mentionable[]) {
   const ids = new Set<string>();

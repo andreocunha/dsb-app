@@ -24,6 +24,10 @@ export type Reply = { id: number; user_id: string; author_name: string; body: st
  * live: onde quem compartilha a localização em tempo real está agora.
  */
 export type Message = Row & { reactions: Reaction[]; reply: Reply | null; pending?: boolean; localUrl?: string; played_by_me?: boolean; played_by_others?: boolean; live?: LivePosition | null };
+/** Resumo da última mensagem de uma conversa, para a prévia da lista. */
+export type Last = { id: number; user_id: string; author_name?: string; body: string | null; file_type: string | null; file_name: string | null; created_at: string; deleted: boolean; duration_ms?: number | null; played?: boolean; event?: GroupEvent | null; location?: unknown };
+/** Conversa da lista: particular (other) ou grupo criado pelas pessoas (group). */
+export type Chat = { id: string; other: Person | null; group: GroupInfo | null; last: Last | null; unread: number; mentions: number; otherRead: number; otherDelivered: number };
 /** Microfone da mensagem de voz: verde (você ainda não ouviu), cinza (enviada) ou azul (ouvida). */
 export type Played = 'new' | 'sent' | 'played';
 

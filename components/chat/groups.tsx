@@ -26,6 +26,10 @@ export function GroupAvatar({ id, group, className = '' }: { id: string; group: 
     : <span className={`avatar group-avatar ${className}`} aria-hidden><Users /></span>;
 }
 
+// Quem estava em cada grupo da última vez que ele foi aberto (só enquanto o app está aberto):
+// reabrir o grupo já mostra os participantes, e o banco confirma por baixo.
+const lastMembers = new Map<string, Member[]>();
+
 /** Participantes do grupo aberto, admins primeiro. reload: depois de alguém entrar, sair ou virar admin. */
 export function useGroupMembers(conversationId: string | null) {
   const [members, setMembers] = useState<{ id: string; list: Member[] } | null>(null);
@@ -33,11 +37,13 @@ export function useGroupMembers(conversationId: string | null) {
     if (!conversationId) return;
     void supabase.rpc('group_members', { p_conversation: conversationId }).then(({ data, error }) => {
       if (error) return;
-      setMembers({ id: conversationId, list: (data ?? []).map(m => ({ id: m.user_id, name: m.name, avatar_url: m.avatar_url, admin: m.admin })) });
+      const list = (data ?? []).map(m => ({ id: m.user_id, name: m.name, avatar_url: m.avatar_url, admin: m.admin }));
+      lastMembers.set(conversationId, list);
+      setMembers({ id: conversationId, list });
     });
   }, [conversationId]);
   useEffect(reload, [reload]);
-  return { members: members && members.id === conversationId ? members.list : null, reload };
+  return { members: members && members.id === conversationId ? members.list : (conversationId && lastMembers.get(conversationId)) || null, reload };
 }
 
 /** A foto vai reduzida (como as miniaturas do chat) para a pasta da pessoa dentro do grupo, no bucket privado. */

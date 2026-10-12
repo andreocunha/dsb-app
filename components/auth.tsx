@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { supabase, errorMessage } from '@/lib/supabase';
 import { isNativeApp, listenNativeLogin, nativeSignIn } from '@/lib/native-auth';
 import { clearChatCache } from './chat/cache';
@@ -39,6 +39,13 @@ const fetchProfile = async (id: string) =>
 
 // O aceite acontece antes de haver sessão, e o login com Google recarrega a página.
 // A data fica guardada aqui até dar para registrá-la no perfil.
+// A conta que estava aberta da última vez. Conferir a sessão pode depender da rede (renovar o acesso, baixar as chaves);
+// até lá o app já abre como essa pessoa, com as conversas guardadas no aparelho. O banco só responde com a sessão de verdade.
+const USER_KEY = 'dsb-user';
+const rememberedUser = () => { try { return localStorage.getItem(USER_KEY); } catch { return null; } };
+const rememberUser = (id: string | null) => { try { if (id) localStorage.setItem(USER_KEY, id); else localStorage.removeItem(USER_KEY); } catch { /* janela anônima */ } };
+const noSubscribe = () => () => {};
+
 const ACCEPT_KEY = 'dsb.termos-aceitos-em';
 const markAccepted = () => { try { localStorage.setItem(ACCEPT_KEY, new Date().toISOString()); } catch { /* janela anônima */ } };
 async function saveAcceptance() {
@@ -50,7 +57,10 @@ async function saveAcceptance() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [userId, setUserId] = useState<string | null>(null);
+  const remembered = useSyncExternalStore(noSubscribe, rememberedUser, () => null);
+  // null: a sessão ainda está sendo conferida.
+  const [session, setSession] = useState<{ user: string | null } | null>(null);
+  const userId = session ? session.user : remembered;
   const [loaded, setLoaded] = useState<Profile | null>(null);
   const [admin, setAdmin] = useState<{ user: string; value: boolean } | null>(null);
   const [loginReason, setLoginReason] = useState<string | null>(null);
@@ -72,8 +82,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // getClaims valida o JWT localmente com as chaves públicas do projeto (JWKS), sem ida ao servidor.
+    const setUserId = (id: string | null) => { if (id) rememberUser(id); setSession({ user: id }); };
     void supabase.auth.getClaims().then(({ data }) => setUserId(data?.claims.sub ?? null));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setUserId(session?.user.id ?? null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Só sair da conta esquece quem era: sem rede a sessão pode não ser conferida, e a conta continua a mesma.
+      if (event === 'SIGNED_OUT') rememberUser(null);
+      setUserId(session?.user.id ?? null);
+    });
     return () => subscription.unsubscribe();
   }, []);
 

@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     // Projetos nativos gerados pelo Capacitor.
     "ios/**",
     "android/**",
+    // Funções do Supabase rodam em Deno, com o lint dele (deno-lint-ignore), não o do site.
+    "supabase/functions/**",
   ]),
 ]);
 

@@ -6,20 +6,19 @@ import { formatDuration } from '@/lib/voice';
 import { listTime, mentionsMe } from '@/lib/chat-format';
 import { asPlace, placeLabel } from '@/lib/location';
 import { shortName } from '@/lib/names';
-import { supabase, errorMessage } from '@/lib/supabase';
+import { clearReadNotifications } from '@/lib/push';
+import { onResume } from '@/lib/resume';
+import { fire, supabase, errorMessage } from '@/lib/supabase';
 import { useApp, useChatUnread, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar } from '../ui';
-import { forgetConversation } from './cache';
+import { cacheChangedMessage, cacheChatList, cachedChatList, cacheNewMessage, forgetConversation, warmConversations } from './cache';
 import { Conversation } from './chat';
 import { useGeneralReceipts } from './general-receipts';
 import { GroupAvatar, JoinGroup, NewGroup } from './groups';
-import { eventText, GROUP_KEY, targetKey, type GroupEvent, type GroupInfo, type Person, type Target } from './types';
+import { eventText, GROUP_KEY, targetKey, type Chat, type GroupInfo, type Last, type Person, type Row, type Target } from './types';
 import { useWide, WIDE } from './use-wide';
 
-type Last = { id: number; user_id: string; author_name?: string; body: string | null; file_type: string | null; file_name: string | null; created_at: string; deleted: boolean; duration_ms?: number | null; played?: boolean; event?: GroupEvent | null; location?: unknown };
-/** Conversa da lista: particular (other) ou grupo criado pelas pessoas (group). */
-type Chat = { id: string; other: Person | null; group: GroupInfo | null; last: Last | null; unread: number; mentions: number; otherRead: number; otherDelivered: number };
 type Filter = 'all' | 'unread' | 'groups';
 
 const GENERAL: Target = { kind: 'general' };
@@ -47,11 +46,13 @@ function ChatsScreen() {
   const invite = params.get('convite');
   const { userId, requireLogin } = useAuth();
   const { notify } = useApp();
-  const { unread: groupUnread, mentions: groupMentions } = useChatUnread();
-  const [chats, setChats] = useState<Chat[] | null>(null);
-  const [groupLast, setGroupLast] = useState<Last | null>(null);
+  const { unread: groupUnread, mentions: groupMentions, refreshDm } = useChatUnread();
+  // A lista abre com o que ficou guardado da última vez; o banco atualiza por baixo.
+  const [saved] = useState(() => cachedChatList(userId));
+  const [chats, setChats] = useState<Chat[] | null>(userId ? saved?.chats ?? null : null);
+  const [groupLast, setGroupLast] = useState<Last | null>(saved?.groupLast ?? null);
   const [extra, setExtra] = useState<Target | null>(null);
-  const [blocked, setBlocked] = useState<string[]>([]);
+  const [blocked, setBlocked] = useState<string[]>(saved?.blocked ?? []);
   const [newChat, setNewChat] = useState(false);
   const [newGroup, setNewGroup] = useState(false);
   // A conversa foi aberta a partir da lista neste celular: fechar é voltar no histórico.
@@ -62,29 +63,54 @@ function ChatsScreen() {
 
   const loadChats = useCallback(() => {
     if (!userId) return;
-    void supabase.rpc('my_conversations').then(({ data }) => setChats((data ?? []).map(row => ({
-      id: row.id,
-      other: !row.is_group && row.other_id ? { id: row.other_id, name: row.other_name ?? '', avatar_url: row.other_avatar } : null,
-      group: row.is_group ? { name: row.name ?? '', photo_path: row.photo_path, description: row.description } : null,
-      last: row.last as unknown as Last | null, unread: row.unread, mentions: row.mentions ?? 0,
-      otherRead: row.other_read_id, otherDelivered: row.other_delivered_id,
-    }))));
+    void supabase.rpc('my_conversations').then(({ data, error }) => {
+      // Sem resposta do banco, a lista guardada continua na tela.
+      if (error) return;
+      const list: Chat[] = (data ?? []).map(row => ({
+        id: row.id,
+        other: !row.is_group && row.other_id ? { id: row.other_id, name: row.other_name ?? '', avatar_url: row.other_avatar } : null,
+        group: row.is_group ? { name: row.name ?? '', photo_path: row.photo_path, description: row.description } : null,
+        last: row.last as unknown as Last | null, unread: row.unread, mentions: row.mentions ?? 0,
+        otherRead: row.other_read_id, otherDelivered: row.other_delivered_id,
+      }));
+      setChats(list);
+      // O que já foi lido (em outro aparelho, por exemplo) sai da bandeja de notificações deste.
+      void clearReadNotifications(conversa => conversa !== GROUP_KEY && !list.find(c => c.id === conversa)?.unread);
+      // As mensagens das conversas mais recentes já ficam guardadas: abrir qualquer uma delas é na hora.
+      warmConversations(userId, list.map(c => ({ key: c.id, lastId: c.last?.id ?? 0 })), openRef.current);
+    });
+  }, [userId]);
+
+  const loadGeneral = useCallback(() => {
+    void supabase.rpc('chat_messages', { p_limit: 1 }).then(({ data }) => {
+      const m = data?.[0];
+      if (!m) return;
+      setGroupLast({ id: m.id, user_id: m.user_id, author_name: m.author_name, body: m.body, file_type: m.file_type, file_name: m.file_name, created_at: m.created_at, deleted: !!m.deleted_at, duration_ms: m.duration_ms, played: m.played_by_me, location: m.location });
+      warmConversations(userId, [{ key: GROUP_KEY, lastId: m.id }], openRef.current);
+    });
   }, [userId]);
 
   useEffect(() => {
     loadChats();
-    void supabase.rpc('chat_messages', { p_limit: 1 }).then(({ data }) => {
-      const m = data?.[0];
-      if (m) setGroupLast({ id: m.id, user_id: m.user_id, author_name: m.author_name, body: m.body, file_type: m.file_type, file_name: m.file_name, created_at: m.created_at, deleted: !!m.deleted_at, duration_ms: m.duration_ms, played: m.played_by_me, location: m.location });
-    });
-    if (userId) void supabase.from('user_blocks').select('blocked_id').then(({ data }) => setBlocked((data ?? []).map(b => b.blocked_id)));
-  }, [userId, loadChats]);
+    loadGeneral();
+    if (userId) void supabase.from('user_blocks').select('blocked_id').then(({ data }) => { if (data) setBlocked(data.map(b => b.blocked_id)); });
+    // Voltou para o app: o que chegou com ele em segundo plano entra na lista.
+    return onResume(() => { loadChats(); loadGeneral(); });
+  }, [userId, loadChats, loadGeneral]);
+
+  // Guarda a lista para a próxima abertura (com conta, só quando há lista: a guardada ou a do banco).
+  useEffect(() => {
+    if (chats || !userId) cacheChatList(userId, { chats: chats ?? [], groupLast, blocked });
+  }, [userId, chats, groupLast, blocked]);
 
   // Tempo real da lista: última mensagem, não lidas e tiques de cada conversa.
   useEffect(() => {
     const channel = supabase.channel('chats-list')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: row }) => {
         const last: Last = { id: row.id, user_id: row.user_id, author_name: row.author_name, body: row.body, file_type: row.file_type, file_name: row.file_name, created_at: row.created_at, deleted: false, duration_ms: row.duration_ms, played: false, event: row.event, location: row.location };
+        // Conversa fechada: a mensagem entra no que está guardado, para abrir já com ela (a aberta cuida do próprio cache).
+        const key = row.conversation_id ?? GROUP_KEY;
+        if (openRef.current !== key) cacheNewMessage(userId, key, row as Row);
         if (!row.conversation_id) { setGroupLast(last); return; }
         // Conversa nova (a outra pessoa acabou de puxar papo): recarrega a lista.
         if (!chatsRef.current?.some(c => c.id === row.conversation_id)) { loadChats(); return; }
@@ -95,6 +121,8 @@ function ChatsScreen() {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, ({ new: row }) => {
         const patch = (last: Last | null): Last | null => last && last.id === row.id ? { ...last, body: row.body, file_type: row.file_type, file_name: row.file_name, location: row.location, deleted: !!row.deleted_at } : last;
+        const key = row.conversation_id ?? GROUP_KEY;
+        if (openRef.current !== key) cacheChangedMessage(userId, key, row as Row);
         if (!row.conversation_id) setGroupLast(patch);
         else setChats(current => current?.map(c => c.id === row.conversation_id ? { ...c, last: patch(c.last) } : c) ?? current);
       })
@@ -108,9 +136,17 @@ function ChatsScreen() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_reads' }, ({ new: row }) => {
         const read = row as { conversation_id?: string; user_id?: string; last_read_id?: number; last_delivered_id?: number };
-        if (!read.conversation_id || read.user_id === userId) return;
-        // No grupo o tique azul depende de todo mundo: quem sabe calcular é o banco (e só importa se a última é sua).
+        if (!read.conversation_id) return;
         const chat = chatsRef.current?.find(c => c.id === read.conversation_id);
+        if (read.user_id === userId) {
+          // Você leu a conversa em outro aparelho: o contador dela some aqui também.
+          if (chat?.unread && (chat.last?.id ?? 0) <= (read.last_read_id ?? 0)) {
+            setChats(current => current?.map(c => c.id === read.conversation_id ? { ...c, unread: 0, mentions: 0 } : c) ?? current);
+            refreshDm();
+          }
+          return;
+        }
+        // No grupo o tique azul depende de todo mundo: quem sabe calcular é o banco (e só importa se a última é sua).
         if (chat?.group) { if (chat.last?.user_id === userId) loadChats(); return; }
         setChats(current => current?.map(c => c.id !== read.conversation_id ? c : {
           ...c, otherRead: Math.max(c.otherRead, read.last_read_id ?? 0),
@@ -136,7 +172,7 @@ function ChatsScreen() {
     });
     channel.subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [userId, loadChats, notify, router]);
+  }, [userId, loadChats, refreshDm, notify, router]);
 
   // Conversa aberta pelo endereço que ainda não está na lista (acabou de ser criada ou não tem mensagens).
   const known = open === GROUP_KEY || chats?.some(c => c.id === open) || (extra && targetKey(extra) === open);
@@ -207,7 +243,7 @@ function ChatsScreen() {
     const { error } = await supabase.from('user_blocks').insert({ blocked_id: person.id });
     if (error && error.code !== '23505') { notify(errorMessage(error)); return; }
     // A App Store exige que bloquear também avise a organização sobre o conteúdo.
-    if (messageId) void supabase.rpc('report_message', { p_message_id: messageId, p_reason: 'bloqueio' });
+    if (messageId) fire(supabase.rpc('report_message', { p_message_id: messageId, p_reason: 'bloqueio' }));
     setBlocked(current => [...new Set([...current, person.id])]);
     notify(`${shortName(person.name)} foi bloqueado. A organização foi avisada.`);
   }
@@ -237,7 +273,8 @@ function ChatsScreen() {
     </div>
     <div className="chats-pane">
       {target
-        ? <Conversation key={targetKey(target)} target={target} blocked={blocked} onBlock={(person, id) => void block(person, id)} onUnblock={id => void unblock(id)}
+        ? <Conversation key={targetKey(target)} target={target} blocked={blocked} unread={chat?.unread ?? 0}
+          seen={chat ? { read: chat.otherRead, delivered: chat.otherDelivered } : null} onBlock={(person, id) => void block(person, id)} onUnblock={id => void unblock(id)}
           onBack={() => go(null)} onSeen={onSeen} onOpenPerson={person => void openPerson(person)} onLeft={() => leftGroup(targetKey(target))} />
         : open && userId ? <div className="chats-intro"><span className="spinner" /></div>
         : <Intro onGroup={() => go(GROUP_KEY)} />}

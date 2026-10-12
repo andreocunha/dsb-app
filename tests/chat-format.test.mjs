@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayLabel, fold, formatMessage, hasMentionAll, jumboEmoji, listTime, mentionedIds, mentionQuery, mentionsMe, nameColor, NAME_COLORS, preview, whenLabel } from '../lib/chat-format.ts';
+import { dayLabel, fold, formatMessage, hasMentionAll, jumboEmoji, listTime, mentionedIds, mentionQuery, mentionsMe, nameColor, NAME_COLORS, preview, readUpTo, whenLabel } from '../lib/chat-format.ts';
 
 const text = t => ({ type: 'text', text: t });
 
@@ -111,4 +111,15 @@ test('@all: palavra solta no texto, e conta como menção a todo mundo menos que
   assert.equal(mentionsMe({ user_id: 'a', mentions: ['c'], mention_all: false }, 'b'), false);
   assert.equal(mentionsMe({ user_id: 'a', mentions: [], mention_all: true }, null), false);
   assert.deepEqual(formatMessage('@all bora', [{ id: 'all', label: 'all' }])[0], { type: 'mention', text: 'all', id: 'all' });
+});
+
+test('faixa de não lidas a partir do número da lista: as últimas mensagens dos outros', () => {
+  const messages = [{ id: 10, user_id: 'a' }, { id: 11, user_id: 'eu' }, { id: 12, user_id: 'a' }, { id: 13, user_id: 'eu' }, { id: 14, user_id: 'b' }];
+  assert.equal(readUpTo(messages, 0, 'eu'), 0);
+  assert.equal(readUpTo(messages, 1, 'eu'), 13);
+  assert.equal(readUpTo(messages, 2, 'eu'), 11);
+  // Mais não lidas do que o que está guardado: a faixa fica antes da primeira mensagem de outra pessoa.
+  assert.equal(readUpTo(messages, 30, 'eu'), 9);
+  assert.equal(readUpTo([{ id: 11, user_id: 'eu' }], 3, 'eu'), 0);
+  assert.equal(readUpTo([], 3, 'eu'), 0);
 });

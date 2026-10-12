@@ -109,6 +109,27 @@ export async function openPushSettings() {
   } catch { return false; }
 }
 
+// A conversa de uma notificação de mensagem: "geral" ou o id da particular/do grupo. Os avisos das provas têm outro formato.
+const CONVERSA = /^(geral|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+/**
+ * Tira da bandeja as notificações das conversas que já estão lidas (em outro aparelho, por exemplo).
+ * Roda com o app aberto: com ele fechado, quem tira a notificação é a pessoa.
+ */
+export async function clearReadNotifications(lida: (conversa: string) => boolean) {
+  if (!enabled()) return;
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+    const { notifications } = await PushNotifications.getDeliveredNotifications();
+    // Android devolve a tag (que é a conversa); iOS devolve os dados que foram junto.
+    const lidas = notifications.filter(n => {
+      const conversa = typeof n.data?.c === 'string' ? n.data.c : n.tag;
+      return !!conversa && CONVERSA.test(conversa) && lida(conversa);
+    });
+    if (lidas.length) await PushNotifications.removeDeliveredNotifications({ notifications: lidas });
+  } catch { /* bandeja indisponível: as notificações ficam até a pessoa dispensar */ }
+}
+
 /** Tira da bandeja as notificações de uma conversa que acabou de ser lida, como no WhatsApp. */
 export async function clearChatNotifications(conversa: string) {
   if (!enabled()) return;

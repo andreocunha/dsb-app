@@ -3,13 +3,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { ArrowLeft, AtSign, Ban, ChevronDown, Copy, EllipsisVertical, Flag, Info, LogIn, Pencil, Pin, Reply as ReplyIcon, Trash2, UserX } from 'lucide-react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { dayLabel, fold, hasMentionAll, mentionedIds, mentionsMe } from '@/lib/chat-format';
+import { dayLabel, fold, hasMentionAll, mentionedIds, mentionsMe, readUpTo } from '@/lib/chat-format';
 import { makeThumbnail, MAX_FILE_SIZE, storageName } from '@/lib/media';
 import { shortName } from '@/lib/names';
 import { primeLivePosition, syncLiveSharing } from '@/lib/live-location';
 import { asPlace, isLivePlace, type LivePosition } from '@/lib/location';
 import { clearChatNotifications } from '@/lib/push';
-import { supabase, errorMessage } from '@/lib/supabase';
+import { onResume } from '@/lib/resume';
+import { fire, supabase, errorMessage } from '@/lib/supabase';
 import type { Recording } from '@/lib/voice';
 import { lastReadId, useApp, useChatUnread, useOnline, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
@@ -17,7 +18,7 @@ import { Avatar, Sheet } from '../ui';
 import { Compose, type ComposeContext } from './compose';
 import { EmojiPicker } from './emoji-picker';
 import { useGeneralReceipts } from './general-receipts';
-import { cacheConversation, cachedConversation } from './cache';
+import { cacheConversation, cachedConversation, fetchPage, PAGE } from './cache';
 import { bucketFor } from './files';
 import { InfoPanel } from './group-info';
 import { GroupAvatar, useGroupMembers } from './groups';
@@ -31,19 +32,13 @@ import { Reactors } from './reactors';
 import { canEdit, eventText, isAudio, isImage, targetKey, toReply, type GroupEvent, type Message, type Person, type Reaction, type Reply, type Row, type Target } from './types';
 import { Viewer } from './viewer';
 
-// Abre com as últimas 100 mensagens; as anteriores carregam de 100 em 100 ao subir.
-const PAGE = 100;
+// Abre com as últimas 50 mensagens (PAGE); as anteriores carregam de 50 em 50 ao subir.
 const TYPING_EVERY = 3000;
 const TYPING_TTL = 5000;
-const MAX_JUMP_PAGES = 10;
+const MAX_JUMP_PAGES = 20;
 const NOBODY: string[] = [];
 const NO_PEOPLE: Person[] = [];
 type Confirm = { title: string; text: string; label: string; run: () => void };
-
-async function fetchPage(conversationId: string | null, before?: number) {
-  const { data, error } = await supabase.rpc('chat_messages', { p_before: before, p_limit: PAGE, p_conversation_id: conversationId ?? undefined });
-  return error ? null : (data as unknown as Message[]).reverse();
-}
 
 // Mensagens ainda enviando ficam sempre no fim, na ordem em que saíram.
 const order = (m: Message) => m.pending ? Number.MAX_SAFE_INTEGER : m.id;
@@ -56,8 +51,10 @@ const wiped = (m: Message, by: string | null): Message =>
  * uma conversa particular (tiques azuis quando a outra pessoa lê, "online", bloqueio)
  * ou um grupo criado pelas pessoas (participantes, admins e tiques azuis quando todos leem).
  */
-export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSeen, onOpenPerson, onLeft }: {
+export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock, onBack, onSeen, onOpenPerson, onLeft }: {
   target: Target; blocked: string[];
+  /** O que a lista de conversas já sabe ao abrir: quantas faltam ler e os tiques. Vale até o banco responder. */
+  unread: number; seen: Receipts | null;
   onBlock: (person: Person, messageId?: number) => void; onUnblock: (id: string) => void;
   onBack: () => void; onSeen: (key: string) => void; onOpenPerson: (person: Person) => void; onLeft: () => void;
 }) {
@@ -115,10 +112,12 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   const [typers, setTypers] = useState<Record<string, { name: string; audio: boolean }>>({});
   const [flash, setFlash] = useState<number | null>(null);
   // Faixa "N mensagens não lidas": o que chegou entre a última visita e a abertura da conversa.
-  const [readAtOpen, setReadAtOpen] = useState(() => general ? lastReadId() : 0);
-  const [unreadUpTo, setUnreadUpTo] = useState(0);
+  // Com a conversa guardada, a faixa já aparece no lugar ao abrir, sem esperar o banco.
+  const [readAtOpen, setReadAtOpen] = useState(() => general ? lastReadId() : readUpTo(cached?.messages ?? [], unread, userId));
+  const [unreadUpTo, setUnreadUpTo] = useState(() => cached?.messages.at(-1)?.id ?? 0);
   // Até onde cada outra pessoa da conversa recebeu (✓✓) e leu (✓✓ azul). No geral, o banco já manda o de todo mundo junto.
   const [reads, setReads] = useState<Record<string, Receipts>>({});
+  const [readsLoaded, setReadsLoaded] = useState(false);
   const generalReads = useGeneralReceipts(general && !!userId);
   // Quando a pessoa está lendo mensagens antigas, as novas viram um contador no botão de descer.
   const [newCount, setNewCount] = useState(0);
@@ -146,13 +145,10 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     if (lastId <= 0 || lastId <= lastSeen.current || document.visibilityState !== 'visible') return;
     lastSeen.current = lastId;
     void clearChatNotifications(key);
-    if (!conversationId) {
-      markRead(lastId);
-      if (userId) void supabase.rpc('mark_general_read', { p_last_id: lastId });
-      return;
-    }
-    void supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId, p_last_id: lastId }).then(() => { refreshDm(); onSeen(key); });
-  }, [conversationId, key, userId, markRead, refreshDm, onSeen]);
+    // No geral, quem grava no banco e avisa os outros aparelhos da conta é o markRead.
+    if (!conversationId) { markRead(lastId); return; }
+    void supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId, p_last_id: lastId }).then(() => { refreshDm(true); onSeen(key); });
+  }, [conversationId, key, markRead, refreshDm, onSeen]);
 
   const applyPage = useCallback((page: Message[] | null, before?: number) => {
     if (!page) {
@@ -179,6 +175,18 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     }
   }, [markSeen, notify, fromCache]);
 
+  /**
+   * Voltou para o app com a conversa aberta: a última página entra por cima do que estava na tela.
+   * Se ela emenda no que já estava carregado, as mais antigas continuam; senão ficou um buraco, e vale só a página.
+   */
+  const catchUp = useCallback((page: Message[]) => {
+    const oldest = page[0]?.id ?? 0, newest = page[page.length - 1]?.id ?? 0;
+    const joined = page.length < PAGE || known.current.has(oldest);
+    setMessages(current => sorted([...(joined ? current.filter(m => !m.pending && m.id < oldest) : []), ...page, ...current.filter(m => m.pending || m.id > newest)]));
+    if (!joined) setHasMore(true);
+    if (stickToBottom.current) markSeen(newest);
+  }, [markSeen]);
+
   useEffect(() => {
     known.current = new Set(messages.map(m => m.id));
     latestId.current = messages.findLast(m => !m.pending)?.id ?? 0;
@@ -199,25 +207,37 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   // Carga inicial + tempo real (mensagens, reações, leituras e quem está digitando).
   useEffect(() => {
     let alive = true;
-    if (conversationId) {
+    // again: a conversa já estava na tela e a pessoa voltou para o app (o tempo real não entrega o que chegou nesse meio-tempo).
+    const load = (again: boolean) => {
+      if (!conversationId) {
+        void fetchPage(null).then(page => { if (!alive) return; if (!again) applyPage(page); else if (page) catchUp(page); });
+        if (userId && !again) void supabase.rpc('my_mentions', { p_after: lastReadId() }).then(({ data }) => { if (alive && data?.length) setMentionedMe(data); });
+        return;
+      }
       // Na particular e nos grupos, a faixa de não lidas e os tiques vêm das leituras salvas no banco.
       void Promise.all([
         fetchPage(conversationId),
         supabase.from('conversation_reads').select('user_id, last_read_id, last_delivered_id').eq('conversation_id', conversationId),
       ]).then(([page, saved]) => {
         if (!alive) return;
-        const myRead = saved.data?.find(r => r.user_id === userId)?.last_read_id ?? 0;
-        setReadAtOpen(myRead);
-        setReads(Object.fromEntries((saved.data ?? []).filter(r => r.user_id !== userId)
-          .map(r => [r.user_id, { read: r.last_read_id, delivered: Math.max(r.last_delivered_id, r.last_read_id) }])));
-        // Menções a você no grupo que chegaram desde a última leitura: o botão @ leva a cada uma.
-        if (userId && page) setMentionedMe(page.filter(m => m.id > myRead && !m.deleted_at && mentionsMe(m, userId)).map(m => m.id));
+        // Sem resposta do banco, continuam valendo a faixa e os tiques que a lista de conversas já mostrava.
+        if (saved.data) {
+          setReads(Object.fromEntries(saved.data.filter(r => r.user_id !== userId)
+            .map(r => [r.user_id, { read: r.last_read_id, delivered: Math.max(r.last_delivered_id, r.last_read_id) }])));
+          setReadsLoaded(true);
+        }
+        if (again) { if (page) catchUp(page); return; }
+        if (saved.data) {
+          const myRead = saved.data.find(r => r.user_id === userId)?.last_read_id ?? 0;
+          setReadAtOpen(myRead);
+          // Menções a você no grupo que chegaram desde a última leitura: o botão @ leva a cada uma.
+          if (userId && page) setMentionedMe(page.filter(m => m.id > myRead && !m.deleted_at && mentionsMe(m, userId)).map(m => m.id));
+        }
         applyPage(page);
       });
-    } else {
-      void fetchPage(null).then(page => { if (alive) applyPage(page); });
-      if (userId) void supabase.rpc('my_mentions', { p_after: lastReadId() }).then(({ data }) => { if (alive && data?.length) setMentionedMe(data); });
-    }
+    };
+    load(false);
+    const stopResume = onResume(() => { if (loaded.current) load(true); });
 
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const stopTyping = (id: string) => {
@@ -299,8 +319,8 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
     }
     realtime.subscribe();
     channel.current = realtime;
-    return () => { alive = false; channel.current = null; timers.forEach(clearTimeout); void supabase.removeChannel(realtime); };
-  }, [applyPage, markSeen, reloadMembers, conversationId, key, userId]);
+    return () => { alive = false; stopResume(); channel.current = null; timers.forEach(clearTimeout); void supabase.removeChannel(realtime); };
+  }, [applyPage, catchUp, markSeen, reloadMembers, conversationId, key, userId]);
 
   // Abre na faixa de não lidas (ou no fim), mantém a conversa no fim quando chegam mensagens
   // e a posição ao carregar as antigas.
@@ -415,7 +435,7 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
 
   function markPlayed(message: Message) {
     setMessages(current => current.map(m => m.id === message.id ? { ...m, played_by_me: true } : m));
-    void supabase.rpc('mark_played', { p_message_id: message.id });
+    fire(supabase.rpc('mark_played', { p_message_id: message.id }));
   }
 
   /** Aparece na hora com o relógio; o ✓ entra quando o banco confirma. */
@@ -766,7 +786,9 @@ export function Conversation({ target, blocked, onBlock, onUnblock, onBack, onSe
   // Tiques: na particular, os da outra pessoa; no grupo, o menor de todos (azul só quando todo mundo leu).
   const receiptsOf = (ids: string[]): Receipts | null => ids.length
     ? { read: Math.min(...ids.map(id => reads[id]?.read ?? 0)), delivered: Math.min(...ids.map(id => reads[id]?.delivered ?? 0)) } : null;
-  const tickState = other ? receiptsOf([other.id]) : group ? receiptsOf(othersInGroup.map(m => m.id)) : generalReads.receipts;
+  // Até as leituras (e, no grupo, os participantes) chegarem do banco, valem os tiques que a lista de conversas já mostrava.
+  const tickState = conversationId && (!readsLoaded || (group && !members)) ? seen
+    : other ? receiptsOf([other.id]) : group ? receiptsOf(othersInGroup.map(m => m.id)) : generalReads.receipts;
   // Mensagem dos dados (a versão mais nova; apagada, o painel fecha) e quantas pessoas já receberam e leram, para atualizar ao vivo.
   const infoMessage = infoOf ? byId.get(infoOf.id) ?? infoOf : null;
   const infoStamp = !infoMessage ? '' : general ? String(generalReads.version) : `${Object.values(reads).filter(r => r.read >= infoMessage.id).length}:${Object.values(reads).filter(r => r.delivered >= infoMessage.id).length}`;

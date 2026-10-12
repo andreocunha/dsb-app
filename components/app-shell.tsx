@@ -1,21 +1,24 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { House, MessageCircle, Trophy, Menu, ChevronRight, Settings, ShieldCheck, LayoutDashboard, Sun, Moon, LogIn, LogOut, Download, Check, X, WifiOff } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Avatar, Brand, Sheet } from './ui';
 import { Dashboard } from './dashboard';
 import { LoginOptions, useAuth } from './auth';
 import { useLocalState } from '@/lib/local-state';
-import { supabase } from '@/lib/supabase';
+import { fire, supabase, throttled } from '@/lib/supabase';
 import { shortName } from '@/lib/names';
 import { mentionsMe } from '@/lib/chat-format';
 import { closeTopOverlay } from '@/lib/overlays';
 import { hideSplash, listenBackButton, paintStatusBar } from '@/lib/system-ui';
-import { registerPush } from '@/lib/push';
+import { clearReadNotifications, registerPush } from '@/lib/push';
+import { onResume } from '@/lib/resume';
 import { trackInstall } from '@/lib/install';
 import { syncLiveSharing } from '@/lib/live-location';
+import { GROUP_KEY } from './chat/types';
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 /** action: botão no aviso (ex.: "Desfazer"); o aviso fica um pouco mais na tela para dar tempo de tocar. */
 type ToastAction = { label: string; run: () => void };
@@ -41,28 +44,67 @@ const noopSubscribe = () => () => {};
 // Mensagens não lidas: o último id lido fica no aparelho e o total aparece no menu.
 const READ_KEY = 'dsb-chat-read';
 const lastRead = () => { try { return Number(localStorage.getItem(READ_KEY)) || 0; } catch { return 0; } };
+const rememberRead = (lastId: number) => { if (lastId > lastRead()) try { localStorage.setItem(READ_KEY, String(lastId)); } catch { /* sem localStorage: só nesta sessão */ } };
 export const lastReadId = lastRead;
 // unread: grupo geral (último lido fica no aparelho). dmUnread: conversas particulares (no banco).
 // mentions: menções a você no grupo ainda não lidas (o @ verde da lista, como no WhatsApp).
-type UnreadValue = { unread: number; mentions: number; markRead: (lastId: number) => void; dmUnread: number; refreshDm: () => void };
+type UnreadValue = { unread: number; mentions: number; markRead: (lastId: number) => void; dmUnread: number; refreshDm: (announce?: boolean) => void };
 const UnreadContext = createContext<UnreadValue>({ unread: 0, mentions: 0, markRead: () => {}, dmUnread: 0, refreshDm: () => {} });
 export const useChatUnread = () => useContext(UnreadContext);
+
+// Gravar no banco até onde o geral foi lido e recebido. Com o chat movimentado isso aconteceria a cada mensagem,
+// em cada aparelho: vai uma gravação a cada poucos segundos, com o último valor.
+let readToSave = 0;
+const saveGeneralRead = throttled(() => fire(supabase.rpc('mark_general_read', { p_last_id: readToSave })), 3000);
+const saveGeneralDelivered = throttled(() => fire(supabase.rpc('mark_general_delivered')), 30_000);
 
 function useUnread(userId: string | null) {
   const [unread, setUnread] = useState(0);
   const [mentions, setMentions] = useState({ user: null as string | null, count: 0 });
   const [dm, setDm] = useState({ user: null as string | null, count: 0 });
-  const refreshDm = useCallback(() => {
+  // Canal só da conta: os aparelhos dela se avisam do que foi lido, e o contador some em todos na hora.
+  const account = useRef<RealtimeChannel | null>(null);
+  const tellDevices = useCallback((payload: { general?: number }) => { void account.current?.send({ type: 'broadcast', event: 'read', payload }); }, []);
+  const countDm = useCallback(() => {
     if (!userId) return;
-    void supabase.rpc('dm_unread_count').then(({ data }) => setDm({ user: userId, count: data ?? 0 }));
+    void supabase.rpc('dm_unread_count').then(({ data }) => {
+      if (data === null) return;
+      setDm({ user: userId, count: data });
+      // Nada mais por ler: as notificações que sobraram na bandeja deste aparelho saem (o que foi lido em outro, por exemplo).
+      if (data === 0) void clearReadNotifications(conversa => conversa !== GROUP_KEY);
+    });
   }, [userId]);
+  /** announce: uma conversa acabou de ser lida neste aparelho; os outros da conta refazem a contagem. */
+  const refreshDm = useCallback((announce = false) => {
+    countDm();
+    if (announce) tellDevices({});
+  }, [countDm, tellDevices]);
   useEffect(() => {
     let alive = true;
-    void supabase.rpc('unread_count', { p_after: lastRead() }).then(({ data }) => { if (alive) setUnread(data ?? 0); });
-    if (userId) void supabase.rpc('dm_unread_count').then(({ data }) => { if (alive) setDm({ user: userId, count: data ?? 0 }); });
-    if (userId) void supabase.rpc('my_mentions', { p_after: lastRead() }).then(({ data }) => { if (alive) setMentions({ user: userId, count: data?.length ?? 0 }); });
+    // Contagens direto do banco: ao abrir, ao voltar para o app (o tempo real não entrega o que chegou em segundo plano)
+    // e quando outro aparelho da conta avisa que leu.
+    const count = async () => {
+      if (userId) {
+        // O último lido do geral vale para a conta inteira: o maior entre este aparelho e o banco, e o banco fica sabendo.
+        const { data, error } = await supabase.from('general_reads').select('last_read_id').eq('user_id', userId).maybeSingle();
+        if (data) rememberRead(data.last_read_id);
+        if (!error && lastRead() > (data?.last_read_id ?? 0)) { readToSave = lastRead(); saveGeneralRead(); }
+      }
+      void supabase.rpc('unread_count', { p_after: lastRead() }).then(({ data }) => {
+        if (!alive || data === null) return;
+        setUnread(data);
+        if (data === 0) void clearReadNotifications(conversa => conversa === GROUP_KEY);
+      });
+      if (!userId) return;
+      countDm();
+      void supabase.rpc('my_mentions', { p_after: lastRead() }).then(({ data }) => { if (alive && data) setMentions({ user: userId, count: data.length }); });
+    };
+    void count();
+    const stopResume = onResume(() => void count());
+    // Outro aparelho da conta lendo um chat movimentado avisa a cada mensagem: a recontagem vai no máximo a cada 2 s.
+    const recount = throttled(() => void count(), 2000);
     // ✓✓ cinza do outro lado: o que chegou enquanto o app estava fechado conta como entregue ao abrir.
-    const delivered = () => { if (userId) void supabase.rpc('mark_delivered', {}); };
+    const delivered = () => { if (userId) fire(supabase.rpc('mark_delivered', {})); };
     delivered();
     const onVisible = () => { if (document.visibilityState === 'visible') delivered(); };
     document.addEventListener('visibilitychange', onVisible);
@@ -71,24 +113,40 @@ function useUnread(userId: string | null) {
         if (row.user_id === userId) return;
         if (row.conversation_id) {
           setDm(current => ({ ...current, count: current.count + 1 }));
-          void supabase.rpc('mark_delivered', { p_conversation_id: row.conversation_id });
+          fire(supabase.rpc('mark_delivered', { p_conversation_id: row.conversation_id }));
         } else {
           // Geral: chegou ao app, é entregue (✓✓ cinza para quem mandou).
-          if (userId) void supabase.rpc('mark_general_delivered');
+          if (userId) saveGeneralDelivered();
           if (row.id <= lastRead()) return;
           setUnread(count => count + 1);
           if (mentionsMe(row as Parameters<typeof mentionsMe>[0], userId)) setMentions(current => ({ user: userId, count: current.count + 1 }));
         }
       })
       .subscribe();
-    return () => { alive = false; document.removeEventListener('visibilitychange', onVisible); void supabase.removeChannel(channel); };
-  }, [userId]);
+    const own = userId ? supabase.channel(`conta:${userId}`, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'read' }, ({ payload }) => {
+        const general = Number((payload as { general?: number }).general) || 0;
+        if (!general) { countDm(); return; }
+        rememberRead(general);
+        recount();
+      })
+      .subscribe() : null;
+    account.current = own;
+    return () => {
+      alive = false; account.current = null; stopResume(); document.removeEventListener('visibilitychange', onVisible);
+      void supabase.removeChannel(channel); if (own) void supabase.removeChannel(own);
+    };
+  }, [userId, countDm]);
   const markRead = useCallback((lastId: number) => {
     if (lastId <= lastRead()) return;
-    try { localStorage.setItem(READ_KEY, String(lastId)); } catch { /* sem localStorage: só nesta sessão */ }
+    rememberRead(lastId);
     setUnread(0);
     setMentions(current => ({ ...current, count: 0 }));
-  }, []);
+    if (!userId) return;
+    readToSave = lastId;
+    saveGeneralRead();
+    tellDevices({ general: lastId });
+  }, [userId, tellDevices]);
   return { unread, mentions: mentions.user === userId ? mentions.count : 0, markRead, dmUnread: dm.user === userId ? dm.count : 0, refreshDm };
 }
 
