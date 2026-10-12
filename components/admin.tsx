@@ -216,15 +216,22 @@ function LapList({ laps, start, onRemove, onAdd }: {
   laps: number[]; start: number; onRemove: (ms: number) => void; onAdd: (time: string) => void;
 }) {
   const [time, setTime] = useState('');
+  // Apagar pede um segundo toque: a lixeira só arma a linha.
+  const [armed, setArmed] = useState<number | null>(null);
   const splits = lapSplits(laps, start);
   return <section className="admin-sheet-section">
     <h3>Voltas</h3>
     {laps.length ? <ol className="lap-list">
-      {laps.map((ms, i) => <li key={ms}>
+      {laps.map((ms, i) => <li key={ms} className={armed === ms ? 'armed' : undefined}>
         <span className="lap-number">{i + 1}</span>
         <span className="lap-time">{clock.format(ms)}</span>
-        <span className="lap-split">{formatDuration(splits[i])}</span>
-        <button className="icon-button danger" onClick={() => onRemove(ms)} aria-label={`Apagar volta ${i + 1}`}><Trash2 size={16} /></button>
+        {armed === ms ? <>
+          <button className="button" onClick={() => setArmed(null)} autoFocus>Cancelar</button>
+          <button className="button danger-solid" onClick={() => { setArmed(null); onRemove(ms); }} aria-label={`Confirmar: apagar volta ${i + 1}`}><Trash2 size={14} /> Apagar</button>
+        </> : <>
+          <span className="lap-split">{formatDuration(splits[i])}</span>
+          <button className="icon-button danger" onClick={() => setArmed(ms)} aria-label={`Apagar volta ${i + 1}`}><Trash2 size={16} /></button>
+        </>}
       </li>)}
     </ol> : <p className="panel-note">Nenhuma volta lançada.</p>}
     <form className="admin-inline-form" onSubmit={e => { e.preventDefault(); if (time) { onAdd(time); setTime(''); } }}>

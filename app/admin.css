@@ -33,6 +33,8 @@
 .lap-number { display: inline-grid; flex-shrink: 0; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--surface-hover); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .lap-time { flex: 1; font-weight: 500; }
 .lap-split { color: var(--text-secondary); font-size: 13px; }
+.lap-list li.armed { gap: 8px; }
+.lap-list li.armed .lap-time { color: var(--danger); }
 
 .admin-form { display: flex; flex-direction: column; gap: 12px; }
 .admin-inline-form { display: flex; align-items: flex-end; gap: 8px; }
