@@ -190,7 +190,7 @@ export function Bubble({ ref, message, first, userId, reply, group, receipts, vo
 }
 
 /** "Rabinho" do primeiro balão de cada sequência, no canto de cima. */
-function Tail() {
+export function Tail() {
   return <svg className="bubble-tail" viewBox="0 0 8 13" width="8" height="13" aria-hidden><path d="M1.53 0H8v11.2L.84 2.66C.14 1.83.46 0 1.53 0z" /></svg>;
 }
 

@@ -1,7 +1,6 @@
 'use client';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, AtSign, Ban, ChevronDown, Copy, EllipsisVertical, Flag, Info, LogIn, Pencil, Pin, Reply as ReplyIcon, Trash2, UserX } from 'lucide-react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { dayLabel, fold, hasMentionAll, mentionedIds, mentionsMe, readUpTo } from '@/lib/chat-format';
 import { makeThumbnail, MAX_FILE_SIZE, storageName } from '@/lib/media';
@@ -29,12 +28,12 @@ import { Bubble, MessageRow, type MenuRequest, type Receipts, type VoiceInfo } f
 import { MessageInfo } from './message-info';
 import { MessageMenu, type MenuAction } from './message-menu';
 import { Reactors } from './reactors';
+import { TypingBubble, type Typer } from './typing';
 import { canEdit, eventText, isAudio, isImage, targetKey, toReply, type GroupEvent, type Message, type Person, type Reaction, type Reply, type Row, type Target } from './types';
 import { Viewer } from './viewer';
 
 // Abre com as últimas 50 mensagens (PAGE); as anteriores carregam de 50 em 50 ao subir.
 const TYPING_EVERY = 3000;
-const TYPING_TTL = 5000;
 const MAX_JUMP_PAGES = 20;
 const NOBODY: string[] = [];
 const NO_PEOPLE: Person[] = [];
@@ -51,8 +50,10 @@ const wiped = (m: Message, by: string | null): Message =>
  * uma conversa particular (tiques azuis quando a outra pessoa lê, "online", bloqueio)
  * ou um grupo criado pelas pessoas (participantes, admins e tiques azuis quando todos leem).
  */
-export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock, onBack, onSeen, onOpenPerson, onLeft }: {
+export function Conversation({ target, blocked, unread, seen, typers, onTyping, onBlock, onUnblock, onBack, onSeen, onOpenPerson, onLeft }: {
   target: Target; blocked: string[];
+  /** Quem está digitando nesta conversa, e o aviso de que você está (audio: gravando uma mensagem de voz). */
+  typers: Typer[]; onTyping: (audio: boolean) => void;
   /** O que a lista de conversas já sabe ao abrir: quantas faltam ler e os tiques. Vale até o banco responder. */
   unread: number; seen: Receipts | null;
   onBlock: (person: Person, messageId?: number) => void; onUnblock: (id: string) => void;
@@ -108,8 +109,9 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
   // Dados da mensagem (quem recebeu e leu): ocupa o lugar dos dados do grupo ou do contato.
   const [infoOf, setInfoOf] = useState<Message | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
-  // Quem está digitando ou gravando áudio agora (o WhatsApp mostra os dois no topo).
-  const [typers, setTypers] = useState<Record<string, { name: string; audio: boolean }>>({});
+  // Quem está digitando ou gravando áudio agora: vira o balão dos três pontinhos no fim da conversa.
+  const typingNow = typers.filter(t => t.id !== userId && !blocked.includes(t.id));
+  const someoneTyping = typingNow.length > 0;
   const [flash, setFlash] = useState<number | null>(null);
   // Faixa "N mensagens não lidas": o que chegou entre a última visita e a abertura da conversa.
   // Com a conversa guardada, a faixa já aparece no lugar ao abrir, sem esperar o banco.
@@ -130,8 +132,9 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
   // A primeira página já veio do banco (até lá, o que aparece pode ser só o cache).
   const loaded = useRef(false);
   const jumpTarget = useRef<number | null>(null);
-  const channel = useRef<RealtimeChannel | null>(null);
   const lastTyping = useRef(0);
+  const typingOut = useRef(onTyping);
+  useEffect(() => { typingOut.current = onTyping; }, [onTyping]);
   const lastSeen = useRef(0);
   const draft = useRef('');
   const known = useRef(new Set<number>());
@@ -239,22 +242,15 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
     load(false);
     const stopResume = onResume(() => { if (loaded.current) load(true); });
 
-    const timers = new Map<string, ReturnType<typeof setTimeout>>();
-    const stopTyping = (id: string) => {
-      clearTimeout(timers.get(id));
-      timers.delete(id);
-      setTypers(current => { if (!(id in current)) return current; const next = { ...current }; delete next[id]; return next; });
-    };
     const upsertReaction = (reaction: Reaction & { message_id: number }) => setMessages(current => current.map(m => m.id !== reaction.message_id ? m
       : { ...m, reactions: [...m.reactions.filter(r => r.user_id !== reaction.user_id), { user_id: reaction.user_id, emoji: reaction.emoji }] }));
     // O Realtime só entrega a cada pessoa o que ela pode ler (RLS); aqui separamos a conversa aberta.
     const filter = conversationId ? { filter: `conversation_id=eq.${conversationId}` } : {};
     const mine = (row: { conversation_id?: string | null }) => (row.conversation_id ?? null) === conversationId;
-    let realtime = supabase.channel(`chat:${key}`, { config: { broadcast: { self: false } } })
+    let realtime = supabase.channel(`chat:${key}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', ...filter }, ({ new: payload }) => {
         const row = payload as Row;
         if (!mine(row)) return;
-        stopTyping(row.user_id);
         // Alguém entrou ou saiu do grupo: a lista de participantes muda.
         if (row.event) reloadMembers();
         setMessages(current => {
@@ -295,14 +291,6 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
         const play = row as { message_id: number; user_id: string };
         setMessages(current => current.map(m => m.id !== play.message_id ? m
           : play.user_id === userId ? { ...m, played_by_me: true } : { ...m, played_by_others: true }));
-      })
-      .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        const { id, name, audio } = payload as { id: string; name: string; audio?: boolean };
-        if (typeof id !== 'string' || typeof name !== 'string') return;
-        const next = { name: name.slice(0, 40), audio: audio === true };
-        setTypers(current => current[id]?.name === next.name && current[id]?.audio === next.audio ? current : { ...current, [id]: next });
-        clearTimeout(timers.get(id));
-        timers.set(id, setTimeout(() => stopTyping(id), TYPING_TTL));
       });
     if (conversationId) {
       const onRead = ({ new: row }: { new: Record<string, unknown> }) => {
@@ -318,8 +306,7 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members', filter: `conversation_id=eq.${conversationId}` }, () => reloadMembers());
     }
     realtime.subscribe();
-    channel.current = realtime;
-    return () => { alive = false; stopResume(); channel.current = null; timers.forEach(clearTimeout); void supabase.removeChannel(realtime); };
+    return () => { alive = false; stopResume(); void supabase.removeChannel(realtime); };
   }, [applyPage, catchUp, markSeen, reloadMembers, conversationId, key, userId]);
 
   // Abre na faixa de não lidas (ou no fim), mantém a conversa no fim quando chegam mensagens
@@ -341,7 +328,7 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
       document.getElementById(`m-${jumpTarget.current}`)?.scrollIntoView({ block: 'center' });
       jumpTarget.current = null;
     }
-  }, [messages, flash]);
+  }, [messages, flash, someoneTyping]);
 
   // A barra de digitar muda de altura (resposta, várias linhas, emojis): quem está no fim continua no fim.
   useEffect(() => {
@@ -416,13 +403,10 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
   function sendTyping() {
     if (!userId || !profile || Date.now() - lastTyping.current < TYPING_EVERY) return;
     lastTyping.current = Date.now();
-    void channel.current?.send({ type: 'broadcast', event: 'typing', payload: { id: userId, name: shortName(profile.name), audio: false } });
+    typingOut.current(false);
   }
-  // "Gravando áudio…" a cada 3s enquanto grava (estável: o gravador usa como dependência).
-  const sendRecording = useCallback(() => {
-    if (!userId || !profile) return;
-    void channel.current?.send({ type: 'broadcast', event: 'typing', payload: { id: userId, name: shortName(profile.name), audio: true } });
-  }, [userId, profile]);
+  // "Gravando áudio" a cada 3s enquanto grava (estável: o gravador usa como dependência).
+  const sendRecording = useCallback(() => typingOut.current(true), []);
 
   /** Mensagem de voz pronta: vai como arquivo de áudio, com a duração e a forma de onda. */
   function sendVoice(recording: Recording) {
@@ -767,20 +751,14 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
     const last = days[days.length - 1];
     if (last?.key === day) last.items.push(m); else days.push({ key: day, label: dayLabel(m.created_at), items: [m] });
   }
-  const typingNow = Object.entries(typers).filter(([id]) => !blocked.includes(id)).map(([, t]) => t);
-  const typing = typingNow.map(t => t.name);
-  const recordingNow = typingNow.length > 0 && typingNow.every(t => t.audio);
   const otherBlocked = !!other && blocked.includes(other.id);
   // Grupo: quem está nele (você por último, como no WhatsApp). Saiu ou foi removido: não dá mais para escrever.
   const othersInGroup = members?.filter(m => m.id !== userId) ?? [];
   const leftGroup = !!group && !!userId && members !== null && !members.some(m => m.id === userId);
-  const subtitle = group && !typing.length
+  // Quem está digitando não aparece mais aqui em cima: é o balão no fim da conversa (TypingBubble).
+  const subtitle = group
     ? (members ? [...othersInGroup.map(m => shortName(m.name)), ...(leftGroup ? [] : ['Você'])].join(', ') : 'clique para ver os dados do grupo')
-    : other
-    ? (typing.length ? (recordingNow ? 'gravando áudio…' : 'digitando…') : onlineUsers.has(other.id) ? 'online' : 'clique para ver os dados do contato')
-    : typing.length === 1 ? `${typing[0]} está ${recordingNow ? 'gravando áudio' : 'digitando'}…`
-    : typing.length === 2 ? `${typing[0]} e ${typing[1]} estão digitando…`
-    : typing.length > 2 ? `${typing.length} pessoas estão digitando…`
+    : other ? (onlineUsers.has(other.id) ? 'online' : 'clique para ver os dados do contato')
     : online > 0 ? `${online} ${online === 1 ? 'pessoa' : 'pessoas'} no app agora` : 'clique para ver os dados do grupo';
   const menuMessage = menu ? byId.get(menu.message.id) ?? menu.message : null;
   // Tiques: na particular, os da outra pessoa; no grupo, o menor de todos (azul só quando todo mundo leu).
@@ -820,7 +798,7 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
             : <img src="/images/logo.png" alt="" className="chat-avatar" />}
           <span>
             <h1>{other ? other.name : group ? group.name : 'Torcida Solar'}</h1>
-            <small className={typing.length ? 'typing' : ''} aria-live="polite">{subtitle}</small>
+            <small>{subtitle}</small>
           </span>
         </button>
         <button className="icon-button" onClick={() => setHeaderMenu(true)} aria-label="Mais opções" aria-haspopup="menu"><EllipsisVertical size={22} /></button>
@@ -863,6 +841,7 @@ export function Conversation({ target, blocked, unread, seen, onBlock, onUnblock
               </div>;
             })}
           </section>)}
+          {someoneTyping && <TypingBubble typers={typingNow} people={multi ? people : NO_PEOPLE} group={multi} />}
         </div>
         {!atBottom && mentionedMe.some(id => !blocked.includes(byId.get(id)?.user_id ?? '')) && <button className="scroll-down scroll-mention" onClick={nextMention}
           aria-label={`${mentionedMe.length} ${mentionedMe.length === 1 ? 'menção' : 'menções'} a você. Ir para a próxima`}>

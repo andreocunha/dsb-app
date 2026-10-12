@@ -16,6 +16,7 @@ import { cacheChangedMessage, cacheChatList, cachedChatList, cacheNewMessage, fo
 import { Conversation } from './chat';
 import { useGeneralReceipts } from './general-receipts';
 import { GroupAvatar, JoinGroup, NewGroup } from './groups';
+import { MAX_WATCHED, NO_TYPERS, typingText, useTyping, type Typing } from './typing';
 import { eventText, GROUP_KEY, targetKey, type Chat, type GroupInfo, type Last, type Person, type Row, type Target } from './types';
 import { useWide, WIDE } from './use-wide';
 
@@ -44,7 +45,7 @@ function ChatsScreen() {
   const open = params.get('c');
   // Link de convite de um grupo (?convite=): a folha "Entrar no grupo" aparece por cima das conversas.
   const invite = params.get('convite');
-  const { userId, requireLogin } = useAuth();
+  const { userId, profile, requireLogin } = useAuth();
   const { notify } = useApp();
   const { unread: groupUnread, mentions: groupMentions, refreshDm } = useChatUnread();
   // A lista abre com o que ficou guardado da última vez; o banco atualiza por baixo.
@@ -55,6 +56,9 @@ function ChatsScreen() {
   const [blocked, setBlocked] = useState<string[]>(saved?.blocked ?? []);
   const [newChat, setNewChat] = useState(false);
   const [newGroup, setNewGroup] = useState(false);
+  // "Digitando…": o grupo geral, as conversas mais recentes da lista e a que está aberta.
+  const recent = [...(chats ?? [])].sort((a, b) => (b.last?.id ?? 0) - (a.last?.id ?? 0)).slice(0, MAX_WATCHED).map(c => c.id);
+  const { typing, send: sendTyping, stop: stopTyping } = useTyping([GROUP_KEY, ...recent, ...(open ? [open] : [])], userId, profile?.name ?? null);
   // A conversa foi aberta a partir da lista neste celular: fechar é voltar no histórico.
   const pushed = useRef(false);
   const openRef = useRef(open);
@@ -110,6 +114,8 @@ function ChatsScreen() {
         const last: Last = { id: row.id, user_id: row.user_id, author_name: row.author_name, body: row.body, file_type: row.file_type, file_name: row.file_name, created_at: row.created_at, deleted: false, duration_ms: row.duration_ms, played: false, event: row.event, location: row.location };
         // Conversa fechada: a mensagem entra no que está guardado, para abrir já com ela (a aberta cuida do próprio cache).
         const key = row.conversation_id ?? GROUP_KEY;
+        // A mensagem chegou: quem mandou parou de digitar.
+        stopTyping(key, row.user_id);
         if (openRef.current !== key) cacheNewMessage(userId, key, row as Row);
         if (!row.conversation_id) { setGroupLast(last); return; }
         // Conversa nova (a outra pessoa acabou de puxar papo): recarrega a lista.
@@ -172,7 +178,7 @@ function ChatsScreen() {
     });
     channel.subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [userId, loadChats, refreshDm, notify, router]);
+  }, [userId, loadChats, refreshDm, stopTyping, notify, router]);
 
   // Conversa aberta pelo endereço que ainda não está na lista (acabou de ser criada ou não tem mensagens).
   const known = open === GROUP_KEY || chats?.some(c => c.id === open) || (extra && targetKey(extra) === open);
@@ -267,14 +273,15 @@ function ChatsScreen() {
         ? <NewGroup blocked={blocked} onClose={() => setNewGroup(false)} onCreated={groupCreated} />
         : newChat
         ? <NewChat userId={userId} onClose={() => setNewChat(false)} onPick={person => void openPerson(person)} onGroup={startGroup} />
-        : <ChatList userId={userId} chats={chats} groupLast={groupLast} groupUnread={groupUnread} groupMentions={groupMentions} open={open} blocked={blocked}
+        : <ChatList userId={userId} chats={chats} groupLast={groupLast} groupUnread={groupUnread} groupMentions={groupMentions} open={open} blocked={blocked} typing={typing}
           onOpen={go} onNew={() => { if (userId) setNewChat(true); else requireLogin('Entre para conversar em particular.'); }} onNewGroup={startGroup}
           onPerson={person => void openPerson(person)} />}
     </div>
     <div className="chats-pane">
       {target
         ? <Conversation key={targetKey(target)} target={target} blocked={blocked} unread={chat?.unread ?? 0}
-          seen={chat ? { read: chat.otherRead, delivered: chat.otherDelivered } : null} onBlock={(person, id) => void block(person, id)} onUnblock={id => void unblock(id)}
+          seen={chat ? { read: chat.otherRead, delivered: chat.otherDelivered } : null}
+          typers={typing[targetKey(target)] ?? NO_TYPERS} onTyping={audio => sendTyping(targetKey(target), audio)} onBlock={(person, id) => void block(person, id)} onUnblock={id => void unblock(id)}
           onBack={() => go(null)} onSeen={onSeen} onOpenPerson={person => void openPerson(person)} onLeft={() => leftGroup(targetKey(target))} />
         : open && userId ? <div className="chats-intro"><span className="spinner" /></div>
         : <Intro onGroup={() => go(GROUP_KEY)} />}
@@ -304,8 +311,13 @@ function LastPreview({ last, userId, group, receipts }: { last: Last | null; use
   return <span className={`chat-row-preview ${last.deleted ? 'deleted' : ''}`}>{tick}{own && group && !last.deleted ? 'Você: ' : who}{icon}<span>{text}</span></span>;
 }
 
-function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, blocked, onOpen, onNew, onNewGroup, onPerson }: {
-  userId: string | null; chats: Chat[] | null; groupLast: Last | null; groupUnread: number; groupMentions: number; open: string | null; blocked: string[];
+/** "digitando…" em verde no lugar da última mensagem, como na lista do WhatsApp. */
+function TypingPreview({ text }: { text: string }) {
+  return <span className="chat-row-preview typing"><span>{text}</span></span>;
+}
+
+function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, blocked, typing, onOpen, onNew, onNewGroup, onPerson }: {
+  userId: string | null; chats: Chat[] | null; groupLast: Last | null; groupUnread: number; groupMentions: number; open: string | null; blocked: string[]; typing: Typing;
   onOpen: (key: string) => void; onNew: () => void; onNewGroup: () => void; onPerson: (person: Person) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -321,6 +333,9 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
   const showGroup = filter !== 'unread' || groupUnread > 0;
   const groupMatches = !term || normalize('Torcida Solar').includes(term);
   const visibleChats = sortedChats.filter(c => (filter !== 'unread' || c.unread > 0) && (filter !== 'groups' || !!c.group) && (!term || normalize(chatName(c)).includes(term)));
+  // Quem está digitando em cada conversa toma o lugar da prévia da última mensagem (menos você, em outra aba, e quem você bloqueou).
+  const typingIn = (key: string) => (typing[key] ?? NO_TYPERS).filter(t => t.id !== userId && !blocked.includes(t.id));
+  const groupTyping = typingIn(GROUP_KEY);
   const contacts = term ? (people ?? []).filter(p => normalize(p.name).includes(term) && !visibleChats.some(c => c.other?.id === p.id)) : [];
 
   return <>
@@ -352,7 +367,8 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
         <span className="chat-row-main">
           <span className="chat-row-top"><strong>Torcida Solar</strong>{groupLast && <time className={groupUnread ? 'unread' : ''}>{listTime(groupLast.created_at)}</time>}</span>
           <span className="chat-row-bottom">
-            <LastPreview last={groupLast && !blocked.includes(groupLast.user_id) ? groupLast : null} userId={userId} group receipts={groupReceipts} />
+            {groupTyping.length > 0 ? <TypingPreview text={typingText(groupTyping, true)} />
+              : <LastPreview last={groupLast && !blocked.includes(groupLast.user_id) ? groupLast : null} userId={userId} group receipts={groupReceipts} />}
             {groupMentions > 0 && <b className="chat-row-badge chat-row-mention" aria-label="Você foi mencionado">@</b>}
             {groupUnread > 0 && <b className="chat-row-badge">{groupUnread > 99 ? '99+' : groupUnread}</b>}
             <Pin size={16} className="chat-row-pin" aria-label="Fixada" />
@@ -367,7 +383,8 @@ function ChatList({ userId, chats, groupLast, groupUnread, groupMentions, open, 
         <span className="chat-row-main">
           <span className="chat-row-top"><strong>{chatName(c)}</strong>{c.last && <time className={c.unread ? 'unread' : ''}>{listTime(c.last.created_at)}</time>}</span>
           <span className="chat-row-bottom">
-            <LastPreview last={c.last} userId={userId} group={!!c.group} receipts={{ read: c.otherRead, delivered: c.otherDelivered }} />
+            {typingIn(c.id).length > 0 ? <TypingPreview text={typingText(typingIn(c.id), !!c.group)} />
+              : <LastPreview last={c.last} userId={userId} group={!!c.group} receipts={{ read: c.otherRead, delivered: c.otherDelivered }} />}
             {c.other && blocked.includes(c.other.id) && <Ban size={15} className="chat-row-pin" aria-label="Bloqueado" />}
             {c.mentions > 0 && <b className="chat-row-badge chat-row-mention" aria-label="Você foi mencionado">@</b>}
             {c.unread > 0 && <b className="chat-row-badge">{c.unread > 99 ? '99+' : c.unread}</b>}
