@@ -134,6 +134,11 @@
 .day-column { display: grid; flex: 1; grid-template-rows: minmax(0, 1fr) 20px; min-width: 0; justify-items: center; }
 .day-bar { align-self: end; width: 100%; max-width: 24px; border-radius: 4px 4px 0 0; background: var(--viz-1); opacity: .4; transition: opacity .12s; }
 .day-column[aria-pressed="true"] .day-bar { opacity: 1; }
+/* Dia estimado: a coluna vem listrada, para não passar por contagem. */
+.day-column.estimated .day-bar, .day-legend i { background: repeating-linear-gradient(135deg, var(--viz-1) 0 3px, color-mix(in srgb, var(--viz-1) 45%, transparent) 3px 6px); }
+.day-tag { margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: var(--surface-hover); color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.day-legend { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--text-tertiary); font-size: 12px; }
+.day-legend i { flex-shrink: 0; width: 10px; height: 10px; border-radius: 2px; }
 .day-column small { width: 100%; border-top: 1px solid var(--border-strong); color: var(--text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 19px; text-align: center; }
 .day-column[aria-pressed="true"] small { color: var(--text); font-weight: 600; }
 

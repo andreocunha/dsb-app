@@ -3,13 +3,12 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 type Count = { label: string; total: number };
-type Day = Count & { opens: number };
+/** new: aparelhos que apareceram naquele dia. estimated: dia reconstruído pelos logins, de antes da contagem por aparelho. */
+type Day = Count & { opens: number; new: number; estimated: boolean };
 type InstallStats = {
-  since: string | null; ios: number; android: number; web: number; logged: number;
+  since: string | null; estimated_devices: number; ios: number; android: number; web: number; logged: number;
   push_granted: number; push_denied: number; push_ask: number; active_7d: number; accounts: number;
-  devices: Count[]; systems: Count[]; versions: Count[];
-  // Só existem depois da migration das aberturas: sem ela o painel abre com o resto.
-  days?: Day[]; frequency?: Count[];
+  devices: Count[]; systems: Count[]; versions: Count[]; days: Day[]; frequency: Count[];
 };
 
 const DAYS = 14;
@@ -23,7 +22,7 @@ function lastDays(days: Day[], now: number): Day[] {
   const known = new Map(days.map(d => [d.label, d]));
   return Array.from({ length: DAYS }, (_, i) => {
     const label = dayLabel.format(now - (DAYS - 1 - i) * DAY);
-    return known.get(label) ?? { label, total: 0, opens: 0 };
+    return known.get(label) ?? { label, total: 0, opens: 0, new: 0, estimated: false };
   });
 }
 
@@ -58,17 +57,19 @@ function DayChart({ days }: { days: Day[] }) {
   const max = Math.max(...days.map(d => d.total), 1);
   return <div className="settings-card day-chart">
     <p className="day-readout" aria-live="polite">
-      <strong>{active.label}</strong> · {plural(active.total, 'aparelho', 'aparelhos')} · {plural(active.opens, 'abertura', 'aberturas')}
+      <strong>{active.label}</strong> · {plural(active.total, 'aparelho', 'aparelhos')} · {plural(active.new, 'novo', 'novos')} · {plural(active.opens, 'abertura', 'aberturas')}
+      {active.estimated && <span className="day-tag">estimado</span>}
     </p>
     <div className="day-plot" onPointerLeave={() => setPicked(null)}>
       <span className="day-max" aria-hidden>{number(max)}</span>
-      {days.map(d => <button key={d.label} type="button" className="day-column" aria-pressed={d.label === active.label}
-        aria-label={`${d.label}: ${plural(d.total, 'aparelho', 'aparelhos')}, ${plural(d.opens, 'abertura', 'aberturas')}`}
+      {days.map(d => <button key={d.label} type="button" className={`day-column ${d.estimated ? 'estimated' : ''}`} aria-pressed={d.label === active.label}
+        aria-label={`${d.label}: ${plural(d.total, 'aparelho', 'aparelhos')}, ${plural(d.new, 'novo', 'novos')}, ${plural(d.opens, 'abertura', 'aberturas')}${d.estimated ? ' (estimado)' : ''}`}
         onPointerEnter={() => setPicked(d.label)} onFocus={() => setPicked(d.label)} onClick={() => setPicked(d.label)}>
         <span className="day-bar" style={{ height: `${d.total / max * 100}%` }} />
         <small>{d.label.slice(0, 2)}</small>
       </button>)}
     </div>
+    {days.some(d => d.estimated) && <p className="day-legend"><i aria-hidden />Estimado pelos logins no app, de antes da contagem por aparelho</p>}
   </div>;
 }
 
@@ -109,7 +110,6 @@ export function StatsPanel() {
   const app = stats.ios + stats.android;
   const share = (total: number) => app ? `${Math.round(total / app * 100)}% dos aparelhos` : undefined;
   const since = stats.since && dayLabel.format(new Date(stats.since));
-  const frequency = stats.frequency ?? [];
   return <div className="admin-stats">
     <Group title="App das lojas">
       <div className="stat-tiles">
@@ -134,16 +134,17 @@ export function StatsPanel() {
       </div>
     </Group>
 
-    <Group title="Aparelhos que abriram o app por dia"><DayChart days={lastDays(stats.days ?? [], stats.at)} /></Group>
+    <Group title="Aparelhos que abriram o app por dia"><DayChart days={lastDays(stats.days, stats.at)} /></Group>
 
     <div className="stat-columns">
-      {frequency.length > 0 && <Group title="Quantas vezes abriram"><BarList counts={frequency} /></Group>}
+      {stats.frequency.length > 0 && <Group title="Quantas vezes abriram"><BarList counts={stats.frequency} /></Group>}
       {stats.systems.length > 0 && <Group title="Sistema"><BarList counts={byMajor(stats.systems)} limit={6} /></Group>}
       {stats.versions.length > 0 && <Group title="Versão do app"><BarList counts={stats.versions} limit={6} /></Group>}
       {stats.devices.length > 0 && <Group title="Modelos"><BarList counts={stats.devices} limit={6} /></Group>}
     </div>
 
-    <p className="settings-hint">{since ? `Conta cada aparelho que abriu o app desde ${since}. ` : 'Nenhum aparelho registrado ainda. '}
+    <p className="settings-hint">{since ? `A contagem por aparelho começou em ${since}. ` : 'Nenhum aparelho registrado ainda. '}
+      {stats.estimated_devices > 0 && `O que vem de antes foi reconstruído pelos logins no app: não inclui quem usou sem entrar na conta, e ${plural(stats.estimated_devices, 'aparelho ainda é conhecido', 'aparelhos ainda são conhecidos')} só por esse histórico, até abrir o app de novo. `}
       Reinstalar conta de novo, e voltar ao app depois de 30 minutos conta como outra abertura. O total de downloads fica no Google Play Console e no App Store Connect.</p>
   </div>;
 }
