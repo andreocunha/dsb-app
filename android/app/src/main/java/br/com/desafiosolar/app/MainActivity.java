@@ -7,6 +7,8 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Plugins do próprio app entram antes do super, que é quem monta a ponte com o site.
+        registerPlugin(AppSettingsPlugin.class);
         // O site ocupa a tela inteira, por baixo das barras do sistema, em todas as versões.
         // No Android 15+ isso já é obrigatório; aqui vale também do 8 ao 14, e o site
         // cuida dos recuos com env(safe-area-inset-*).

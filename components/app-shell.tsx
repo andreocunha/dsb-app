@@ -157,10 +157,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [userId]);
   // Registra de novo ao entrar/sair, para associar o aparelho à conta.
   // Tocar numa notificação de mensagem abre a conversa dela; o voltar leva à lista, como em qualquer conversa.
+  // Quem recusou a pergunta do sistema fica sabendo onde reativar (Configurações › Notificações).
   // A instalação entra nos números da organização já na abertura, e de novo com a resposta à pergunta do sistema.
   useEffect(() => {
     void trackInstall(userId);
-    void registerPush(setToast, conversa => router.push(`/comunidade/?c=${encodeURIComponent(conversa)}`)).then(() => trackInstall(userId));
+    void registerPush(setToast, conversa => router.push(`/comunidade/?c=${encodeURIComponent(conversa)}`)).then(permission => {
+      if (permission && permission !== 'granted') setToast('Notificações desligadas neste aparelho.', { label: 'Ativar', run: () => router.push('/configuracoes/#settings-notifications') });
+      void trackInstall(userId);
+    });
   }, [userId, router, setToast]);
   useEffect(() => {
     const updateOnline = () => setOffline(!navigator.onLine);

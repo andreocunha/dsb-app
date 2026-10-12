@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, Check, ChevronRight, ChevronsUpDown, Eye, ImagePlus, LogIn, LogOut, Moon, Search, ShieldCheck, Sun, Trash2, Users } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { useApp } from './app-shell';
@@ -8,6 +8,8 @@ import { PhotoCrop } from './photo-crop';
 import { forgetAffiliations } from './chat/affiliations';
 import { Avatar, Sheet, TeamBadge } from './ui';
 import { supabase, errorMessage } from '@/lib/supabase';
+import { enablePush, openPushSettings, pushPermission, type PushPermission } from '@/lib/push';
+import { useLocalState } from '@/lib/local-state';
 import type { Team } from '@/lib/data';
 
 type TeamOption = Pick<Team, 'id' | 'name' | 'initials' | 'color' | 'logo'> & { active: boolean };
@@ -15,20 +17,21 @@ type Link = { affiliation: Affiliation | null; team_id: string | null; team_stat
 type ChatFilter = 'all' | 'mentions' | 'off';
 type Prefs = { chat: ChatFilter; fantasy: boolean; announcements: boolean };
 const DEFAULT_PREFS: Prefs = { chat: 'mentions', fantasy: true, announcements: true };
+const ALL_OFF: Prefs = { chat: 'off', fantasy: false, announcements: false };
+const anyOn = (prefs: Prefs) => prefs.chat !== 'off' || prefs.fantasy || prefs.announcements;
 
 const AFFILIATIONS: { id: Affiliation; title: string; text: string; icon: typeof Users }[] = [
   { id: 'team', title: 'Equipe', text: 'Faço ou já fiz parte de um barco', icon: Users },
   { id: 'organization', title: 'Organização', text: 'Trabalho na organização do evento', icon: ShieldCheck },
   { id: 'visitor', title: 'Visitante', text: 'Estou acompanhando e torcendo', icon: Eye },
 ];
+// Com o chat ligado: o que vira notificação. Desligar é no interruptor do chat, não numa opção daqui.
 const CHAT_FILTERS: { id: ChatFilter; label: string; text: string }[] = [
-  { id: 'all', label: 'Todas', text: 'Toda mensagem nova, inclusive cada mensagem da Torcida Solar.' },
-  { id: 'mentions', label: 'Menções', text: 'Conversas e grupos normalmente. Na Torcida Solar, só quando marcarem ou responderem você.' },
-  { id: 'off', label: 'Nenhuma', text: 'Nenhuma notificação do chat. As mensagens continuam chegando no app.' },
+  { id: 'all', label: 'Todas as mensagens', text: 'Toda mensagem nova, inclusive cada mensagem da Torcida Solar.' },
+  { id: 'mentions', label: 'Conversas e menções', text: 'Conversas e grupos normalmente. Na Torcida Solar, só quando marcarem ou responderem você.' },
 ];
 
 const normalize = (text: string) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const noopSubscribe = () => () => {};
 const linkOf = (profile: Profile | null): Link =>
   ({ affiliation: profile?.affiliation ?? null, team_id: profile?.team_id ?? null, team_status: profile?.team_status ?? 'member' });
 
@@ -120,7 +123,6 @@ export function Preferences() {
       </section>
 
       <AffiliationSettings profile={profile} onChanged={reloadProfile} />
-      <NotificationSettings userId={userId} />
     </> : <section className="settings-group">
       <div className="settings-card settings-signin">
         <span className="settings-signin-icon"><LogIn size={20} /></span>
@@ -131,6 +133,7 @@ export function Preferences() {
         <button className="button primary" onClick={() => requireLogin()}><LogIn size={16} /> Entrar</button>
       </div>
     </section>}
+    <NotificationSettings userId={userId} />
 
     {/* No desktop o tema já fica no rodapé da sidebar; aqui só no celular. */}
     <section className="settings-group settings-appearance" aria-labelledby="settings-theme">
@@ -377,46 +380,134 @@ function TeamPicker({ open, teams, alumni, selected, onClose, onPick }: {
   </Sheet>;
 }
 
-function NotificationSettings({ userId }: { userId: string }) {
+/**
+ * Permissão de notificações deste aparelho (null fora do app das lojas). Confere de novo quando o
+ * app volta para a frente: é assim que a tela fica sabendo que a pessoa liberou nos ajustes do celular.
+ */
+function usePushPermission() {
+  const [permission, setPermission] = useState<PushPermission | null>(null);
+  useEffect(() => {
+    let alive = true, last: PushPermission | null = null;
+    const check = async () => {
+      let now = await pushPermission();
+      // Liberou pelos ajustes e voltou: o aparelho é registrado na hora, sem esperar o app reabrir.
+      if (now === 'granted' && last && last !== 'granted') now = await enablePush() ?? now;
+      last = now;
+      if (alive) setPermission(now);
+    };
+    void check();
+    const onVisible = () => { if (document.visibilityState === 'visible') void check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { alive = false; document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+  return [permission, setPermission] as const;
+}
+
+function NotificationSettings({ userId }: { userId: string | null }) {
   const { notify } = useApp();
+  const [permission, setPermission] = usePushPermission();
   const [prefs, setPrefs] = usePrefs(userId);
-  // No HTML estático é sempre web; no app nativo corrige após hidratar.
-  const native = useSyncExternalStore(noopSubscribe, () => Capacitor.isNativePlatform(), () => false);
+  // O que estava ligado antes de desligar tudo, e o modo do chat antes de desligar o chat: religar volta ao que era.
+  const [last, setLast] = useLocalState<{ prefs: Prefs; mode: ChatFilter }>('dsb-notification-last', { prefs: DEFAULT_PREFS, mode: DEFAULT_PREFS.chat });
+  const [busy, setBusy] = useState(false);
+  const [help, setHelp] = useState(false);
+  // Sem conta só há o que mostrar no app das lojas: a permissão do aparelho.
+  if (!userId && !permission) return null;
+
+  const loading = !!userId && !prefs;
+  const shown = prefs ?? DEFAULT_PREFS;
+  // No app das lojas, sem a permissão do celular nada chega, seja qual for a escolha da conta.
+  const blocked = permission !== null && permission !== 'granted';
+  const on = !blocked && (!userId || anyOn(shown));
+  const chatOn = shown.chat !== 'off';
 
   async function change(next: Partial<Prefs>) {
     if (!prefs) return;
     const updated = { ...prefs, ...next };
     setPrefs(updated);
+    setLast({
+      prefs: anyOn(updated) ? updated : anyOn(prefs) ? prefs : last.prefs,
+      mode: updated.chat !== 'off' ? updated.chat : prefs.chat !== 'off' ? prefs.chat : last.mode,
+    });
     const { error } = await supabase.rpc('update_notification_prefs', { p_chat: updated.chat, p_fantasy: updated.fantasy, p_announcements: updated.announcements });
     if (error) { setPrefs(prefs); notify(errorMessage(error)); }
   }
 
-  const chat = CHAT_FILTERS.find(f => f.id === (prefs?.chat ?? DEFAULT_PREFS.chat))!;
-  return <section className="settings-group" aria-labelledby="settings-notifications" aria-busy={!prefs}>
+  async function toggleAll() {
+    if (on) {
+      // Sem conta, o que está ligado é só a permissão do celular, e ela se desliga nos ajustes dele.
+      if (userId) await change(ALL_OFF); else if (!(await openPushSettings())) setHelp(true);
+      return;
+    }
+    if (prefs && !anyOn(prefs)) void change(last.prefs && anyOn(last.prefs) ? last.prefs : DEFAULT_PREFS);
+    if (!blocked) return;
+    setBusy(true);
+    if (permission === 'ask') {
+      // O sistema ainda mostra a pergunta: é só aceitar. Recusando de novo, o caminho passa a ser os ajustes.
+      const now = await enablePush();
+      if (now) setPermission(now);
+    } else if (!(await openPushSettings())) setHelp(true);
+    setBusy(false);
+  }
+
+  return <section className="settings-group" aria-labelledby="settings-notifications" aria-busy={loading}>
     <h2 id="settings-notifications" className="settings-label">Notificações</h2>
     <div className="settings-card">
-      <div className="settings-row">
-        <div className="settings-split">
-          <div><h3 id="settings-chat">Chat</h3></div>
-          <div className="segmented" role="radiogroup" aria-labelledby="settings-chat">
-            {CHAT_FILTERS.map(f => <button key={f.id} role="radio" aria-checked={chat.id === f.id} disabled={!prefs}
-              onClick={() => { if (chat.id !== f.id) void change({ chat: f.id }); }}>{f.label}</button>)}
-          </div>
-        </div>
-        <p className="settings-row-text" aria-live="polite">{chat.text}</p>
-      </div>
-      <Toggle title="Fantasy" text="Lembrete 1 hora antes de cada prova para ajustar sua escalação." checked={prefs?.fantasy ?? true} disabled={!prefs} onChange={fantasy => void change({ fantasy })} />
-      <Toggle title="Anúncios gerais" text="Largadas das provas e recados da organização." checked={prefs?.announcements ?? true} disabled={!prefs} onChange={announcements => void change({ announcements })} />
+      {/* Primeiro a resposta para "estou recebendo?"; as escolhas só aparecem com ele ligado. */}
+      <Toggle title="Notificações do DSB" checked={on} disabled={loading || busy} onChange={() => void toggleAll()}
+        state={blocked ? { label: permission === 'ask' ? 'Sem permissão do celular' : 'Bloqueadas no celular', alert: true } : { label: on ? 'Ativadas' : 'Desativadas' }}
+        text={permission === 'ask' ? 'O celular ainda não tem permissão para mostrar as notificações do DSB. Ligue aqui para permitir.'
+          : blocked ? `O celular está bloqueando as notificações do DSB. Ligue aqui para abrir os ajustes${Capacitor.getPlatform() === 'ios' ? ', toque em Notificações e permita.' : ' e permitir.'}`
+          : !on ? 'Você não recebe nenhuma notificação do DSB. Ligue para escolher o que quer receber.'
+          : userId ? 'Você recebe o que estiver ligado abaixo.' : 'O celular está liberado para mostrar as notificações do DSB.'} />
+      {on && userId && <>
+        <Toggle title="Chat" text="Mensagens das conversas, dos grupos e da Torcida Solar." checked={chatOn} disabled={loading}
+          onChange={chat => void change({ chat: !chat ? 'off' : last.mode && last.mode !== 'off' ? last.mode : DEFAULT_PREFS.chat })}>
+          {chatOn && <div className="option-list" role="radiogroup" aria-label="Quais mensagens do chat viram notificação">
+            {CHAT_FILTERS.map(f => {
+              const picked = shown.chat === f.id;
+              return <button key={f.id} role="radio" aria-checked={picked} className="option-row" disabled={loading} onClick={() => { if (!picked) void change({ chat: f.id }); }}>
+                <span className="choice-check" aria-hidden>{picked && <Check size={14} />}</span>
+                <span className="choice-text"><strong>{f.label}</strong><small>{f.text}</small></span>
+              </button>;
+            })}
+          </div>}
+        </Toggle>
+        <Toggle title="Fantasy" text="Lembrete 1 hora antes de cada prova para ajustar sua escalação." checked={shown.fantasy} disabled={loading} onChange={fantasy => void change({ fantasy })} />
+        <Toggle title="Anúncios gerais" text="Largadas das provas e recados da organização." checked={shown.announcements} disabled={loading} onChange={announcements => void change({ announcements })} />
+      </>}
     </div>
-    <p className="settings-hint">{native
-      ? 'Vale para todos os seus aparelhos. Se nada chegar, confira se as notificações do DSB estão liberadas no celular.'
+    <p className="settings-hint">{!userId ? 'Entrando na sua conta você escolhe o que quer receber do chat e do fantasy.'
+      : permission ? 'O que você escolher aqui vale para todos os seus aparelhos.'
       : 'As notificações chegam pelo app do DSB no celular. O que você escolher aqui vale para todos os seus aparelhos.'}</p>
+    <Sheet open={help} onClose={() => setHelp(false)} title="Notificações nos ajustes do celular">
+      <div className="prose">
+        <p>Esta versão do app não consegue abrir os ajustes do Android sozinha. O caminho é este:</p>
+        <ol>
+          <li>Abra as <strong>Configurações</strong> do celular.</li>
+          <li>Entre em <strong>Apps</strong> (ou Aplicativos) e escolha <strong>DSB</strong>.</li>
+          <li>Toque em <strong>Notificações</strong> e ligue ou desligue a permissão.</li>
+        </ol>
+        <p>Depois é só voltar para cá: o app percebe sozinho.</p>
+      </div>
+    </Sheet>
   </section>;
 }
 
-function Toggle({ title, text, checked, disabled, onChange }: { title: string; text: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
-  return <label className="settings-row settings-split toggle-row">
-    <div><h3>{title}</h3><p>{text}</p></div>
-    <button type="button" role="switch" className="toggle" aria-checked={checked} aria-label={title} disabled={disabled} onClick={() => onChange(!checked)}><span /></button>
-  </label>;
+/** Interruptor com o estado escrito ao lado do título; `children` são as opções que só existem com ele ligado. */
+function Toggle({ title, text, checked, disabled, state, onChange, children }: {
+  title: string; text: string; checked: boolean; disabled?: boolean;
+  /** Por padrão "Ativado" / "Desativado". */
+  state?: { label: string; alert?: boolean };
+  onChange: (checked: boolean) => void; children?: React.ReactNode;
+}) {
+  const pill = state ?? { label: checked ? 'Ativado' : 'Desativado' };
+  return <div className="settings-row">
+    <label className="settings-split toggle-row">
+      {/* Enquanto carrega ainda não há o que afirmar: o estado escrito só entra depois. */}
+      <div><h3>{title}{!disabled && <span className={`state-pill ${pill.alert ? 'alert' : checked ? 'on' : ''}`}>{pill.label}</span>}</h3><p>{text}</p></div>
+      <button type="button" role="switch" className="toggle" aria-checked={checked} aria-label={title} disabled={disabled} onClick={() => onChange(!checked)}><span /></button>
+    </label>
+    {children}
+  </div>;
 }
