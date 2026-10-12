@@ -142,9 +142,5 @@ export function StatsPanel() {
       {stats.versions.length > 0 && <Group title="Versão do app"><BarList counts={stats.versions} limit={6} /></Group>}
       {stats.devices.length > 0 && <Group title="Modelos"><BarList counts={stats.devices} limit={6} /></Group>}
     </div>
-
-    <p className="settings-hint">{since ? `A contagem por aparelho começou em ${since}. ` : 'Nenhum aparelho registrado ainda. '}
-      {stats.estimated_devices > 0 && `O que vem de antes foi reconstruído pelos logins no app: não inclui quem usou sem entrar na conta, e ${plural(stats.estimated_devices, 'aparelho ainda é conhecido', 'aparelhos ainda são conhecidos')} só por esse histórico, até abrir o app de novo. `}
-      Reinstalar conta de novo, e voltar ao app depois de 30 minutos conta como outra abertura. O total de downloads fica no Google Play Console e no App Store Connect.</p>
   </div>;
 }
