@@ -4,12 +4,15 @@ const contato = 'andreoliveiracunha20@gmail.com';
 
 export default function Page() {
   return <div className="page legal">
-    <div className="page-heading"><div><h1>Política de privacidade</h1><p>Última atualização: 20 de setembro de 2026.</p></div></div>
+    <div className="page-heading"><div><h1>Política de privacidade</h1><p>Última atualização: 12 de outubro de 2026.</p></div></div>
     <section className="card prose">
       <p>O DSB é o aplicativo do Desafio Solar Brasil. Ele mostra a competição, um chat da torcida e um jogo de fantasy. Esta página explica quais dados ele guarda e o que você pode fazer com eles.</p>
 
       <h2>Navegar não exige conta</h2>
       <p>O mapa, os resultados, a transmissão e a leitura do chat funcionam sem login. Só é preciso entrar para escrever no chat, reagir a mensagens e montar seu fantasy.</p>
+
+      <h2>O que guardamos de cada aparelho</h2>
+      <p>Para saber quantas pessoas usam o DSB, cada instalação (ou navegador) recebe um identificador aleatório, criado no próprio aparelho. Com ele guardamos o modelo e o sistema do aparelho, a versão do aplicativo, se as notificações estão liberadas e as datas do primeiro e do último acesso. Se você entrar na sua conta, o aparelho fica ligado a ela.</p>
 
       <h2>O que guardamos quando você entra</h2>
       <ul>

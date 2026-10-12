@@ -351,6 +351,11 @@ export type Database = {
       admin_delete_penalty: { Args: { p_id: number }; Returns: undefined }
       send_announcement: { Args: { p_title: string; p_body: string }; Returns: undefined }
       recent_announcements: { Args: { p_limit?: number }; Returns: { title: string; sent_at: string }[] }
+      track_install: {
+        Args: { p_id: string; p_platform: string; p_model?: string | null; p_os?: string | null; p_app_version?: string | null; p_push?: string | null }
+        Returns: undefined
+      }
+      install_stats: { Args: never; Returns: Json }
     }
     Enums: { [_ in never]: never }
     CompositeTypes: { [_ in never]: never }

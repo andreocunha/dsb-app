@@ -88,6 +88,7 @@
 .push-preview strong { display: block; color: var(--text); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .push-preview p { margin-top: 2px; color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
 .admin-when { flex-shrink: 0; color: var(--text-tertiary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.admin-count { flex-shrink: 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .live-state { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--surface-hover); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .live-state.on { background: var(--danger-soft); color: var(--danger); }

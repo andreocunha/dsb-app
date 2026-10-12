@@ -14,6 +14,7 @@ import { mentionsMe } from '@/lib/chat-format';
 import { closeTopOverlay } from '@/lib/overlays';
 import { hideSplash, listenBackButton, paintStatusBar } from '@/lib/system-ui';
 import { registerPush } from '@/lib/push';
+import { trackInstall } from '@/lib/install';
 import { syncLiveSharing } from '@/lib/live-location';
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 /** action: botão no aviso (ex.: "Desfazer"); o aviso fica um pouco mais na tela para dar tempo de tocar. */
@@ -156,8 +157,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [userId]);
   // Registra de novo ao entrar/sair, para associar o aparelho à conta.
   // Tocar numa notificação de mensagem abre a conversa dela; o voltar leva à lista, como em qualquer conversa.
+  // A instalação entra nos números da organização já na abertura, e de novo com a resposta à pergunta do sistema.
   useEffect(() => {
-    void registerPush(setToast, conversa => router.push(`/comunidade/?c=${encodeURIComponent(conversa)}`));
+    void trackInstall(userId);
+    void registerPush(setToast, conversa => router.push(`/comunidade/?c=${encodeURIComponent(conversa)}`)).then(() => trackInstall(userId));
   }, [userId, router, setToast]);
   useEffect(() => {
     const updateOnline = () => setOffline(!navigator.onLine);
