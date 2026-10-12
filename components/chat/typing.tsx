@@ -97,7 +97,7 @@ export function TypingBubble({ typers, people, group }: { typers: Typer[]; peopl
     <div className="msg-main">
       <div className="bubble typing-bubble">
         <Tail />
-        {recording && <Mic size={16} />}
+        {recording && <Mic size={13} />}
         <span className="typing-dots" aria-hidden><i /><i /><i /></span>
       </div>
     </div>
