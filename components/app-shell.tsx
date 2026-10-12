@@ -169,7 +169,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     updateOnline();
     if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator && !Capacitor.isNativePlatform()) navigator.serviceWorker.register('/sw.js').catch(error => console.warn('Não foi possível preparar o modo offline:', error));
     // A tela de abertura fica segurada até aqui, que é quando já há interface para mostrar.
-    void hideSplash();
+    // Abrindo na home, quem solta é o Dashboard, com o mapa pronto na tela.
+    if (window.location.pathname !== '/') void hideSplash();
     return () => { window.removeEventListener('online', updateOnline); window.removeEventListener('offline', updateOnline); window.removeEventListener('beforeinstallprompt', beforeInstall); };
   }, []);
   async function install() {

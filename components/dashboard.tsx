@@ -12,6 +12,10 @@ import { ScheduleCard } from './schedule';
 import { useAuth } from './auth';
 import { supabase } from '@/lib/supabase';
 import { onOverlaysChange } from '@/lib/overlays';
+import { hideSplash } from '@/lib/system-ui';
+
+// Abrindo o app na home, a tela de abertura espera o mapa ficar pronto, mas só até aqui (rede lenta, mapa fora do ar).
+const MAP_WAIT = 2000;
 
 // A live fica em tela cheia sobre o mapa ou num mini player (PiP) no canto.
 type LiveMode = 'off' | 'full' | 'pip';
@@ -28,22 +32,40 @@ export function Dashboard({ visible }: { visible: boolean }) {
   const { isAdmin } = useAuth();
   const frame = useRef<HTMLIFrameElement>(null);
   const trackerOrigin = new URL(eventConfig.trackingUrl).origin;
-  // Quem é da organização (admin_emails) vê o botão "Organização" no mapa.
-  const mapUrl = isAdmin ? `${eventConfig.trackingUrl}${eventConfig.trackingUrl.includes('?') ? '&' : '?'}admin=1` : eventConfig.trackingUrl;
 
+  // Quem é da organização (admin_emails) vê o botão "Organização" no mapa. O aviso vai por mensagem,
+  // e não no endereço: trocar o src recarregava o mapa do zero assim que a conta terminava de carregar.
   // O painel do mapa entra com a própria conta do app: ele pede a sessão e o app só responde
   // ao iframe do rastreamento, só para a organização. O servidor do mapa confere de novo no Supabase.
   useEffect(() => {
+    const post = (data: object) => frame.current?.contentWindow?.postMessage(data, trackerOrigin);
+    // O mapa avisa quando começa a ouvir ("hello"); se a conta carregar depois disso, o aviso vai na hora.
+    const announce = () => post({ type: 'dsb-tracker:admin', admin: isAdmin === true });
     const answer = async (event: MessageEvent) => {
-      if (event.origin !== trackerOrigin || event.source !== frame.current?.contentWindow || event.data?.type !== 'dsb-tracker:token?') return;
-      const reply = (data: { token?: string; error?: string }) => frame.current?.contentWindow?.postMessage({ type: 'dsb-tracker:token', ...data }, trackerOrigin);
+      if (event.origin !== trackerOrigin || event.source !== frame.current?.contentWindow) return;
+      if (event.data?.type === 'dsb-tracker:hello') return announce();
+      if (event.data?.type !== 'dsb-tracker:token?') return;
+      const reply = (data: { token?: string; error?: string }) => post({ type: 'dsb-tracker:token', ...data });
       if (!isAdmin) return reply({ error: 'Esta conta não faz parte da organização.' });
       const { data } = await supabase.auth.getSession();
       reply(data.session ? { token: data.session.access_token } : { error: 'Entre no app com a conta da organização.' });
     };
     window.addEventListener('message', answer);
+    announce();
     return () => window.removeEventListener('message', answer);
   }, [isAdmin, trackerOrigin]);
+
+  // Abertura do app: a splash só sai com o mapa já na tela, em vez de mostrar o carregamento dele.
+  // O mapa avisa quando termina ("ready"); como pode terminar antes de o app começar a ouvir, o app também pergunta.
+  useEffect(() => {
+    function onReady(event: MessageEvent) { if (event.origin === trackerOrigin && event.data?.type === 'dsb-tracker:ready') reveal(); }
+    function stop() { clearTimeout(limit); window.removeEventListener('message', onReady); }
+    function reveal() { stop(); void hideSplash(); }
+    const limit = setTimeout(reveal, MAP_WAIT);
+    window.addEventListener('message', onReady);
+    frame.current?.contentWindow?.postMessage({ type: 'dsb-tracker:ready?' }, trackerOrigin);
+    return stop;
+  }, [trackerOrigin]);
 
   // Com um sheet aberto por cima, o mapa desenha devagar: no Android ele divide o processo com o app,
   // e a animação do sheet trava em celular mais simples se o mapa seguir a 15–60 quadros por segundo.
@@ -76,7 +98,7 @@ export function Dashboard({ visible }: { visible: boolean }) {
         <iframe
           ref={frame}
           className="map-frame"
-          src={mapUrl}
+          src={eventConfig.trackingUrl}
           title="Rastreamento das embarcações do Desafio Solar Brasil"
           allow="fullscreen"
           allowFullScreen

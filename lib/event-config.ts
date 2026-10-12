@@ -1,6 +1,7 @@
 /** Edite os links do evento aqui, sem alterar componentes. */
 export const eventConfig = {
-  trackingUrl: 'https://dsb-rastreio.vercel.app/',
+  // Para testar com o mapa rodando no computador: NEXT_PUBLIC_TRACKING_URL=http://localhost:3001/ (em .env.development.local)
+  trackingUrl: process.env.NEXT_PUBLIC_TRACKING_URL || 'https://dsb-rastreio.vercel.app/',
   // Aceita youtube.com/watch?v=..., youtube.com/live/... ou youtu.be/...
   // Sem link definido, a aba Live mostra "a transmissão começa em breve".
   // Para testar com uma live qualquer: NEXT_PUBLIC_YOUTUBE_LIVE_URL=https://www.youtube.com/watch?v=rFZHOHl-L8A
