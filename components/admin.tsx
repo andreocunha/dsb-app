@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Flag, LogIn, Megaphone, Minus, Plus, Radio, RotateCcw, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import { useApp } from './app-shell';
 import { SchedulePanel } from './admin-schedule';
+import { StatsPanel } from './admin-stats';
 import { useAuth } from './auth';
 import { Sheet, TeamBadge } from './ui';
 import { supabase, errorMessage } from '@/lib/supabase';
@@ -59,7 +60,8 @@ export function Admin() {
   return <div className="page settings admin">
     {heading}
     <div className="segmented admin-tabs" role="radiogroup" aria-label="Seções do painel">
-      {TABS.map(t => <button key={t.id} role="radio" aria-checked={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</button>)}
+      {TABS.map(t => <button key={t.id} role="radio" aria-checked={tab === t.id}
+        onClick={e => { setTab(t.id); e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); }}>{t.label}</button>)}
     </div>
     {isAdmin === null || !races || !data
       ? <p className="panel-note">{error ? 'Não foi possível carregar. Confira sua conexão.' : 'Carregando…'}</p>
@@ -649,78 +651,4 @@ function LivePanel() {
     </form>
     <p className="settings-hint">A troca vale na hora para quem está com a live aberta no app, sem precisar publicar uma nova versão.</p>
   </section>;
-}
-
-// ---------------------------------------------------------------------
-// Números
-// ---------------------------------------------------------------------
-
-type Count = { label: string; total: number };
-type InstallStats = {
-  since: string | null; ios: number; android: number; web: number; logged: number;
-  push_granted: number; push_denied: number; push_ask: number; active_7d: number; accounts: number;
-  devices: Count[]; systems: Count[]; versions: Count[];
-};
-
-function StatRow({ title, text, total }: { title: string; text?: string; total: number }) {
-  return <li className="settings-row settings-split">
-    <div><h3>{title}</h3>{text && <p>{text}</p>}</div>
-    <strong className="admin-count">{total}</strong>
-  </li>;
-}
-
-function CountList({ id, title, counts }: { id: string; title: string; counts: Count[] }) {
-  if (!counts.length) return null;
-  return <section className="settings-group" aria-labelledby={id}>
-    <h2 id={id} className="settings-label">{title}</h2>
-    <div className="settings-card">
-      <ul className="admin-list">{counts.map(c => <StatRow key={c.label} title={c.label} total={c.total} />)}</ul>
-    </div>
-  </section>;
-}
-
-/** Quem tem o app, em que aparelho, quantos entraram na conta e quantos aceitaram notificações (lib/install.ts). */
-function StatsPanel() {
-  const [stats, setStats] = useState<InstallStats | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    void supabase.rpc('install_stats').then(({ data, error }) => {
-      if (error || !data) setFailed(true);
-      else setStats(data as unknown as InstallStats);
-    });
-  }, []);
-  if (!stats) return <p className="panel-note">{failed ? 'Não foi possível carregar os números.' : 'Carregando…'}</p>;
-
-  const app = stats.ios + stats.android;
-  const share = (total: number) => app ? ` · ${Math.round(total / app * 100)}% dos aparelhos` : '';
-  const since = stats.since && new Date(stats.since).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
-  return <>
-    <section className="settings-group" aria-labelledby="admin-stats">
-      <h2 id="admin-stats" className="settings-label">App das lojas</h2>
-      <div className="settings-card">
-        <ul className="admin-list">
-          <StatRow title="Aparelhos com o app" text={`Android ${stats.android} · iPhone e iPad ${stats.ios}`} total={app} />
-          <StatRow title="Entraram na conta" text={`Aparelhos em que alguém já fez login${share(stats.logged)}`} total={stats.logged} />
-          <StatRow title="Aceitaram notificações" text={`${stats.push_denied} recusaram · ${stats.push_ask} ainda não responderam${share(stats.push_granted)}`} total={stats.push_granted} />
-          <StatRow title="Abriram nos últimos 7 dias" total={stats.active_7d} />
-        </ul>
-      </div>
-      <p className="settings-hint">{since ? `Conta cada aparelho que abriu o app desde ${since}. ` : 'Nenhum aparelho registrado ainda. '}
-        Reinstalar conta de novo. O total de downloads fica no Google Play Console e no App Store Connect.</p>
-    </section>
-
-    <section className="settings-group" aria-labelledby="admin-stats-other">
-      <h2 id="admin-stats-other" className="settings-label">Fora do app</h2>
-      <div className="settings-card">
-        <ul className="admin-list">
-          <StatRow title="Navegadores no site" text="Quem abriu dsb.app.br sem o app das lojas" total={stats.web} />
-          <StatRow title="Contas criadas" text="Pessoas que já entraram, pelo app ou pelo site" total={stats.accounts} />
-        </ul>
-      </div>
-    </section>
-
-    <CountList id="admin-stats-devices" title="Aparelhos" counts={stats.devices} />
-    <CountList id="admin-stats-systems" title="Sistema" counts={stats.systems} />
-    <CountList id="admin-stats-versions" title="Versão do app" counts={stats.versions} />
-  </>;
 }

@@ -4,8 +4,13 @@ import { deviceFromUserAgent, type Device } from './device';
 
 // Id aleatório desta instalação (ou deste navegador). Fica no aparelho: reinstalar gera outro.
 const KEY = 'dsb-install';
-// O que já foi enviado nesta abertura, para não repetir o mesmo registro.
+// O que já foi enviado nesta abertura, para não repetir o mesmo registro: internet do celular é cara.
 let sent: string | null = null;
+let sentAt = 0;
+// Voltar ao app depois deste tempo conta como outra abertura (o banco usa a mesma regra).
+const SESSION = 30 * 60_000;
+let lastUser: string | null = null;
+let listening = false;
 
 function installId() {
   try {
@@ -53,17 +58,25 @@ async function appVersion() {
  * Registra esta instalação para os números da organização (/admin › Números): plataforma, aparelho,
  * versão do app, se as notificações estão liberadas e se alguém entrou na conta por aqui.
  * Como o app das lojas carrega o site, vale também para quem já tinha o app instalado.
- * É só métrica: qualquer falha passa em silêncio.
+ * É só métrica: qualquer falha passa em silêncio. Custa um pedido pequeno por abertura, e outro
+ * só quando a pessoa volta ao app depois de 30 minutos (é o que conta as aberturas no painel).
  */
 export async function trackInstall(userId: string | null) {
   if (process.env.NODE_ENV !== 'production' || /bot|crawl|spider|headless|lighthouse/i.test(navigator.userAgent)) return;
   const id = installId();
   if (!id) return;
+  lastUser = userId;
+  if (!listening) {
+    listening = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && Date.now() - sentAt >= SESSION) void trackInstall(lastUser);
+    });
+  }
   try {
     const [{ model, os }, push, version] = await Promise.all([device(), pushStatus(), appVersion()]);
     const state = JSON.stringify([userId, model, os, version, push]);
-    if (state === sent) return;
-    sent = state;
+    if (state === sent && Date.now() - sentAt < SESSION) return;
+    sent = state; sentAt = Date.now();
     const { error } = await supabase.rpc('track_install', { p_id: id, p_platform: Capacitor.getPlatform(), p_model: model, p_os: os, p_app_version: version, p_push: push });
     if (error) sent = null;
   } catch { sent = null; }

@@ -1,7 +1,8 @@
 /* ---------- Painel da organização (/admin) ---------- */
-/* Cinco abas cabem em 360px: dividem a largura e encolhem o respiro em vez de alargar a página. */
-.admin-tabs { flex-shrink: 1; min-width: 0; margin-bottom: 20px; }
-.admin-tabs button { flex: 1 1 auto; min-width: 0; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; }
+/* As abas mostram o nome inteiro: no celular a faixa rola de lado em vez de cortar os nomes ou alargar a página. */
+.admin-tabs { flex-shrink: 1; min-width: 0; margin-bottom: 20px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.admin-tabs::-webkit-scrollbar { display: none; }
+.admin-tabs button { flex: 1 0 auto; padding: 0 12px; }
 .admin-race-select { display: flex; margin-bottom: 16px; }
 .admin-race-select select { width: 100%; }
 
@@ -88,7 +89,6 @@
 .push-preview strong { display: block; color: var(--text); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .push-preview p { margin-top: 2px; color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
 .admin-when { flex-shrink: 0; color: var(--text-tertiary); font-size: 12px; font-variant-numeric: tabular-nums; }
-.admin-count { flex-shrink: 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .live-state { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--surface-hover); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .live-state.on { background: var(--danger-soft); color: var(--danger); }
@@ -99,4 +99,53 @@
 @media (max-width: 479px) {
   .admin-duel-fields { grid-template-columns: minmax(0, 1fr) 96px; }
   .admin-inline-form { flex-direction: column; align-items: stretch; }
+}
+
+/* ---------- Números (components/admin-stats.tsx) ---------- */
+/* Cores dos gráficos: roxo da marca e amarelo solar, nos tons que passam no teste de daltonismo em cada tema. */
+.admin-stats { --viz-1: #7b55a2; --viz-2: #eda100; --viz-track: var(--brand-soft); }
+[data-theme="dark"] .admin-stats { --viz-1: #9a7bd0; --viz-2: #c98500; }
+.admin-stats .series-1 { background: var(--viz-1); }
+.admin-stats .series-2 { background: var(--viz-2); }
+
+.stat-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.stat-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.stat-label { color: var(--text-secondary); font-size: 12px; font-weight: 500; line-height: 1.3; }
+.stat-value { font-size: 28px; font-weight: 600; line-height: 1.1; }
+.stat-note { margin-top: auto; color: var(--text-tertiary); font-size: 12px; line-height: 1.35; }
+.stat-meter { height: 6px; overflow: hidden; border-radius: 999px; background: var(--viz-track); }
+.stat-meter span { display: block; height: 100%; border-radius: 999px; background: var(--viz-1); }
+/* Android e iPhone numa barra só, com 2px de respiro entre as partes. */
+.stat-split { display: flex; gap: 2px; height: 6px; }
+.stat-split span { min-width: 4px; border-radius: 999px; }
+.stat-legend { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: auto; padding: 0; list-style: none; color: var(--text-secondary); font-size: 12px; }
+.stat-legend li { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.stat-legend i { width: 8px; height: 8px; border-radius: 2px; }
+.stat-legend b { color: var(--text); font-weight: 600; }
+
+.day-chart { padding: 14px 14px 10px; }
+.day-readout { margin-bottom: 12px; color: var(--text-secondary); font-size: 13px; }
+.day-readout strong { color: var(--text); font-weight: 600; }
+/* A linha de cima marca o maior valor do período; a de baixo, o zero. */
+.day-plot { position: relative; display: flex; gap: 2px; height: 132px; border-top: 1px solid var(--border); }
+.day-max { position: absolute; top: 3px; left: 0; color: var(--text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.day-column { display: grid; flex: 1; grid-template-rows: minmax(0, 1fr) 20px; min-width: 0; justify-items: center; }
+.day-bar { align-self: end; width: 100%; max-width: 24px; border-radius: 4px 4px 0 0; background: var(--viz-1); opacity: .4; transition: opacity .12s; }
+.day-column[aria-pressed="true"] .day-bar { opacity: 1; }
+.day-column small { width: 100%; border-top: 1px solid var(--border-strong); color: var(--text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; line-height: 19px; text-align: center; }
+.day-column[aria-pressed="true"] small { color: var(--text); font-weight: 600; }
+
+.stat-columns { display: grid; gap: 0 16px; }
+.bar-card { padding: 6px 14px; }
+.bar-list { padding: 0; list-style: none; }
+.bar-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 10px 0; font-size: 13px; }
+.bar-list li + li { border-top: 1px solid var(--border); }
+.bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-list b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar-track { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--viz-track); }
+.bar-track span { display: block; min-width: 4px; height: 100%; border-radius: 999px; background: var(--viz-1); }
+.bar-more { width: 100%; padding: 10px 0; border-top: 1px solid var(--border); color: var(--brand); font-size: 13px; font-weight: 600; text-align: left; }
+@media (min-width: 640px) {
+  .stat-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .stat-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }

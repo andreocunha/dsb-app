@@ -12,7 +12,7 @@ export default function Page() {
       <p>O mapa, os resultados, a transmissão e a leitura do chat funcionam sem login. Só é preciso entrar para escrever no chat, reagir a mensagens e montar seu fantasy.</p>
 
       <h2>O que guardamos de cada aparelho</h2>
-      <p>Para saber quantas pessoas usam o DSB, cada instalação (ou navegador) recebe um identificador aleatório, criado no próprio aparelho. Com ele guardamos o modelo e o sistema do aparelho, a versão do aplicativo, se as notificações estão liberadas e as datas do primeiro e do último acesso. Se você entrar na sua conta, o aparelho fica ligado a ela.</p>
+      <p>Para saber quantas pessoas usam o DSB, cada instalação (ou navegador) recebe um identificador aleatório, criado no próprio aparelho. Com ele guardamos o modelo e o sistema do aparelho, a versão do aplicativo, se as notificações estão liberadas e em que dias o aplicativo foi aberto. Se você entrar na sua conta, o aparelho fica ligado a ela.</p>
 
       <h2>O que guardamos quando você entra</h2>
       <ul>
