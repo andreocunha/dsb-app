@@ -175,7 +175,7 @@ export function Fantasy() {
         <li><strong>Escolha {PICKS_PER_RACE} barcos por prova</strong><p>São {races.length} provas, e a escalação é separada para cada uma. Tudo é salvo na hora.</p></li>
         <li><strong>Ligue o Turbo solar</strong><p>Toque no 2x de um dos seus barcos: ele vale o dobro dos pontos na prova.</p></li>
         <li><strong>Troque até a largada</strong><p>Dá para mudar os barcos e o Turbo até o horário de início da prova. Depois disso, trava.</p></li>
-        <li><strong>Suba no ranking</strong><p>Quando a organização publica o resultado, os pontos dos seus barcos entram na sua soma.</p></li>
+        <li><strong>Suba no ranking</strong><p>Quando a organização publica o resultado, os pontos dos seus barcos entram na sua soma. Com os mesmos pontos, fica na frente quem montou o fantasy primeiro.</p></li>
       </ol>
       <p className="footnote">Fantasy gratuito, sem apostas ou prêmios em dinheiro.</p>
     </Sheet>
@@ -298,7 +298,7 @@ function Ranking({ ranking, userId }: { ranking: RankingRow[] | null; userId: st
         <strong>{player.points}<small> pts</small></strong>
       </li>)}
     </ol>
-    <p className="footnote">{ranking.length} {ranking.length === 1 ? 'participante' : 'participantes'}. Pontos com o Turbo solar já contado em dobro.</p>
+    <p className="footnote">{ranking.length} {ranking.length === 1 ? 'participante' : 'participantes'}. Pontos com o Turbo solar já contado em dobro. No empate, fica na frente quem montou o fantasy primeiro.</p>
   </section>;
 }
 

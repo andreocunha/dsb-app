@@ -97,9 +97,9 @@ export type Database = {
         Relationships: []
       }
       profiles: {
-        Row: { affiliation: string | null; avatar_url: string | null; banned_at: string | null; banned_by: string | null; created_at: string; id: string; name: string; role: string; team_id: string | null; team_status: string | null; terms_accepted_at: string | null }
-        Insert: { affiliation?: string | null; avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id: string; name: string; role?: string; team_id?: string | null; team_status?: string | null; terms_accepted_at?: string | null }
-        Update: { affiliation?: string | null; avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; id?: string; name?: string; role?: string; team_id?: string | null; team_status?: string | null; terms_accepted_at?: string | null }
+        Row: { affiliation: string | null; avatar_url: string | null; banned_at: string | null; banned_by: string | null; created_at: string; fantasy_since: string | null; id: string; name: string; role: string; team_id: string | null; team_status: string | null; terms_accepted_at: string | null }
+        Insert: { affiliation?: string | null; avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; fantasy_since?: string | null; id: string; name: string; role?: string; team_id?: string | null; team_status?: string | null; terms_accepted_at?: string | null }
+        Update: { affiliation?: string | null; avatar_url?: string | null; banned_at?: string | null; banned_by?: string | null; created_at?: string; fantasy_since?: string | null; id?: string; name?: string; role?: string; team_id?: string | null; team_status?: string | null; terms_accepted_at?: string | null }
         Relationships: []
       }
       notification_prefs: {
