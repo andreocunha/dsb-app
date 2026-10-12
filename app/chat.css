@@ -113,7 +113,7 @@
 .chat-day-group { display: flex; flex-direction: column; }
 .chat-day { position: sticky; top: 8px; z-index: 2; display: flex; justify-content: center; margin: 10px 0 6px; pointer-events: none; }
 .chat-day span, .chat-notice, .unread-divider span { padding: 5px 12px 6px; border-radius: 7.5px; background: var(--wa-chip); color: var(--wa-chip-text); font-size: 12.5px; line-height: 1.3; box-shadow: var(--wa-shadow); }
-.chat-notice { display: flex; justify-content: center; align-self: center; max-width: 85%; margin: 10px auto; text-align: center; }
+.chat-notice { display: flex; justify-content: center; align-self: center; max-width: 85%; margin: 10px auto; text-align: center; overflow-wrap: anywhere; }
 .chat-notice .spinner { width: 16px; height: 16px; color: var(--wa-green); }
 .chat-notice.notice-private { max-width: min(480px, 88%); background: var(--wa-notice); color: var(--wa-notice-text); }
 .unread-divider { margin: 10px 0 4px; padding: 5px 0; background: var(--wa-unread); text-align: center; }
@@ -307,7 +307,7 @@ button.mention:hover { text-decoration: underline; }
 .reactor-tabs [aria-selected="true"] { border-color: var(--wa-green); color: var(--wa-green); }
 .reactors { display: flex; flex-direction: column; padding: 0; list-style: none; }
 .reactors li > * { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 0; color: inherit; text-align: left; }
-.reactors li span { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 16px; }
+.reactors li span { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 16px; overflow-wrap: anywhere; }
 .reactors li small { color: var(--wa-text-2); font-size: 13px; }
 .reactors li b { font-size: 22px; }
 .confirm p { margin-bottom: 20px; color: var(--wa-text-2); }
@@ -329,7 +329,7 @@ button.mention:hover { text-decoration: underline; }
 .hero-photo:hover { filter: brightness(.92); }
 .group-hero .hero-photo { margin-bottom: 18px; }
 .group-hero .hero-photo > * { margin-bottom: 0; }
-.group-hero h1 { font-size: 24px; font-weight: 400; line-height: 1.3; }
+.group-hero h1 { display: -webkit-box; max-width: 100%; overflow: hidden; font-size: 24px; font-weight: 400; line-height: 1.3; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
 .group-hero p { margin-top: 2px; color: var(--wa-text-2); font-size: 16px; }
 .group-hero p b { color: var(--wa-green-strong); font-weight: 600; }
 /* Equipe e situação embaixo do nome, como a tag de membro nos dados do contato do WhatsApp. */
@@ -343,7 +343,7 @@ button.mention:hover { text-decoration: underline; }
 .group-row { display: flex; align-items: center; gap: 22px; width: 100%; min-height: 56px; margin: 0 -10px; padding: 8px 10px; border-radius: 12px; color: var(--wa-text); text-align: left; box-sizing: content-box; }
 .group-row:hover { background: var(--wa-hover); }
 .group-row > svg { flex-shrink: 0; color: var(--wa-icon); }
-.group-row > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.group-row > span { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
 .group-row strong { font-size: 16px; font-weight: 400; }
 .group-row small { color: var(--wa-text-2); font-size: 14px; line-height: 1.35; }
 .group-row em { color: var(--wa-text-2); font-size: 15px; font-style: normal; }
@@ -361,7 +361,7 @@ button.mention:hover { text-decoration: underline; }
 a.group-member:hover, .group-member.me { background: var(--wa-hover); }
 .group-member .avatar { width: 48px; height: 48px; font-size: 15px; }
 .group-member > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.group-member strong { font-size: 16px; font-weight: 400; }
+.group-member strong { overflow: hidden; font-size: 16px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .group-member small { overflow: hidden; color: var(--wa-text-2); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .group-member small.green { color: var(--wa-green-strong); font-weight: 500; }
 .admin-badge { padding: 2px 8px; border-radius: 4px; background: var(--wa-out); color: var(--wa-green-strong); font-size: 12px; font-style: normal; font-weight: 600; white-space: nowrap; }
@@ -688,7 +688,7 @@ button.group-member:hover { background: var(--wa-hover); }
   .viewer-stage-wrap, .viewer-stage-wrap:last-child { padding: 16px 96px; }
   .viewer-caption { max-width: 70%; margin: 0 auto; padding: 4px 16px 12px; color: var(--wa-text); }
   .viewer-caption .bubble-link { color: var(--wa-link); }
-  .group-info { position: relative; inset: auto; z-index: 4; flex: 0 0 clamp(340px, 42%, 620px); border-left: 1px solid var(--wa-divider); animation: none; }
+  .group-info { position: relative; inset: auto; z-index: 4; flex: 0 0 clamp(340px, 42%, 620px); min-width: 0; border-left: 1px solid var(--wa-divider); animation: none; }
   .group-info-header { min-height: 64px; padding: 0 16px; }
   .group-info-body { padding: 0 20px 24px; }
 }
