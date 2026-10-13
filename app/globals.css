@@ -646,10 +646,8 @@ button.race-row:disabled { cursor: default; }
 .segmented button:hover:not([aria-checked="true"]) { color: var(--text); }
 .segmented button[aria-checked="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px #0000001f; }
 [data-theme="dark"] .segmented button[aria-checked="true"] { background: var(--border-strong); }
-/* Estado escrito ao lado do título ("Ativado"), para não depender só da cor do controle. */
-.state-pill { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--surface-hover); color: var(--text-secondary); font-size: 11px; font-weight: 600; line-height: 1.5; vertical-align: 1px; white-space: nowrap; }
-.state-pill.on { background: var(--success-soft); color: var(--success); }
-.state-pill.alert { background: var(--danger-soft); color: var(--danger); }
+/* Aviso ao lado do título de um interruptor, para o que a chave não mostra ("Bloqueadas no celular"). */
+.state-pill { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--danger-soft); color: var(--danger); font-size: 11px; font-weight: 600; line-height: 1.5; vertical-align: 1px; white-space: nowrap; }
 /* Lista de escolha única com a explicação de cada opção: a marcada tem borda, fundo e o círculo preenchido. */
 .option-list { display: grid; gap: 8px; margin-top: 12px; }
 .option-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; text-align: left; transition: border-color .15s, box-shadow .15s, background .15s; }

@@ -455,7 +455,7 @@ function NotificationSettings({ userId }: { userId: string | null }) {
     <div className="settings-card">
       {/* Primeiro a resposta para "estou recebendo?"; as escolhas só aparecem com ele ligado. */}
       <Toggle title="Notificações do DSB" checked={on} disabled={loading || busy} onChange={() => void toggleAll()}
-        state={blocked ? { label: permission === 'ask' ? 'Sem permissão do celular' : 'Bloqueadas no celular', alert: true } : { label: on ? 'Ativadas' : 'Desativadas' }}
+        alert={blocked ? (permission === 'ask' ? 'Sem permissão do celular' : 'Bloqueadas no celular') : undefined}
         text={permission === 'ask' ? 'O celular ainda não tem permissão para mostrar as notificações do DSB. Ligue aqui para permitir.'
           : blocked ? `O celular está bloqueando as notificações do DSB. Ligue aqui para abrir os ajustes${Capacitor.getPlatform() === 'ios' ? ', toque em Notificações e permita.' : ' e permitir.'}`
           : !on ? 'Você não recebe nenhuma notificação do DSB. Ligue para escolher o que quer receber.'
@@ -494,18 +494,17 @@ function NotificationSettings({ userId }: { userId: string | null }) {
   </section>;
 }
 
-/** Interruptor com o estado escrito ao lado do título; `children` são as opções que só existem com ele ligado. */
-function Toggle({ title, text, checked, disabled, state, onChange, children }: {
+/** Interruptor: a chave já diz se está ligado. `children` são as opções que só existem com ele ligado. */
+function Toggle({ title, text, checked, disabled, alert, onChange, children }: {
   title: string; text: string; checked: boolean; disabled?: boolean;
-  /** Por padrão "Ativado" / "Desativado". */
-  state?: { label: string; alert?: boolean };
+  /** Aviso ao lado do título para o que a chave não mostra (o celular bloqueando as notificações). */
+  alert?: string;
   onChange: (checked: boolean) => void; children?: React.ReactNode;
 }) {
-  const pill = state ?? { label: checked ? 'Ativado' : 'Desativado' };
   return <div className="settings-row">
     <label className="settings-split toggle-row">
-      {/* Enquanto carrega ainda não há o que afirmar: o estado escrito só entra depois. */}
-      <div><h3>{title}{!disabled && <span className={`state-pill ${pill.alert ? 'alert' : checked ? 'on' : ''}`}>{pill.label}</span>}</h3><p>{text}</p></div>
+      {/* Enquanto carrega ainda não há o que afirmar: o aviso só entra depois. */}
+      <div><h3>{title}{alert && !disabled && <span className="state-pill">{alert}</span>}</h3><p>{text}</p></div>
       <button type="button" role="switch" className="toggle" aria-checked={checked} aria-label={title} disabled={disabled} onClick={() => onChange(!checked)}><span /></button>
     </label>
     {children}
