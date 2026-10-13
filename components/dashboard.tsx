@@ -9,6 +9,7 @@ import { eventConfig, youtubeEmbedUrl } from '@/lib/event-config';
 import { useLiveUrl } from '@/lib/live-url';
 import { ResultsSheet } from './results';
 import { ScheduleCard } from './schedule';
+import { useNotificationCenter } from './notifications';
 import { useAuth } from './auth';
 import { supabase } from '@/lib/supabase';
 import { onOverlaysChange } from '@/lib/overlays';
@@ -30,6 +31,7 @@ export function Dashboard({ visible }: { visible: boolean }) {
   // Nome do que está acontecendo (ou vem a seguir), para a barra da live.
   const current = items && now ? featured(phases(items, now)) : null;
   const { isAdmin } = useAuth();
+  const notifications = useNotificationCenter();
   const frame = useRef<HTMLIFrameElement>(null);
   const trackerOrigin = new URL(eventConfig.trackingUrl).origin;
 
@@ -91,6 +93,7 @@ export function Dashboard({ visible }: { visible: boolean }) {
         <ScheduleCard items={items} actions={<div className="hud-actions">
           <button className="hud-results" aria-haspopup="dialog" aria-label="Resultado" onClick={() => setResults(true)}><Trophy size={16} /><span>Resultado</span></button>
           <button className="hud-live" aria-pressed={live !== 'off'} aria-label="Live" onClick={() => setLive(live === 'off' ? 'full' : 'off')}><Radio size={16} /><span>Live</span></button>
+          {notifications.bell}
         </div>} />
       </div>
 
@@ -108,6 +111,7 @@ export function Dashboard({ visible }: { visible: boolean }) {
         {visible && live !== 'off' && <Live mode={live} raceName={current?.item.title ?? 'Desafio Solar Brasil'} setMode={setLive} />}
       </div>
       <ResultsSheet open={results} onClose={() => setResults(false)} />
+      {notifications.modal}
     </div>
   );
 }

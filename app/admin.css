@@ -87,7 +87,13 @@
 /* Prévia no formato da notificação do celular. */
 .push-preview { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-subtle); }
 .push-preview img { flex-shrink: 0; border-radius: 9px; }
-.push-preview div { min-width: 0; }
+.push-preview div { flex: 1; min-width: 0; }
+.push-preview .push-preview-image { width: 44px; height: 44px; margin-left: auto; border-radius: 8px; object-fit: cover; }
+.announce-pick { display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border: 1px dashed var(--border-strong); border-radius: 8px; color: var(--text-secondary); font-size: 14px; font-weight: 500; transition: background .15s, color .15s; }
+.announce-pick:hover { background: var(--surface-hover); color: var(--text); }
+.announce-image { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-hover); }
+.announce-image img { display: block; width: 100%; max-height: 220px; object-fit: contain; }
+.announce-image .icon-button { position: absolute; top: 8px; right: 8px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 .push-preview strong { display: block; color: var(--text); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .push-preview p { margin-top: 2px; color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
 .admin-when { flex-shrink: 0; color: var(--text-tertiary); font-size: 12px; font-variant-numeric: tabular-nums; }

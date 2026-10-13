@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, Flag, LogIn, Megaphone, Minus, Plus, Radio, RotateCcw, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, ChevronRight, Flag, ImagePlus, LogIn, Megaphone, Minus, Plus, Radio, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useApp } from './app-shell';
 import { SchedulePanel } from './admin-schedule';
 import { StatsPanel } from './admin-stats';
@@ -11,6 +11,7 @@ import type { Race, Team } from '@/lib/data';
 import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
 import { hasStarted, useNow } from '@/lib/races';
 import { youtubeEmbedUrl } from '@/lib/event-config';
+import { NOTIFICATIONS_MOCK } from '@/lib/notifications';
 import {
   DOC_ITEMS, duelStageLabel, duelWinner, formatDuel, formatDuration, lapSplits, parseDuel, sortRace,
   type Duel, type DuelStage, type Score, type Status,
@@ -539,11 +540,26 @@ function TeamExtras({ team, races, penalties, onChanged }: { team: Team; races: 
 
 const TITLE_MAX = 65;
 const BODY_MAX = 240;
+// Mesmo limite e tipos do bucket avisos. No Android a imagem também aparece na notificação (o GIF, parado).
+const IMAGE_MAX = 5 * 1024 * 1024;
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+
+/** Envia a imagem do recado para o bucket público avisos e devolve o link dela. */
+async function uploadAnnouncementImage(file: File) {
+  const ext = file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1];
+  const path = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from('avisos').upload(path, file, { contentType: file.type, cacheControl: '31536000' });
+  if (error) throw error;
+  return supabase.storage.from('avisos').getPublicUrl(path).data.publicUrl;
+}
 
 function NotifyPanel() {
   const { notify } = useApp();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  // Imagem ou GIF opcional: aparece ao abrir o recado no app.
+  const [image, setImage] = useState<{ file: File; url: string } | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recent, setRecent] = useState<{ title: string; sent_at: string }[] | null>(null);
@@ -551,13 +567,39 @@ function NotifyPanel() {
   useEffect(() => { void loadRecent(); }, []);
   const ready = title.trim() !== '' && body.trim() !== '';
 
+  function pick(file: File | undefined) {
+    if (!file) return;
+    if (!IMAGE_TYPES.includes(file.type)) { notify('Use uma imagem PNG, JPG, WebP ou GIF.'); return; }
+    if (file.size > IMAGE_MAX) { notify('A imagem pode ter no máximo 5 MB.'); return; }
+    if (image) URL.revokeObjectURL(image.url);
+    setImage({ file, url: URL.createObjectURL(file) });
+  }
+  function clearImage() {
+    if (image) URL.revokeObjectURL(image.url);
+    setImage(null);
+  }
+
   async function send() {
     setBusy(true);
-    const { error } = await supabase.rpc('send_announcement', { p_title: title.trim(), p_body: body.trim() });
+    if (process.env.NODE_ENV === 'development' && NOTIFICATIONS_MOCK) {
+      // Mock (npm run dev): o recado só aparece no sino deste navegador; ninguém recebe nada.
+      const { addMockNotification } = await import('@/lib/notifications-mock');
+      addMockNotification({ title: title.trim(), body: body.trim(), image_url: image ? URL.createObjectURL(image.file) : null });
+      setBusy(false); setConfirm(false); setTitle(''); setBody(''); clearImage();
+      notify('Mock: recado só no sino deste navegador, ninguém recebeu.');
+      return;
+    }
+    let imageUrl: string | null = null;
+    try { if (image) imageUrl = await uploadAnnouncementImage(image.file); } catch (error) {
+      setBusy(false);
+      notify(`Não consegui enviar a imagem: ${errorMessage(error)}`);
+      return;
+    }
+    const { error } = await supabase.rpc('send_announcement', { p_title: title.trim(), p_body: body.trim(), p_image_url: imageUrl });
     setBusy(false);
     setConfirm(false);
     if (error) { notify(errorMessage(error)); return; }
-    setTitle(''); setBody('');
+    setTitle(''); setBody(''); clearImage();
     notify('Notificação enviada para todos.');
     // O envio acontece logo depois, pela Edge Function: o histórico atualiza em seguida.
     setTimeout(() => void loadRecent(), 3000);
@@ -575,10 +617,17 @@ function NotifyPanel() {
           <span>Texto <small>{body.length}/{BODY_MAX}</small></span>
           <textarea required maxLength={BODY_MAX} rows={3} placeholder="Ex.: Vento forte na raia. Acompanhe a largada ao vivo no app." value={body} onChange={e => setBody(e.target.value)} />
         </label>
-        <div className="push-preview" aria-label="Prévia da notificação">
-          <img src="/icons/icon-192.png" alt="" width={36} height={36} />
-          <div><strong>{title.trim() || 'Título'}</strong><p>{body.trim() || 'Texto da notificação'}</p></div>
+        <div className="admin-field">
+          <span>Imagem ou GIF <small>opcional · até 5 MB</small></span>
+          <input ref={picker} type="file" accept={IMAGE_TYPES.join(',')} hidden onChange={e => { pick(e.target.files?.[0]); e.target.value = ''; }} />
+          {image
+            ? <div className="announce-image">
+                <img src={image.url} alt="Imagem escolhida" />
+                <button type="button" className="icon-button" onClick={clearImage} aria-label="Tirar a imagem"><X size={18} /></button>
+              </div>
+            : <button type="button" className="announce-pick" onClick={() => picker.current?.click()}><ImagePlus size={18} /> Escolher imagem</button>}
         </div>
+        <PushPreview title={title} body={body} image={image?.url} />
         <button className="button primary" type="submit" disabled={!ready}><Send size={16} /> Enviar para todos</button>
       </form>
       <p className="settings-hint">Chega no celular de quem tem o app instalado e deixou “Anúncios gerais” ligado em Configurações.</p>
@@ -598,11 +647,10 @@ function NotifyPanel() {
 
     <Sheet open={confirm} onClose={() => setConfirm(false)} title="Enviar para todo mundo?">
       <div className="prose">
-        <div className="push-preview">
-          <img src="/icons/icon-192.png" alt="" width={36} height={36} />
-          <div><strong>{title.trim()}</strong><p>{body.trim()}</p></div>
-        </div>
-        <p>A notificação vai para todos os aparelhos de uma vez. <strong>Não dá para desfazer.</strong></p>
+        <PushPreview title={title} body={body} image={image?.url} />
+        <p>{NOTIFICATIONS_MOCK
+          ? <>Modo mock: o recado só aparece no sino deste navegador. <strong>Ninguém recebe nada.</strong></>
+          : <>A notificação vai para todos os aparelhos de uma vez e fica no sino da home. <strong>Não dá para desfazer.</strong></>}</p>
         <div className="account-actions">
           <button className="button" onClick={() => setConfirm(false)} autoFocus>Cancelar</button>
           <button className="button primary" disabled={busy} onClick={() => void send()}><Megaphone size={16} /> {busy ? 'Enviando…' : 'Enviar agora'}</button>
@@ -610,6 +658,15 @@ function NotifyPanel() {
       </div>
     </Sheet>
   </>;
+}
+
+/** Como a notificação chega: título, texto e, com imagem, a miniatura ao lado (como no Android). */
+function PushPreview({ title, body, image }: { title: string; body: string; image?: string }) {
+  return <div className="push-preview" aria-label="Prévia da notificação">
+    <img src="/icons/icon-192.png" alt="" width={36} height={36} />
+    <div><strong>{title.trim() || 'Título'}</strong><p>{body.trim() || 'Texto da notificação'}</p></div>
+    {image && <img className="push-preview-image" src={image} alt="" />}
+  </div>;
 }
 
 // ---------------------------------------------------------------------

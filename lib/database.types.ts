@@ -162,6 +162,12 @@ export type Database = {
         Update: { active?: boolean; article_delivered?: boolean; color?: string; docs_delivered?: number; id?: string; initials?: string; logo?: string | null; name?: string; university?: string }
         Relationships: []
       }
+      notifications: {
+        Row: { id: number; kind: 'announcement' | 'race_start' | 'fantasy_reminder'; title: string; body: string | null; image_url: string | null; created_at: string }
+        Insert: { id?: never; kind: 'announcement' | 'race_start' | 'fantasy_reminder'; title: string; body?: string | null; image_url?: string | null; created_at?: string }
+        Update: { id?: never; kind?: 'announcement' | 'race_start' | 'fantasy_reminder'; title?: string; body?: string | null; image_url?: string | null; created_at?: string }
+        Relationships: []
+      }
       event_settings: {
         Row: { id: boolean; live_url: string; updated_at: string; updated_by: string | null }
         Insert: { id?: boolean; live_url?: string; updated_at?: string; updated_by?: string | null }
@@ -349,7 +355,7 @@ export type Database = {
       admin_set_team_extras: { Args: { p_team_id: string; p_docs: number; p_article: boolean }; Returns: undefined }
       admin_add_penalty: { Args: { p_team_id: string; p_points: number; p_reason: string; p_race_id?: string | null }; Returns: number }
       admin_delete_penalty: { Args: { p_id: number }; Returns: undefined }
-      send_announcement: { Args: { p_title: string; p_body: string }; Returns: undefined }
+      send_announcement: { Args: { p_title: string; p_body: string; p_image_url?: string | null }; Returns: number }
       recent_announcements: { Args: { p_limit?: number }; Returns: { title: string; sent_at: string }[] }
       track_install: {
         Args: { p_id: string; p_platform: string; p_model?: string | null; p_os?: string | null; p_app_version?: string | null; p_push?: string | null }

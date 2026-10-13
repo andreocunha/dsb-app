@@ -15,6 +15,7 @@ import { mentionsMe } from '@/lib/chat-format';
 import { closeTopOverlay } from '@/lib/overlays';
 import { hideSplash, listenBackButton, paintStatusBar } from '@/lib/system-ui';
 import { clearReadNotifications, registerPush } from '@/lib/push';
+import { openNotification } from '@/lib/notifications';
 import { onResume } from '@/lib/resume';
 import { trackInstall } from '@/lib/install';
 import { syncLiveSharing } from '@/lib/live-location';
@@ -215,11 +216,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [userId]);
   // Registra de novo ao entrar/sair, para associar o aparelho à conta.
   // Tocar numa notificação de mensagem abre a conversa dela; o voltar leva à lista, como em qualquer conversa.
+  // Tocar num recado da organização ou aviso de prova abre o recado no sino da home.
   // Quem recusou a pergunta do sistema fica sabendo onde reativar (Configurações › Notificações).
   // A instalação entra nos números da organização já na abertura, e de novo com a resposta à pergunta do sistema.
   useEffect(() => {
     void trackInstall(userId);
-    void registerPush(setToast, conversa => router.push(`/comunidade/?c=${encodeURIComponent(conversa)}`)).then(permission => {
+    const openChat = (conversa: string) => router.push(`/comunidade/?c=${encodeURIComponent(conversa)}`);
+    // Recado ou aviso de prova: o sino da home abre direto nele.
+    const openAviso = (id: number) => { if (window.location.pathname !== '/') router.replace('/'); openNotification(id); };
+    void registerPush(setToast, openChat, openAviso).then(permission => {
       if (permission && permission !== 'granted') setToast('Notificações desligadas neste aparelho.', { label: 'Ativar', run: () => router.push('/configuracoes/#settings-notifications') });
       void trackInstall(userId);
     });

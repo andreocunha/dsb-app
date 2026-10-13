@@ -29,6 +29,94 @@ const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)')
 const isModal = () => window.matchMedia('(min-width: 640px)').matches;
 const EASE = 'cubic-bezier(.2, .8, .2, 1)';
 
+// Modais empilhados (ex.: recado aberto por cima da lista) travam a rolagem da página uma vez só.
+let travas = 0, rolagemAntes = '';
+function travarRolagem() {
+  if (travas++ === 0) { rolagemAntes = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
+  return () => { if (--travas === 0) document.body.style.overflow = rolagemAntes; };
+}
+
+/**
+ * Modal centralizado em qualquer tamanho de tela (ver .modal no CSS): cresce com o conteúdo até o limite
+ * da tela e, passando disso, rola por dentro. Tocar fora fecha.
+ * `fill`: ocupa a tela inteira e entra deslizando da direita, como uma página nova (com a seta de fechar).
+ *
+ * Mesmas regras do Sheet: `page` identifica o conteúdo atual e, com `onBack`, aparece a seta de voltar
+ * (o voltar do Android e o Esc também voltam). `depth` diz o sentido da troca; cada página guarda a própria rolagem.
+ */
+export function Modal({ open, onClose, onBack, page = '', depth = 0, title, fill = false, children }: {
+  open: boolean; onClose: () => void; onBack?: () => void; page?: string; depth?: number; title: string; fill?: boolean; children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const fechar = useRef(onClose);
+  useEffect(() => { fechar.current = onClose; }, [onClose]);
+  const voltar = useRef(onBack);
+  useEffect(() => { voltar.current = onBack; }, [onBack]);
+
+  const body = useRef<HTMLDivElement>(null);
+  const rolagens = useRef(new Map<string, number>());
+  const atual = useRef({ page, depth });
+  useLayoutEffect(() => {
+    const anterior = atual.current;
+    if (anterior.page === page) return;
+    atual.current = { page, depth };
+    const el = body.current;
+    if (!el) return;
+    el.scrollTop = rolagens.current.get(page) ?? 0;
+    // Trocou de página fechado (ou fechando): reabre direto, sem deslizar.
+    if (reduceMotion() || !open || !ref.current?.open) return;
+    const lado = depth >= anterior.depth ? 1 : -1;
+    el.animate([{ opacity: 0, transform: `translateX(${lado * 28}px)` }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE });
+    // open só decide se anima; a troca é marcada pela página.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, depth]);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (!open) {
+      if (!dialog.open) return;
+      let cancelled = false;
+      const done = () => {
+        if (cancelled || !dialog.open) return;
+        dialog.close();
+        // As animações de saída ficam presas (fill: forwards) até cancelar.
+        dialog.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+      };
+      if (reduceMotion()) { done(); return; }
+      const frames = fill ? [{ transform: 'none' }, { transform: 'translateX(100%)' }]
+        : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px) scale(.98)' }];
+      dialog.animate(frames, { duration: fill ? 220 : 140, easing: EASE, fill: 'forwards' }).finished.then(done, done);
+      try { dialog.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, pseudoElement: '::backdrop', fill: 'forwards' }); } catch { /* sem suporte: o fundo some junto */ }
+      // Garantia: com a aba em segundo plano a animação não avança, mas o modal precisa fechar.
+      const timer = setTimeout(done, 400);
+      return () => { cancelled = true; clearTimeout(timer); };
+    }
+    dialog.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    if (!dialog.open) { dialog.showModal(); dialog.focus(); }
+    const destrava = travarRolagem();
+    const solta = registerOverlay(() => (voltar.current ? voltar.current() : fechar.current()));
+    return () => { destrava(); solta(); };
+    // fill só muda com o modal fechado (troca de layout): a animação de saída usa o valor do momento.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  useEffect(() => { const dialog = ref.current; return () => dialog?.close(); }, []);
+
+  return <dialog ref={ref} tabIndex={-1} className={`modal ${fill ? 'fill' : ''}`} aria-label={title}
+    onCancel={e => { e.preventDefault(); e.stopPropagation(); (onBack ?? onClose)(); }}
+    onKeyDown={e => { if (e.key === 'Escape') e.stopPropagation(); }}
+    onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-content">
+      <header className="modal-header">
+        {(onBack || fill) && <button className="icon-button" onClick={onBack ?? onClose} aria-label={onBack ? 'Voltar' : 'Fechar'}><ArrowLeft size={20} /></button>}
+        <h2>{title}</h2>
+        {!fill && <button className="icon-button" onClick={onClose} aria-label="Fechar"><X size={20} /></button>}
+      </header>
+      <div className="modal-body" ref={body} onScroll={e => rolagens.current.set(atual.current.page, e.currentTarget.scrollTop)}>{children}</div>
+    </div>
+  </dialog>;
+}
+
 /**
  * Bottom sheet no mobile, modal centralizado a partir de 640px (ver .sheet no CSS).
  * Abre e fecha com animação; no mobile, arrastar para baixo (em qualquer lugar, com a lista no topo) fecha.
