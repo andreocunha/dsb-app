@@ -10,6 +10,7 @@ const permissionOf = (receive: string): PushPermission => receive === 'granted' 
 // Guardados para as Configurações poderem refazer o registro sem perder o toque nas notificações.
 let avisos: ((mensagem: string) => void) | undefined;
 let aoAbrir: ((conversa: string) => void) | undefined;
+let aoAbrirAviso: ((notificacao: number) => void) | undefined;
 
 /** Como este aparelho está para receber notificações; null fora do app das lojas. */
 export async function pushPermission(): Promise<PushPermission | null> {
@@ -38,7 +39,10 @@ async function register() {
   });
   await PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
     const conversa = notification.data?.c;
-    if (typeof conversa === 'string' && conversa) aoAbrir?.(conversa);
+    if (typeof conversa === 'string' && conversa) { aoAbrir?.(conversa); return; }
+    // Recado da organização ou aviso de prova: o id dele no histórico (sino da home).
+    const aviso = Number(notification.data?.n);
+    if (Number.isInteger(aviso) && aviso > 0) aoAbrirAviso?.(aviso);
   });
   await PushNotifications.register();
 }
@@ -50,13 +54,16 @@ async function register() {
  *
  * `avisar` recebe o motivo quando algo dá errado, para o problema aparecer na tela
  * em vez de ficar escondido no log do aparelho. `abrir` recebe a conversa da notificação
- * tocada ("geral" ou o id da particular), inclusive quando o toque é que abriu o app.
+ * tocada ("geral" ou o id da particular), inclusive quando o toque é que abriu o app;
+ * `abrirAviso`, o id no histórico de um recado ou aviso de prova tocado.
  *
  * Devolve como ficou a permissão: quem recusou a pergunta do sistema reativa pelas Configurações.
  */
-export async function registerPush(avisar?: (mensagem: string) => void, abrir?: (conversa: string) => void): Promise<PushPermission | null> {
+export async function registerPush(
+  avisar?: (mensagem: string) => void, abrir?: (conversa: string) => void, abrirAviso?: (notificacao: number) => void,
+): Promise<PushPermission | null> {
   if (!enabled()) return null;
-  avisos = avisar; aoAbrir = abrir;
+  avisos = avisar; aoAbrir = abrir; aoAbrirAviso = abrirAviso;
   try {
     const { PushNotifications } = await import('@capacitor/push-notifications');
     let permission = await PushNotifications.checkPermissions();

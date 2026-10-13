@@ -177,6 +177,9 @@ img.avatar { object-fit: cover; }
 .hud-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); font-size: 13px; font-weight: 500; }
 .hud-actions button:hover { background: var(--surface-hover); }
 .hud-actions button[aria-pressed="true"] { border-color: var(--brand); background: var(--brand); color: var(--on-brand); }
+/* Sino: só o ícone, com o número no canto (fica do tamanho dele também no desktop, onde os outros se esticam). */
+.hud-actions .hud-bell { position: relative; flex: 0 0 auto; width: 38px; padding: 0; }
+.bell-badge { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border: 2px solid var(--surface); border-radius: 999px; background: var(--brand); color: var(--on-brand); font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .hud-card-title { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 6px 8px; }
 .hud-card-title h2 { font-size: 14px; font-weight: 600; }
 
@@ -229,6 +232,60 @@ img.avatar { object-fit: cover; }
   .live-full .live-bar { padding: 8px 12px 8px 20px; }
   .live-pip { left: 16px; bottom: 16px; width: 400px; }
 }
+
+/* ---------- Modal centralizado (Modal): cresce com o conteúdo até o limite da tela, depois rola por dentro ---------- */
+.modal { --modal-max: min(760px, calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); width: min(520px, calc(100% - 32px)); max-width: none; height: fit-content; max-height: var(--modal-max); margin: auto; padding: 0; border: 0; border-radius: 20px; background: transparent; color: var(--text); }
+.modal::backdrop { background: var(--scrim); }
+.modal:focus { outline: none; }
+.modal[open] { animation: modal-in .2s cubic-bezier(.2, .8, .2, 1); }
+.modal[open]::backdrop { animation: fade-in .2s ease-out; }
+.modal-content { display: flex; flex-direction: column; max-height: var(--modal-max); overflow: hidden; border-radius: 20px; background: var(--surface); box-shadow: var(--sheet-shadow); }
+.modal-header { display: flex; flex-shrink: 0; align-items: center; gap: 6px; height: 60px; padding: 0 10px 0 20px; }
+.modal-header:has(> .icon-button:first-child) { padding-left: 8px; }
+.modal-header h2 { flex: 1; min-width: 0; font-size: 17px; font-weight: 600; letter-spacing: -.2px; }
+.modal-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 20px; }
+/* fill: a tela inteira, como uma página nova (lista de notificações no celular). */
+.modal.fill { --modal-max: 100%; width: 100%; height: 100%; margin: 0; border-radius: 0; }
+.modal.fill > .modal-content { height: 100%; }
+.modal.fill::backdrop { background: transparent; }
+.modal.fill[open] { animation: screen-in .28s cubic-bezier(.2, .8, .2, 1); }
+.modal.fill[open]::backdrop { animation: none; }
+.modal.fill > .modal-content { border-radius: 0; box-shadow: none; }
+.modal.fill .modal-header { height: calc(56px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 16px 0 8px; border-bottom: 1px solid var(--border); }
+.modal.fill .modal-header .icon-button { width: 40px; height: 40px; color: var(--text); }
+.modal.fill .modal-body { padding: 8px 16px calc(24px + var(--safe-bottom)); }
+@keyframes screen-in { from { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .modal[open], .modal.fill[open] { animation: none; } }
+
+/* ---------- Notificações (sino da home) ---------- */
+.notif-list { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; padding: 0; list-style: none; }
+.notif-item { position: relative; display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 12px 8px; border-radius: 12px; text-align: left; transition: background .15s; }
+.notif-item:hover { background: var(--surface-hover); }
+.notif-icon { display: grid; flex-shrink: 0; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--surface-hover); color: var(--text-tertiary); }
+.notif-item.fresh .notif-icon { background: var(--brand-soft); color: var(--brand); }
+.notif-dot { position: absolute; top: 10px; left: 35px; width: 11px; height: 11px; border: 2px solid var(--surface); border-radius: 50%; background: var(--brand); }
+.notif-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; padding-top: 1px; }
+.notif-text strong { color: var(--text); font-size: 14px; font-weight: 500; line-height: 1.35; }
+.notif-item.fresh .notif-text strong { font-weight: 650; }
+.notif-when { margin-top: 3px; color: var(--text-tertiary); font-size: 12px; }
+.notif-body { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 13px; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.notif-thumb { flex-shrink: 0; align-self: center; width: 52px; height: 52px; border-radius: 10px; background: var(--surface-hover); object-fit: cover; }
+.notif-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 28px 16px 36px; color: var(--text-secondary); text-align: center; }
+.notif-empty > span { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 8px; border-radius: 50%; background: var(--surface-hover); color: var(--text-tertiary); }
+.notif-empty h3 { color: var(--text); font-size: 15px; font-weight: 600; }
+.notif-detail { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
+/* Enquanto a imagem carrega, um bloco neutro no lugar dela; o GIF vai no tamanho original para seguir animado. */
+.notif-media { display: grid; place-items: center; min-height: 180px; margin: 0 0 10px; border-radius: 14px; background: var(--surface-hover); }
+.notif-media.loaded { min-height: 0; background: none; }
+/* A imagem leva a moldura junto: limitada na altura, encolhe por inteiro e fica centralizada, sem faixas dos lados. */
+.notif-media img { display: block; width: auto; max-width: 100%; height: auto; max-height: 75dvh; border-radius: 14px; opacity: 0; transition: opacity .2s; }
+/* Desktop: imagem em retrato não empurra o texto para fora do modal. */
+@media (min-width: 900px) { .notif-media img { max-height: min(48dvh, 420px); } }
+.notif-media.loaded img { opacity: 1; }
+.notif-meta { display: flex; align-items: center; gap: 6px; color: var(--text-tertiary); font-size: 12px; font-weight: 500; }
+.notif-detail h3 { color: var(--text); font-size: 19px; font-weight: 700; letter-spacing: -.3px; line-height: 1.3; }
+.notif-detail-body { color: var(--text-secondary); font-size: 15px; line-height: 1.55; white-space: pre-line; }
+.notif-detail .sheet-row { margin-top: 10px; border-top: 1px solid var(--border); }
 
 /* ---------- Primitivos usados também fora do chat (o chat fica em chat.css) ---------- */
 .badge { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--brand); color: var(--on-brand); font-size: 11px; font-weight: 600; line-height: 1; }

@@ -2,12 +2,15 @@
 //
 // Três modos:
 //   { "modo": "provas" }                      → avisos automáticos das provas
-//   { "modo": "aviso", "titulo": "...", "texto": "..." } → recado para todo mundo
+//   { "modo": "aviso", "titulo": "...", "texto": "...", "imagem"?: "https://…", "notificacao"?: 12 }
+//                                             → recado para todo mundo (send_announcement já o pôs no histórico)
 //   { "modo": "mensagem", "id": 123 }         → mensagem nova do chat: particular, grupo, resposta ou menção no grupo geral (chamado pelo gatilho do banco)
 //
 // Cada pessoa escolhe o que recebe em Configurações (tabela notification_prefs; sem linha = padrão):
 //   chat: 'all' (tudo, inclusive a Torcida Solar), 'mentions' (padrão) ou 'off'
 //   fantasy: lembrete 1 hora antes da prova · announcements: largadas e recados da organização
+//
+// Recados e avisos das provas também ficam no histórico (tabela notifications), que o sino da home mostra.
 //
 // Segredos necessários (Supabase → Edge Functions → Secrets):
 //   FCM_SERVICE_ACCOUNT  JSON da conta de serviço do Firebase
@@ -67,6 +70,8 @@ type Notificacao = {
   canal?: string;
   /** Agrupa por conversa: no Android a nova substitui a anterior; no iOS ficam empilhadas juntas. */
   grupo?: string;
+  /** Imagem grande na notificação do Android (GIF aparece parado; animado só ao abrir no app). */
+  imagem?: string;
 };
 
 /** Envia para cada aparelho e devolve os tokens que o Firebase considerou inválidos. */
@@ -84,7 +89,7 @@ async function enviar(conta: ContaServico, tokens: string[], aviso: Notificacao)
       body: JSON.stringify({
         message: {
           token,
-          notification: { title: aviso.titulo, body: aviso.texto },
+          notification: { title: aviso.titulo, body: aviso.texto, ...(aviso.imagem ? { image: aviso.imagem } : {}) },
           data: aviso.dados,
           android: { priority: 'high', notification: { channel_id: aviso.canal ?? 'dsb', sound: 'default', tag: aviso.grupo } },
           apns: { payload: { aps: { sound: 'default', 'thread-id': aviso.grupo } } },
@@ -234,7 +239,7 @@ Deno.serve(async (req) => {
   if (!conta.private_key) return new Response('FCM_SERVICE_ACCOUNT ausente', { status: 500 });
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-  const { modo = 'provas', titulo, texto, id } = await req.json().catch(() => ({}));
+  const { modo = 'provas', titulo, texto, id, imagem, notificacao } = await req.json().catch(() => ({}));
 
   if (modo === 'mensagem') {
     if (!Number.isInteger(id)) return new Response('informe o id da mensagem', { status: 400 });
@@ -242,11 +247,20 @@ Deno.serve(async (req) => {
   }
 
   // Monta a lista de avisos a enviar agora.
-  // tipo: qual filtro das Configurações decide quem recebe.
-  const avisos: { chave: string; titulo: string; texto: string; tipo: 'fantasy' | 'announcements' }[] = [];
+  // tipo: qual filtro das Configurações decide quem recebe. historico: tipo no sino da home;
+  // sem ele o aviso já está lá (o recado entra pelo send_announcement). notificacao: id no histórico, para o toque abrir.
+  type Aviso = {
+    chave: string; titulo: string; texto: string; tipo: 'fantasy' | 'announcements';
+    historico?: 'race_start' | 'fantasy_reminder'; imagem?: string; notificacao?: number;
+  };
+  const avisos: Aviso[] = [];
   if (modo === 'aviso') {
     if (!titulo || !texto) return new Response('informe titulo e texto', { status: 400 });
-    avisos.push({ chave: `aviso:${Date.now()}`, titulo, texto, tipo: 'announcements' });
+    avisos.push({
+      chave: `aviso:${Date.now()}`, titulo, texto, tipo: 'announcements',
+      imagem: typeof imagem === 'string' && imagem.startsWith('https://') ? imagem : undefined,
+      notificacao: Number.isInteger(notificacao) ? notificacao : undefined,
+    });
   } else {
     const { data: provas } = await supabase
       .from('races')
@@ -262,6 +276,7 @@ Deno.serve(async (req) => {
           titulo: `Prova ${prova.number} começa em 1 hora`,
           texto: `${prova.name}. Última chance de mudar seu fantasy.`,
           tipo: 'fantasy',
+          historico: 'fantasy_reminder',
         });
       } else if (faltam <= 0 && faltam > -10) {
         avisos.push({
@@ -269,6 +284,7 @@ Deno.serve(async (req) => {
           titulo: `${prova.name} começou!`,
           texto: 'Acompanhe os barcos ao vivo no mapa.',
           tipo: 'announcements',
+          historico: 'race_start',
         });
       }
     }
@@ -287,9 +303,15 @@ Deno.serve(async (req) => {
     // push_log evita mandar o mesmo aviso duas vezes se o agendamento repetir.
     const { error } = await supabase.from('push_log').insert({ chave: aviso.chave, titulo: aviso.titulo });
     if (error) { resultado[aviso.chave] = 'já enviado antes'; continue; }
+    if (aviso.historico) {
+      const { data: linha } = await supabase.from('notifications')
+        .insert({ kind: aviso.historico, title: aviso.titulo, body: aviso.texto }).select('id').single();
+      aviso.notificacao = linha?.id;
+    }
     const fora = desligou(aviso.tipo);
     const tokens = (aparelhos ?? []).filter(a => !a.user_id || !fora.has(a.user_id)).map(a => a.token);
-    const { enviados, invalidos } = await enviar(conta, tokens, aviso);
+    const dados = aviso.notificacao ? { n: String(aviso.notificacao) } : undefined;
+    const { enviados, invalidos } = await enviar(conta, tokens, { ...aviso, dados });
     if (invalidos.length) await supabase.from('push_devices').delete().in('token', invalidos);
     resultado[aviso.chave] = { enviados, removidos: invalidos.length };
   }
