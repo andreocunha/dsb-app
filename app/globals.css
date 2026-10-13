@@ -218,9 +218,11 @@ img.avatar { object-fit: cover; }
   .race-card .hud-actions button { padding: 0 10px; }
   .live-bar button span { display: none; }
 }
-/* Tela estreita: primeiro o Live vira só ícone; só em tela bem estreita o Resultado também. */
-@media (max-width: 420px) { .race-card .hud-live { width: 38px; padding: 0; } .race-card .hud-live span { display: none; } }
-@media (max-width: 340px) { .race-card .hud-results { width: 38px; padding: 0; } .race-card .hud-results span { display: none; } }
+/* Celular: com o sino ao lado, Resultado e Live ficam só no ícone, para o título e o horário caberem em uma linha. */
+@media (max-width: 480px) {
+  .race-card .hud-results, .race-card .hud-live { width: 38px; padding: 0; }
+  .race-card .hud-results span, .race-card .hud-live span { display: none; }
+}
 @media (min-width: 900px) {
   .home-stage { position: absolute; inset: 0; }
   .home-hud { position: absolute; top: 16px; left: 16px; z-index: 2; display: flex; flex-direction: column; gap: 10px; width: 330px; max-height: calc(100% - 32px); }
