@@ -351,7 +351,7 @@ function BracketAdmin({ race, data }: { race: Race; data: ResultsData }) {
     </section>
 
     <Sheet open={!!editing?.open} onClose={() => setEditing(e => e && { ...e, open: false })} title={editing ? titleOf(editing.entry) : 'Duelo'} subtitle={editing && titleOf(editing.entry) !== stageOf(editing.entry) ? stageOf(editing.entry) : undefined}>
-      {editing && <DuelForm key={`${editing.entry.code}-${editing.entry.duel.team_a}-${editing.entry.duel.team_b}`} duel={editing.entry.duel} saved={editing.entry.saved} teams={data.teams}
+      {editing && <DuelForm key={`${editing.entry.code}-${editing.entry.duel.team_a}-${editing.entry.duel.team_b}`} code={editing.entry.code} duel={editing.entry.duel} saved={editing.entry.saved} teams={data.teams}
         onDone={() => setEditing(e => e && { ...e, open: false })} />}
     </Sheet>
     <Sheet open={!!sheet?.open} onClose={() => setSheet(s => s && { ...s, open: false })} title={selected?.name ?? 'Equipe'} subtitle={`Prova ${race.number} · ${race.name}`}>
@@ -359,6 +359,9 @@ function BracketAdmin({ race, data }: { race: Race; data: ResultsData }) {
     </Sheet>
   </>;
 }
+
+/** Onde o aparelho guarda a largada do duelo: a lista e o formulário param o mesmo relógio. */
+const duelStartKey = (raceId: string, code: string) => `dsb-duel-start:${raceId}:${code}`;
 
 /** Relógio do duelo em andamento, contado da largada marcada no aparelho. */
 function DuelClock({ start }: { start: number }) {
@@ -372,7 +375,7 @@ function DuelRow({ entry, teams, onEdit }: { entry: PlanDuel; teams: Map<string,
   const { notify } = useApp();
   const { code, duel, waiting } = entry;
   // A largada fica no aparelho (vale sem internet): o tempo do barco é o toque de chegada menos ela.
-  const [startedAt, setStartedAt] = useLocalState<number | null>(`dsb-duel-start:${duel.race_id}:${code}`, null);
+  const [startedAt, setStartedAt] = useLocalState<number | null>(duelStartKey(duel.race_id, code), null);
   // O tempo real chega com um pequeno atraso: a chegada marcada aparece na hora por aqui.
   const [arrived, setArrived] = useState<{ a?: number; b?: number }>({});
   // Depois da segunda chegada o quadro fica um instante: um toque repetido não cai na Largada do duelo de baixo.
@@ -417,10 +420,12 @@ function DuelRow({ entry, teams, onEdit }: { entry: PlanDuel; teams: Map<string,
     setStartedAt(at);
     void announce(at);
   }
+  // Com um barco já chegado, quem falta fica sem tempo e perde o duelo; o relógio do mapa para junto.
+  const missing = times.a === null && times.b === null ? null : times.a === null ? 'a' : 'b';
   function stop(start: number) {
     setStartedAt(null);
     void announce(null);
-    notify(times.a === null && times.b === null ? 'Largada cancelada.' : 'Relógio parado.', { label: 'Desfazer', run: () => begin(start) });
+    notify(missing ? `${nameOf(missing)} ficou sem tempo e perdeu o duelo.` : 'Largada cancelada.', { label: 'Desfazer', run: () => begin(start) });
   }
 
   const side = (key: 'a' | 'b') =>
@@ -438,7 +443,7 @@ function DuelRow({ entry, teams, onEdit }: { entry: PlanDuel; teams: Map<string,
     {ready && startedAt === null && closing === null && times.a === null && times.b === null &&
       <button className="button lap-button" onClick={() => begin(Date.now())} aria-label={`Largada do duelo ${code}`}><Flag size={18} /> Largada</button>}
     {live !== null && <div className="admin-duel-live">
-      <div>{running ? <DuelClock start={live} /> : <strong className="admin-duel-clock">Fim</strong>}<button className="button" disabled={!running} onClick={() => stop(live)}><X size={16} /> {times.a === null && times.b === null ? 'Cancelar largada' : 'Encerrar'}</button></div>
+      <div>{running ? <DuelClock start={live} /> : <strong className="admin-duel-clock">Fim</strong>}<button className="button" disabled={!running} onClick={() => stop(live)}><X size={16} /> {missing ? `Não chegou: ${nameOf(missing)}` : 'Cancelar largada'}</button></div>
       {/* Quem já chegou continua no lugar, apagado: o botão do outro barco não sobe para baixo do dedo. */}
       {(['a', 'b'] as const).map(key =>
         <button key={key} className="button primary" disabled={times[key] !== null} onClick={() => void arrive(key, Math.max(0.1, Math.round((Date.now() - live) / 100) / 10), live)}>
@@ -449,12 +454,17 @@ function DuelRow({ entry, teams, onEdit }: { entry: PlanDuel; teams: Map<string,
 }
 
 /** `duel` já vem com os barcos que a chave indica; `saved` diz se ele já está lançado no banco. */
-function DuelForm({ duel, saved, teams, onDone }: { duel: Duel; saved: boolean; teams: Team[]; onDone: () => void }) {
+function DuelForm({ code, duel, saved, teams, onDone }: { code: string; duel: Duel; saved: boolean; teams: Team[]; onDone: () => void }) {
   const { notify } = useApp();
+  const [startedAt, setStartedAt] = useLocalState<number | null>(duelStartKey(duel.race_id, code), null);
+  // Já encerrado sem tempo: um lado com tempo, o outro vazio e o relógio parado.
+  const closed = startedAt === null && (duel.time_a === null) !== (duel.time_b === null);
   const [form, setForm] = useState({
     team_a: duel.team_a ?? '', team_b: duel.team_b ?? '',
     time_a: duel.time_a !== null ? formatDuel(duel.time_a) : '', time_b: duel.time_b !== null ? formatDuel(duel.time_b) : '',
+    out_a: closed && duel.time_a === null, out_b: closed && duel.time_b === null,
   });
+  const both = !!form.team_a && !!form.team_b;
   const [busy, setBusy] = useState(false);
   const sorted = [...teams].sort(byTeamName);
 
@@ -464,15 +474,23 @@ function DuelForm({ duel, saved, teams, onDone }: { duel: Duel; saved: boolean; 
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const time_a = form.time_a.trim() ? parseDuel(form.time_a) : null;
-    const time_b = form.time_b.trim() ? parseDuel(form.time_b) : null;
-    if ((form.time_a.trim() && time_a === null) || (form.time_b.trim() && time_b === null)) { notify('Tempo inválido. Use 3:02,4 ou 182,4 (segundos).'); return; }
+    const out = both ? form.out_a ? 'a' : form.out_b ? 'b' : null : null;
+    const time_a = out !== 'a' && form.time_a.trim() ? parseDuel(form.time_a) : null;
+    const time_b = out !== 'b' && form.time_b.trim() ? parseDuel(form.time_b) : null;
+    if ((out !== 'a' && form.time_a.trim() && time_a === null) || (out !== 'b' && form.time_b.trim() && time_b === null)) { notify('Tempo inválido. Use 3:02,4 ou 182,4 (segundos).'); return; }
     if (!form.team_a && !form.team_b) { notify('Escolha pelo menos um barco.'); return; }
+    if (out && (out === 'a' ? time_b : time_a) === null) { notify('Digite o tempo de quem chegou: sem ele o duelo não tem vencedor.'); return; }
     setBusy(true);
-    const { error } = await save({ ...duel, team_a: form.team_a || null, team_b: form.team_b || null, time_a, time_b });
+    const team_a = form.team_a || null, team_b = form.team_b || null;
+    const { error } = await save({ ...duel, team_a, team_b, time_a, time_b });
+    // Quem não chegou encerra o duelo: o relógio para aqui e no mapa.
+    const stopped = !error && out ? (await supabase.rpc('admin_start_duel', {
+      p_race_id: duel.race_id, p_stage: duel.stage, p_slot: duel.slot, p_team_a: team_a, p_team_b: team_b, p_at: null,
+    })).error : null;
     setBusy(false);
     if (error) { notify(errorMessage(error)); return; }
-    notify('Duelo salvo.');
+    if (out) setStartedAt(null);
+    notify(stopped ? 'Duelo salvo, mas o relógio do mapa não parou. Salve de novo.' : 'Duelo salvo.');
     onDone();
   }
   async function remove() {
@@ -484,24 +502,35 @@ function DuelForm({ duel, saved, teams, onDone }: { duel: Duel; saved: boolean; 
     notify('Duelo apagado.', { label: 'Desfazer', run: () => void save(duel).then(({ error }) => notify(error ? errorMessage(error) : 'Duelo de volta.')) });
   }
 
-  const sideFields = (key: 'a' | 'b', label: string) => <div className="admin-duel-fields">
-    <label className="admin-field">
-      <span>{label}</span>
-      <select value={form[`team_${key}`]} onChange={e => setForm({ ...form, [`team_${key}`]: e.target.value })}>
-        <option value="">{key === 'b' ? 'Sem adversário (passa direto)' : 'A definir'}</option>
-        {sorted.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-      </select>
-    </label>
-    <label className="admin-field">
-      <span>Tempo</span>
-      <input inputMode="decimal" placeholder="3:02,4" value={form[`time_${key}`]} onChange={e => setForm({ ...form, [`time_${key}`]: e.target.value })} />
-    </label>
-  </div>;
+  const sideFields = (key: 'a' | 'b', label: string) => {
+    const out = both && form[`out_${key}`];
+    return <>
+      <div className="admin-duel-fields">
+        <label className="admin-field">
+          <span>{label}</span>
+          <select value={form[`team_${key}`]} onChange={e => setForm({ ...form, [`team_${key}`]: e.target.value })}>
+            <option value="">{key === 'b' ? 'Sem adversário (passa direto)' : 'A definir'}</option>
+            {sorted.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label>
+        <label className="admin-field">
+          <span>Tempo</span>
+          <input inputMode="decimal" placeholder={out ? 'Sem tempo' : '3:02,4'} disabled={out} value={out ? '' : form[`time_${key}`]} onChange={e => setForm({ ...form, [`time_${key}`]: e.target.value })} />
+        </label>
+      </div>
+      {both && <label className="settings-split admin-extra toggle-row">
+        <div><strong>Não chegou</strong><small>Fica sem tempo e perde o duelo</small></div>
+        {/* Só um lado pode ficar sem tempo: marcar um desmarca o outro. */}
+        <button type="button" role="switch" className="toggle" aria-checked={out} aria-label={`${label} não chegou`}
+          onClick={() => setForm({ ...form, out_a: key === 'a' ? !out : false, out_b: key === 'b' ? !out : false })}><span /></button>
+      </label>}
+    </>;
+  };
 
   return <form className="admin-form" onSubmit={e => void submit(e)}>
     {sideFields('a', 'Barco A')}
     {sideFields('b', 'Barco B')}
-    <p className="settings-hint">Aqui é só para corrigir ou digitar um tempo: o normal é tocar em Largada e em Chegou na lista. Vence o menor tempo; sem tempo, o barco perde o duelo.</p>
+    <p className="settings-hint">Aqui é só para corrigir ou digitar um tempo: o normal é tocar em Largada e em Chegou na lista. Vence o menor tempo. Se um barco não chegou, marque Não chegou: ele perde o duelo e o relógio do mapa para.</p>
     <div className="account-actions">
       {saved && <button className="button danger" type="button" disabled={busy} onClick={() => void remove()}><Trash2 size={16} /> Apagar</button>}
       <button className="button primary" type="submit" disabled={busy}><Check size={16} /> {busy ? 'Salvando…' : 'Salvar duelo'}</button>
