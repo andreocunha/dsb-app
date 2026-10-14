@@ -1,10 +1,12 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, BellOff, ChevronRight, Flag, Megaphone, Trophy } from 'lucide-react';
 import { Modal } from './ui';
 import { useWide } from './chat/use-wide';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from './auth';
+import { fire, supabase } from '@/lib/supabase';
+import { clearSeenNotifications } from '@/lib/push';
 import { useLocalState } from '@/lib/local-state';
 import { useNow } from '@/lib/races';
 import { onResume } from '@/lib/resume';
@@ -46,6 +48,49 @@ function useNotifications() {
 }
 
 /**
+ * Até onde o sino foi visto. Fica no aparelho e, com conta, também no banco (notification_reads):
+ * vale o maior dos dois, e abrir o sino num aparelho apaga o número nos outros da conta na hora.
+ */
+function useSeen(userId: string | null): [number, (id: number) => void] {
+  const [seen, setLocal] = useLocalState(SEEN_KEY, 0);
+  // O valor e o gravador mais recentes, para quem roda fora do desenho da tela (tempo real, volta ao app).
+  const state = useRef({ seen, setLocal });
+  useEffect(() => { state.current = { seen, setLocal }; });
+  const raise = useCallback((id: number) => {
+    if (id <= state.current.seen) return false;
+    state.current.seen = id;
+    state.current.setLocal(id);
+    return true;
+  }, []);
+  // Com o sino de mentira (npm run dev) os ids não são os do banco: o visto fica só no aparelho.
+  const account = NOTIFICATIONS_MOCK ? null : userId;
+  useEffect(() => {
+    if (!account) return;
+    let alive = true;
+    // Ao abrir e ao voltar para o app: o tempo real não entrega o que foi visto com ele em segundo plano.
+    const sync = async () => {
+      const { data, error } = await supabase.from('notification_reads').select('last_seen_id').eq('user_id', account).maybeSingle();
+      if (!alive || error) return;
+      const saved = data?.last_seen_id ?? 0;
+      raise(saved);
+      // Visto neste aparelho antes de entrar na conta (ou sem rede): o banco fica sabendo.
+      if (state.current.seen > saved) fire(supabase.rpc('mark_notifications_seen', { p_last_id: state.current.seen }));
+    };
+    void sync();
+    const stopResume = onResume(() => void sync());
+    const channel = supabase.channel(`notifications-seen:${account}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notification_reads', filter: `user_id=eq.${account}` },
+        ({ new: row }) => { raise(Number((row as { last_seen_id?: number }).last_seen_id) || 0); })
+      .subscribe();
+    return () => { alive = false; stopResume(); void supabase.removeChannel(channel); };
+  }, [account, raise]);
+  const markSeen = useCallback((id: number) => {
+    if (raise(id) && account) fire(supabase.rpc('mark_notifications_seen', { p_last_id: id }));
+  }, [raise, account]);
+  return [seen, markSeen];
+}
+
+/**
  * Sino da home: o número é o que chegou desde a última vez que a lista foi aberta.
  * Abrir a lista marca tudo como visto; as novas continuam com o ponto até fechar.
  * No celular a lista ocupa a tela inteira e o recado abre num modal por cima dela;
@@ -58,11 +103,14 @@ export function useNotificationCenter() {
   const items = useNotifications();
   const now = useNow();
   const wide = useWide();
-  const [seen, setSeen] = useLocalState(SEEN_KEY, 0);
+  const { userId } = useAuth();
+  const [seen, setSeen] = useSeen(userId);
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<number | null>(null);
   // O visto de antes de abrir: é ele que decide o ponto de "nova" enquanto a lista está na tela.
   const [seenBefore, setSeenBefore] = useState(0);
+  // O que já foi visto sai da bandeja deste aparelho (inclusive o que foi visto em outro da conta).
+  useEffect(() => { if (items) void clearSeenNotifications(items, seen); }, [items, seen]);
   const count = items && now ? unreadCount(items, seen, now) : 0;
   const latest = items?.[0]?.id ?? 0;
 

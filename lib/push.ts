@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { supabase, errorMessage } from './supabase';
+import { seenInTray, type AppNotification } from './notifications';
 
 const enabled = () => Capacitor.isNativePlatform() && process.env.NEXT_PUBLIC_PUSH_ENABLED === 'true';
 
@@ -134,6 +135,22 @@ export async function clearReadNotifications(lida: (conversa: string) => boolean
       return !!conversa && CONVERSA.test(conversa) && lida(conversa);
     });
     if (lidas.length) await PushNotifications.removeDeliveredNotifications({ notifications: lidas });
+  } catch { /* bandeja indisponível: as notificações ficam até a pessoa dispensar */ }
+}
+
+/**
+ * Tira da bandeja os recados e avisos de prova já vistos no sino, neste aparelho ou em outro da conta.
+ * Roda com o app aberto, como clearReadNotifications.
+ */
+export async function clearSeenNotifications(items: AppNotification[], seen: number) {
+  if (!enabled() || seen <= 0) return;
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+    const { notifications } = await PushNotifications.getDeliveredNotifications();
+    // Mensagem do chat não é do sino: a conversa dela vem na tag (Android) ou nos dados (iOS).
+    const vistas = notifications.filter(n =>
+      !(n.tag && CONVERSA.test(n.tag)) && typeof n.data?.c !== 'string' && seenInTray(n, items, seen));
+    if (vistas.length) await PushNotifications.removeDeliveredNotifications({ notifications: vistas });
   } catch { /* bandeja indisponível: as notificações ficam até a pessoa dispensar */ }
 }
 

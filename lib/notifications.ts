@@ -1,5 +1,6 @@
 // Histórico de notificações (sino da home): recados da organização e avisos das provas.
-// As linhas vêm da tabela notifications; o que já foi visto fica no aparelho (último id visto).
+// As linhas vêm da tabela notifications; o que já foi visto é o último id visto: fica no aparelho e,
+// com conta, também no banco (notification_reads), igual em todos os aparelhos dela.
 
 export type NotificationKind = 'announcement' | 'race_start' | 'fantasy_reminder';
 export type AppNotification = {
@@ -24,6 +25,20 @@ export function unreadCount(items: AppNotification[], seen: number, now: number)
 }
 export const isUnread = (n: AppNotification, seen: number, now: number) =>
   n.id > seen && now - Date.parse(n.created_at) < UNREAD_WINDOW;
+
+/**
+ * Um recado ou aviso de prova que está na bandeja do sistema já foi visto no sino?
+ * O iOS devolve o id que foi junto com o aviso. O Android só devolve título e texto, então vale o texto:
+ * sai da bandeja quando todos os avisos do histórico com aquele título e texto já foram vistos.
+ */
+export function seenInTray(
+  n: { title?: string | null; body?: string | null; data?: Record<string, unknown> | null }, items: AppNotification[], seen: number,
+) {
+  const id = Number(n.data?.n);
+  if (Number.isInteger(id) && id > 0) return id <= seen;
+  const same = items.filter(i => i.title === n.title && (i.body ?? '') === (n.body ?? ''));
+  return same.length > 0 && same.every(i => i.id <= seen);
+}
 
 const TZ = 'America/Sao_Paulo';
 const day = (ms: number) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(ms);

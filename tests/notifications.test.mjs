@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fullDate, onOpenNotification, openNotification, timeAgo, unreadCount } from '../lib/notifications.ts';
+import { fullDate, onOpenNotification, openNotification, seenInTray, timeAgo, unreadCount } from '../lib/notifications.ts';
 
 const at = text => Date.parse(`${text}-03:00`);
 const iso = text => new Date(at(text)).toISOString();
@@ -34,4 +34,22 @@ test('toque antes da home montar: o recado espera ela ouvir', () => {
   openNotification(8);
   stop();
   assert.deepEqual(opened, [7, 8]);
+});
+
+test('recado na bandeja já visto: pelo id no iOS, pelo título e texto no Android', () => {
+  const aviso = (id, title, body) => ({ ...item(id, '2026-10-12T14:00'), title, body });
+  const items = [aviso(5, 'Largada adiada', 'Nova largada às 11h.'), aviso(4, 'Slalom começou!', 'Acompanhe os barcos ao vivo no mapa.'), aviso(2, 'Largada adiada', 'Nova largada às 11h.')];
+  // iOS: o id que foi junto com o aviso.
+  assert.equal(seenInTray({ title: 'x', body: 'y', data: { n: '4' } }, items, 4), true);
+  assert.equal(seenInTray({ title: 'x', body: 'y', data: { n: '5' } }, items, 4), false);
+  // Android: só título e texto (os dados são os extras do sistema).
+  const android = { 'android.title': 'Slalom começou!' };
+  assert.equal(seenInTray({ title: 'Slalom começou!', body: 'Acompanhe os barcos ao vivo no mapa.', data: android }, items, 4), true);
+  assert.equal(seenInTray({ title: 'Slalom começou!', body: 'Acompanhe os barcos ao vivo no mapa.', data: android }, items, 3), false);
+  // Mesmo texto enviado duas vezes: fica na bandeja enquanto o mais novo não foi visto.
+  assert.equal(seenInTray({ title: 'Largada adiada', body: 'Nova largada às 11h.', data: android }, items, 4), false);
+  assert.equal(seenInTray({ title: 'Largada adiada', body: 'Nova largada às 11h.', data: android }, items, 5), true);
+  // Fora do histórico (mensagem do chat, aviso antigo): fica.
+  assert.equal(seenInTray({ title: 'Maria Silva', body: 'oi', data: android }, items, 5), false);
+  assert.equal(seenInTray({}, items, 5), false);
 });

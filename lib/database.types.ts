@@ -162,6 +162,12 @@ export type Database = {
         Update: { active?: boolean; article_delivered?: boolean; color?: string; docs_delivered?: number; id?: string; initials?: string; logo?: string | null; name?: string; university?: string }
         Relationships: []
       }
+      notification_reads: {
+        Row: { last_seen_id: number; updated_at: string; user_id: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       notifications: {
         Row: { id: number; kind: 'announcement' | 'race_start' | 'fantasy_reminder'; title: string; body: string | null; image_url: string | null; created_at: string }
         Insert: { id?: never; kind: 'announcement' | 'race_start' | 'fantasy_reminder'; title: string; body?: string | null; image_url?: string | null; created_at?: string }
@@ -298,6 +304,7 @@ export type Database = {
       general_receipts: { Args: never; Returns: { delivered: number; read: number }[] }
       mark_general_delivered: { Args: never; Returns: undefined }
       mark_general_read: { Args: { p_last_id: number }; Returns: undefined }
+      mark_notifications_seen: { Args: { p_last_id: number }; Returns: undefined }
       message_info: {
         Args: { p_message_id: number }
         Returns: { avatar_url: string | null; delivered: boolean; delivered_at: string | null; name: string; read: boolean; read_at: string | null; user_id: string }[]

@@ -8,7 +8,7 @@ import { asPlace, placeLabel } from '@/lib/location';
 import { shortName } from '@/lib/names';
 import { clearReadNotifications } from '@/lib/push';
 import { onResume } from '@/lib/resume';
-import { fire, supabase, errorMessage } from '@/lib/supabase';
+import { fire, supabase, errorMessage, throttled } from '@/lib/supabase';
 import { useApp, useChatUnread, useOnlineUsers } from '../app-shell';
 import { useAuth } from '../auth';
 import { Avatar } from '../ui';
@@ -109,6 +109,8 @@ function ChatsScreen() {
 
   // Tempo real da lista: última mensagem, não lidas e tiques de cada conversa.
   useEffect(() => {
+    // Num grupo, cada pessoa que recebe ou lê a sua última mensagem gera um aviso: a lista é refeita no máximo a cada 2 s.
+    const reloadGroupTicks = throttled(loadChats, 2000);
     const channel = supabase.channel('chats-list')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: row }) => {
         const last: Last = { id: row.id, user_id: row.user_id, author_name: row.author_name, body: row.body, file_type: row.file_type, file_name: row.file_name, created_at: row.created_at, deleted: false, duration_ms: row.duration_ms, played: false, event: row.event, location: row.location };
@@ -153,7 +155,7 @@ function ChatsScreen() {
           return;
         }
         // No grupo o tique azul depende de todo mundo: quem sabe calcular é o banco (e só importa se a última é sua).
-        if (chat?.group) { if (chat.last?.user_id === userId) loadChats(); return; }
+        if (chat?.group) { if (chat.last?.user_id === userId) reloadGroupTicks(); return; }
         setChats(current => current?.map(c => c.id !== read.conversation_id ? c : {
           ...c, otherRead: Math.max(c.otherRead, read.last_read_id ?? 0),
           otherDelivered: Math.max(c.otherDelivered, read.last_delivered_id ?? 0, read.last_read_id ?? 0),
