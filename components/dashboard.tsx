@@ -88,17 +88,9 @@ export function Dashboard({ visible }: { visible: boolean }) {
     return () => { clearTimeout(timer); stop(); post(false); };
   }, [trackerOrigin]);
 
-  // Fora da home (o mapa segue montado, só escondido) ou com a live em tela cheia por cima, ninguém vê o mapa:
-  // ele para de desenhar e, passado um instante, fecha a conexão do ao vivo. Retoma ao voltar.
-  // O iframe continua "visível" para o navegador, então é o app que avisa (e de novo quando o mapa recarrega).
+  // Fora da home (o mapa segue montado, só escondido) ou com a live em tela cheia por cima, ninguém vê o mapa.
+  // O mapa em si segue sempre ativo; só os balões do RaceFeed esperam a volta.
   const mapHidden = !visible || live === 'full';
-  useEffect(() => {
-    const post = () => frame.current?.contentWindow?.postMessage({ type: 'dsb-tracker:hidden', hidden: mapHidden }, trackerOrigin);
-    const onHello = (event: MessageEvent) => { if (event.origin === trackerOrigin && event.data?.type === 'dsb-tracker:hello') post(); };
-    window.addEventListener('message', onHello);
-    post();
-    return () => window.removeEventListener('message', onHello);
-  }, [mapHidden, trackerOrigin]);
 
   return (
     <div className={`home fill ${live === 'pip' ? 'has-pip' : ''}`} hidden={!visible}>
