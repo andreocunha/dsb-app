@@ -57,7 +57,8 @@ export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => 
   const race = races?.find(r => r.id === chosen) ?? null;
   const standings = useMemo(() => (data ? sortStandings(data.teams) : []), [data]);
   const selected = view.kind === 'team' ? standings.find(t => t.id === view.id) ?? null : null;
-  const scoredRaces = data ? new Set(data.scores.map(s => s.race_id)).size : 0;
+  // Apurada: algum barco já tem colocação, DNF ou DNS (a chave lançada sem tempos ainda não conta).
+  const scoredRaces = data ? new Set(data.scores.filter(s => s.position !== null || s.status !== 'ok').map(s => s.race_id)).size : 0;
   const ready = !!(races && data);
 
   // A lista pesada não entra no meio da subida do sheet (trava em celular simples): se os dados
