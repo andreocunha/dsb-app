@@ -10,8 +10,8 @@ import { Sheet, TeamBadge } from './ui';
 import { fire, supabase, errorMessage } from '@/lib/supabase';
 import type { Race, Team } from '@/lib/data';
 import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
-import { closingMinutes, hasStarted, useNow } from '@/lib/races';
-import { durationText, hhmm } from '@/lib/schedule';
+import { closingMinutes, useNow } from '@/lib/races';
+import { durationText, hhmm, raceToOpen } from '@/lib/schedule';
 import { byTeamName } from '@/lib/names';
 import { useLocalState } from '@/lib/local-state';
 import { youtubeEmbedUrl } from '@/lib/event-config';
@@ -84,8 +84,8 @@ export function Admin() {
 
 function RacesPanel({ races, data, onRaceChanged }: { races: Race[]; data: ResultsData; onRaceChanged: () => Promise<void> }) {
   const now = useNow();
-  // Abre na prova que está acontecendo (a última que largou) ou na primeira.
-  const current = [...races].reverse().find(r => hasStarted(r, now)) ?? races[0];
+  // Abre na prova do momento pelo horário (ver raceToOpen); escolher outra no seletor vale até sair do painel.
+  const current = raceToOpen(races, now);
   const [raceId, setRaceId] = useState<string | null>(null);
   const race = races.find(r => r.id === raceId) ?? current;
   if (!race) return <p className="panel-note">Nenhuma prova cadastrada.</p>;

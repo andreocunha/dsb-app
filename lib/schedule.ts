@@ -81,6 +81,25 @@ export function phaseOf(item: ScheduleItem, now: number, later = false): Phase {
   return { kind: 'live', startedAt: item.startedAt, endsAt: null };
 }
 
+/**
+ * Prova em que o painel da organização abre: a que está acontecendo (ou atrasada, esperando a
+ * largada); a que acabou há menos de 1 hora, para acertar as últimas voltas; senão a próxima pelo
+ * horário; senão a última.
+ */
+export function raceToOpen<T extends RaceRow>(races: T[], now: number): T | undefined {
+  if (!now) return races[0];
+  const list = races.map(race => { const item = itemFromRace(race); return { race, item, phase: phaseOf(item, now) }; });
+  const active = list.filter(({ phase }) => phase.kind === 'live' || phase.kind === 'closing' || phase.kind === 'late');
+  if (active.length) return active.reduce((a, b) => (b.item.startsAt > a.item.startsAt ? b : a)).race;
+  const endOf = ({ finishedAt, startedAt, durationMinutes, closingMinutes }: ScheduleItem) =>
+    finishedAt ?? (startedAt !== null && durationMinutes ? startedAt + (durationMinutes + (closingMinutes ?? 0)) * MINUTE : null);
+  const recent = list.filter(({ item, phase }) => { const end = phase.kind === 'done' ? endOf(item) : null; return end !== null && now - end < 60 * MINUTE; });
+  if (recent.length) return recent.reduce((a, b) => (endOf(b.item)! > endOf(a.item)! ? b : a)).race;
+  const upcoming = list.filter(({ phase }) => phase.kind === 'upcoming');
+  if (upcoming.length) return upcoming.reduce((a, b) => (b.item.startsAt < a.item.startsAt ? b : a)).race;
+  return races[races.length - 1];
+}
+
 export const sortSchedule = (items: ScheduleItem[]) =>
   [...items].sort((a, b) => a.startsAt - b.startsAt || (a.kind === b.kind ? a.label.localeCompare(b.label, 'pt-BR', { numeric: true }) : a.kind === 'event' ? -1 : 1));
 

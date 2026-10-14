@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clock, featured, phaseOf, phases, shiftOf, startsIn } from '../lib/schedule.ts';
+import { clock, featured, phaseOf, phases, raceToOpen, shiftOf, startsIn } from '../lib/schedule.ts';
 
 const at = text => Date.parse(`${text}-03:00`);
 const item = (over = {}) => ({
@@ -63,4 +63,28 @@ test('relógio e "falta quanto"', () => {
   assert.equal(startsIn(25 * 60_000), 'em 25 min');
   assert.equal(startsIn(130 * 60_000), 'em 2h 10min');
   assert.equal(startsIn(3 * 24 * 3_600_000), 'em 3 dias');
+});
+
+test('painel da organização abre na prova do momento pelo horário', () => {
+  const iso = text => new Date(at(text)).toISOString();
+  const race = (id, number, startsAt, over = {}) => ({ id, number, name: id, starts_at: iso(startsAt), started_at: null, finished_at: null, duration_minutes: 60, closing_minutes: 20, ...over });
+  const races = [
+    race('raia-rapida', 1, '2026-10-13T16:55', { started_at: iso('2026-10-13T16:55'), finished_at: iso('2026-10-13T17:51') }),
+    race('match-race', 2, '2026-10-14T10:00', { duration_minutes: null, closing_minutes: null }),
+    race('raia-manobra', 3, '2026-10-14T14:00', { duration_minutes: 120, closing_minutes: 30 }),
+  ];
+  const id = text => raceToOpen(races, at(text))?.id;
+  // Logo depois de acabar, ainda na prova (acertar as voltas); depois, a próxima pelo horário.
+  assert.equal(id('2026-10-13T18:20'), 'raia-rapida');
+  assert.equal(id('2026-10-13T19:00'), 'match-race');
+  assert.equal(id('2026-10-14T07:30'), 'match-race');
+  // Passou do horário sem largada marcada: atrasada, continua nela.
+  assert.equal(id('2026-10-14T10:20'), 'match-race');
+  // Prova acontecendo.
+  const running = races.map(r => r.id === 'raia-manobra' ? { ...r, started_at: iso('2026-10-14T14:05') } : r);
+  assert.equal(raceToOpen(running, at('2026-10-14T15:00')).id, 'raia-manobra');
+  // Tudo encerrado: a última. Sem relógio (build estático): a primeira.
+  const done = races.map(r => ({ ...r, started_at: r.started_at ?? r.starts_at, finished_at: r.finished_at ?? iso('2026-10-14T18:00') }));
+  assert.equal(raceToOpen(done, at('2026-10-15T09:00')).id, 'raia-manobra');
+  assert.equal(raceToOpen(races, 0).id, 'raia-rapida');
 });
