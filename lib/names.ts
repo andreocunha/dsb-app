@@ -10,3 +10,9 @@ export function shortName(name: string) {
   if (partes.length < 2) return partes[0] ?? '';
   return `${partes[0]} ${partes[partes.length - 1]}`;
 }
+
+/** Ordem fixa das equipes: alfabética, com o número do barco valendo como número ("2 - …" antes de "10 - …"). */
+export const byTeamName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true });
+
+/** Nome da equipe sem o número do barco na frente: "9 - Solaris" vira "Solaris". */
+export const teamNameOnly = (name: string) => name.replace(/^\s*\d+\s*[-–—]\s*/, '') || name;

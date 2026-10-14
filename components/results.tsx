@@ -1,5 +1,5 @@
 'use client';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Share2, Trophy } from 'lucide-react';
 import { useRaces, type Race, type Team } from '@/lib/data';
 import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
@@ -13,11 +13,25 @@ import {
 import { Sheet, TeamBadge } from './ui';
 import { ShareArt, shareArtSubtitle } from './share-art';
 import { Tag } from './schedule';
+import { byTeamName } from '@/lib/names';
 
 const int = (n: number) => n.toLocaleString('pt-BR');
 const minus = (n: number) => `−${int(Math.abs(n))}`;
 const extrasOf = (team: Team) => team.docs_delivered * ITEM_POINTS + (team.article_delivered ? ITEM_POINTS : 0);
 const scoreKey = (raceId: string, teamId: string) => `${raceId}:${teamId}`;
+/** Horário de Brasília com segundos: o instante em que o barco fechou a volta. */
+const passTime = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' });
+/** Tempo de volta com as unidades (6min 14s, 1h 02min 14s): ao lado dos horários, "6:14" parece hora. */
+function LapTime({ ms }: { ms: number }) {
+  const total = Math.round(Math.max(ms, 0) / 1000);
+  const h = Math.floor(total / 3600), m = Math.floor(total % 3600 / 60), s = total % 60;
+  const two = (n: number) => String(n).padStart(2, '0');
+  return <>
+    {h > 0 && <>{h}<i>h</i> </>}
+    {(h > 0 || m > 0) && <>{h ? two(m) : m}<i>min</i> </>}
+    {h || m ? two(s) : s}<i>s</i>
+  </>;
+}
 
 /** Prova acontecendo agora (ou fechando a última volta), para abrir direto nela. */
 const isLive = (race: Race, now: number) => { const kind = phaseOf(itemFromRace(race), now).kind; return kind === 'live' || kind === 'closing'; };
@@ -99,7 +113,7 @@ export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => 
 
 /** Antes de haver pontos: as equipes inscritas, em grade compacta. */
 function Entrants({ teams, onTeam }: { teams: Team[]; onTeam: (id: string) => void }) {
-  const sorted = [...teams].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const sorted = [...teams].sort(byTeamName);
   return <section className="entrants" aria-label="Equipes inscritas">
     <h2 className="entrants-title">{sorted.length} equipes inscritas</h2>
     <ul>
@@ -137,8 +151,8 @@ const Standings = memo(function Standings({ races, data, standings, onTeam }: { 
       {[1, 0, 2].map(i => standings[i] && <button key={standings[i].id} className={`podium-place p${i + 1}`} onClick={() => onTeam(standings[i].id)}>
         <TeamBadge team={standings[i]} />
         <strong>{standings[i].name}</strong>
-        <small>{int(standings[i].points)} pts</small>
-        <span className="podium-block">{i + 1}º</span>
+        <small><b>{int(standings[i].points)}</b> pts</small>
+        <span className="podium-step">{i + 1}º</span>
       </button>)}
     </div>
     <Legend />
@@ -161,7 +175,7 @@ const Standings = memo(function Standings({ races, data, standings, onTeam }: { 
                   <strong>{team.name}</strong>
                   {team.penalty_points < 0 && <span className="penalty-tag"><span className="sr-only">Penalidade </span>{minus(team.penalty_points)}</span>}
                 </span>
-                <small className="standings-gap">{index === 0 ? 'Líder' : gap === 0 ? 'Empatada com o líder' : `${minus(gap)} do líder`}{extrasOf(team) > 0 && ` · +${extrasOf(team)} extras`}</small>
+                <small className="standings-gap">{index === 0 ? 'Líder' : gap === 0 ? 'Empatada com o líder' : `${int(gap)} pts atrás do líder`}</small>
                 <span className="score-cells">{races.map(r => <ScoreCell key={r.id} race={r} score={scores.get(scoreKey(r.id, team.id))} />)}</span>
               </span>
               <span className="standings-total"><strong>{int(team.points)}</strong><small>pts</small></span>
@@ -179,7 +193,7 @@ function Legend() {
     <span><span className="swatch" /> 50 pts</span>
     <span><span className="score-cell dnf">DNF</span> largou e não terminou · 20 pts</span>
     <span><span className="score-cell dns">DNS</span> não largou · 0 pts</span>
-    <span>Extras: documentação pré-evento e artigo científico, 20 pts por item.</span>
+    <span>O total já soma documentação pré-evento e artigo científico ({ITEM_POINTS} pts por item). Toque na equipe para ver de onde vêm os pontos.</span>
   </div>;
 }
 
@@ -233,7 +247,7 @@ function RaceStatus({ race }: { race: Race }) {
 
 /** Antes do resultado, as equipes inscritas ocupam as linhas da prova, em ordem alfabética. */
 const waitingRows = (race: Race, teams: Team[]): Score[] =>
-  [...teams].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map(team => ({
+  [...teams].sort(byTeamName).map(team => ({
     race_id: race.id, team_id: team.id, status: 'ok', note: '', laps: 0, last_lap_at: null,
     stage: null, duel_time: null, position: null, points: 0,
   }));
@@ -248,6 +262,8 @@ const LapRace = memo(function LapRace({ race, data }: { race: Race; data: Result
   const laps = useRaceLaps(race.id);
   const now = useNow();
   const [open, setOpen] = useState<string | null>(null);
+  // Ponto tocado no gráfico (guardado pelo horário da volta, que não muda quando chegam voltas novas).
+  const [picked, setPicked] = useState<{ team: string; time: number } | null>(null);
   const published = sortRace(data.scores.filter(s => s.race_id === race.id));
   // Antes da primeira volta, o formato da prova já aparece: as faixas de cada barco e a lista de inscritas.
   const pending = !published.length;
@@ -264,6 +280,10 @@ const LapRace = memo(function LapRace({ race, data }: { race: Race; data: Result
   const best = bests.sort((a, b) => a.ms - b.ms)[0];
   const leader = !pending && scores[0]?.status === 'ok' ? scores[0] : null;
   const leaderLast = leader?.last_lap_at ? Date.parse(leader.last_lap_at) : null;
+
+  const pickedTeam = picked ? teams.get(picked.team) : undefined;
+  const pickedIndex = picked ? timesOf(picked.team).indexOf(picked.time) : -1;
+  const pickedSplits = picked ? splits.get(picked.team) ?? [] : [];
 
   const lastTime = Math.max(start + (duration ?? 0), ...scores.map(s => s.last_lap_at ? Date.parse(s.last_lap_at) : start));
   const span = Math.max(lastTime - start, 60_000) * 1.04;
@@ -301,6 +321,16 @@ const LapRace = memo(function LapRace({ race, data }: { race: Race; data: Result
 
     {(pending || (laps && laps.size > 0)) && <section className="card lap-chart" aria-label="Voltas ao longo da prova">
       <div className="lap-chart-title"><h2>Voltas ao longo da prova</h2><small>cada ponto é uma volta</small></div>
+      {!pending && <div className={`lap-pick ${picked && pickedTeam && pickedIndex >= 0 ? 'on' : ''}`} aria-live="polite">
+        {picked && pickedTeam && pickedIndex >= 0 ? <>
+          <TeamBadge team={pickedTeam} small />
+          <div>
+            <strong>{pickedTeam.name}</strong>
+            <span>Volta {pickedIndex + 1} · {passTime.format(picked.time)} · <LapTime ms={pickedSplits[pickedIndex]} />
+              {pickedSplits.length > 1 && pickedSplits[pickedIndex] === Math.min(...pickedSplits) && <b> · melhor volta</b>}</span>
+          </div>
+        </> : 'Toque em um ponto para ver o horário e o tempo daquela volta.'}
+      </div>}
       <div className={`lap-lanes ${pending ? 'empty' : ''}`}>
         {pending && <p className="lap-empty">As voltas aparecem aqui durante a prova, no horário em que cada barco fechar a volta.</p>}
         {duration && <div className="lap-overlay" aria-hidden="true"><span className="lap-flag" style={{ left: x(start + duration) }} /></div>}
@@ -314,7 +344,11 @@ const LapRace = memo(function LapRace({ race, data }: { race: Race; data: Result
             {team && <span className="lap-logo"><TeamBadge team={team} small /></span>}
             <span className="lap-track">
               <span className="lap-line" style={{ width: x(end) }} />
-              {times.map((time, i) => <span key={time} className={`lap-dot ${i === bestIndex ? 'best' : ''}`} style={{ left: x(time) }} />)}
+              {times.map((time, i) => {
+                const on = picked?.team === s.team_id && picked.time === time;
+                return <button key={time} type="button" className={`lap-dot ${i === bestIndex ? 'best' : ''}`} style={{ left: x(time) }} aria-pressed={on}
+                  aria-label={`${team?.name ?? 'Equipe'}, volta ${i + 1}, às ${passTime.format(time)}`} onClick={() => setPicked(on ? null : { team: s.team_id, time })} />;
+              })}
               {s.status === 'dnf' && <span className="lap-dnf" style={{ left: x(end) }}>×</span>}
             </span>
           </div>;
@@ -346,8 +380,16 @@ const LapRace = memo(function LapRace({ race, data }: { race: Race; data: Result
               <span className="race-row-points"><strong>{pending ? '–' : score.points}</strong><small>pts</small></span>
               {list.length > 0 && <ChevronDown size={16} className="race-row-chevron" />}
             </button>
-            {isOpen && <div className="lap-splits">
-              {list.map((ms, i) => <span key={i} className={ms === bestSplit ? 'best' : ''}><small>V{i + 1}</small> {formatDuration(ms)}</span>)}
+            {/* Linha do tempo: o horário de cada passagem e, entre duas passagens, o tempo daquela volta. */}
+            {isOpen && <div className="lap-timeline" role="list" aria-label={`Voltas de ${team?.name ?? 'equipe'}`}>
+              <div className="lap-node start" role="listitem"><time>{passTime.format(start)}</time><span>Largada</span></div>
+              {timesOf(score.team_id).map((time, i) => <Fragment key={time}>
+                <div className={`lap-leg ${list[i] === bestSplit ? 'best' : ''}`} role="listitem">
+                  <span><span className="sr-only">Tempo da volta {i + 1}: </span><LapTime ms={list[i]} /></span>
+                  {list[i] === bestSplit && list.length > 1 && <small>melhor volta</small>}
+                </div>
+                <div className="lap-node" role="listitem"><time>{passTime.format(time)}</time><span>Volta {i + 1}</span></div>
+              </Fragment>)}
             </div>}
           </li>;
         })}

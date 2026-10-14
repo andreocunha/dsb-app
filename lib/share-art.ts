@@ -4,6 +4,7 @@ import type { Race, Team } from './data';
 import { formatDuel, formatDuration, lapSplits, sortRace, sortStandings, stageLabel, type Score } from './scoring';
 import type { ResultsData } from './results';
 import { supabase } from './supabase';
+import { byTeamName } from './names';
 
 const BRAND = '#422378', DEEP = '#2d1856', ACCENT = '#ffc51c', LILAC = '#d9cdf0';
 const int = (n: number) => n.toLocaleString('pt-BR');
@@ -167,7 +168,7 @@ export async function drawRacePost(data: ResultsData, race: Race) {
 /** Antes do resultado: post com as equipes inscritas (geral) ou o anúncio da largada de uma prova. */
 export async function drawLineupPost(data: ResultsData, races: Race[], race: Race | null) {
   await document.fonts.ready;
-  const teams = [...data.teams].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const teams = [...data.teams].sort(byTeamName);
   const logos = await loadLogos(teams);
   const day = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
   const time = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });

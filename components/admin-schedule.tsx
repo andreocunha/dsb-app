@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Check, ChevronRight, Flag, RotateCcw, Square } from 'lucide-react';
 import { useApp } from './app-shell';
+import { DurationForm } from './admin-duration';
 import { Sheet } from './ui';
 import { supabase, errorMessage } from '@/lib/supabase';
 import { useClock, useSchedule } from '@/lib/use-schedule';
@@ -60,6 +61,7 @@ export function SchedulePanel() {
       title={current?.item.title ?? 'Programação'} subtitle={current ? [current.item.label, `${dayLabel(current.item.startsAt)}, ${hhmm(current.item.startsAt)}`].filter(Boolean).join(' · ') : undefined}>
       {current && <>
         {current.item.kind === 'race' && <RaceControls item={current.item} phase={current.phase} onChanged={reload} />}
+        {current.item.kind === 'race' && <DurationForm key={`${current.item.key}:${current.item.durationMinutes}:${current.item.closingMinutes}`} race={current.item} onChanged={reload} />}
         <Reschedule key={`${current.item.key}:${current.item.startsAt}`} item={current.item} onChanged={reload} />
         {current.item.changes.length > 0 && <section className="admin-sheet-section">
           <h3>Histórico de horários</h3>

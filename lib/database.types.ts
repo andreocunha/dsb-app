@@ -352,6 +352,7 @@ export type Database = {
       admin_remove_lap: { Args: { p_race_id: string; p_team_id: string; p_at: string }; Returns: undefined }
       admin_set_race_start: { Args: { p_race_id: string; p_at: string | null }; Returns: undefined }
       admin_set_race_finish: { Args: { p_race_id: string; p_at: string | null }; Returns: undefined }
+      admin_set_race_duration: { Args: { p_race_id: string; p_minutes: number | null; p_closing_minutes?: number | null }; Returns: undefined }
       admin_reschedule: { Args: { p_kind: string; p_id: string; p_at: string; p_reason?: string }; Returns: undefined }
       admin_set_race_status: { Args: { p_race_id: string; p_team_id: string; p_status: string; p_position?: number | null; p_note?: string }; Returns: undefined }
       admin_save_duel: {

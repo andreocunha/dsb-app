@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { byTeamName } from './names';
 
 /** Linha de team_standings: `points` já soma provas, documentação, artigo e penalidades. */
 export type Team = {
@@ -45,9 +46,9 @@ function useCached<T>(store: ReturnType<typeof cached<T>>) {
 }
 
 const teamsStore = cached(async () => {
-  const { data, error } = await supabase.from('team_standings').select('*').order('name');
+  const { data, error } = await supabase.from('team_standings').select('*');
   if (error) throw error;
-  return data as Team[];
+  return (data as Team[]).sort(byTeamName);
 });
 const racesStore = cached(async () => {
   const { data, error } = await supabase.from('races').select('*').order('number');

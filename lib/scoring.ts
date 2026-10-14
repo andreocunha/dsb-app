@@ -33,7 +33,7 @@ const STAGE_ORDER: DuelStage[] = ['r32', 'r16', 'qf', 'sf', 'final'];
 /** Geral: mais pontos; empate vai para a colocação na prova mais longa (10.1.7); depois o nome. */
 export function sortStandings<T extends { points: number; tiebreak_position: number | null; name: string }>(teams: T[]) {
   return [...teams].sort((a, b) =>
-    b.points - a.points || (a.tiebreak_position ?? 999) - (b.tiebreak_position ?? 999) || a.name.localeCompare(b.name, 'pt-BR'));
+    b.points - a.points || (a.tiebreak_position ?? 999) - (b.tiebreak_position ?? 999) || a.name.localeCompare(b.name, 'pt-BR', { numeric: true }));
 }
 
 const statusOrder: Record<Status, number> = { ok: 0, dnf: 1, dns: 2 };

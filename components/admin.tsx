@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, Flag, ImagePlus, LogIn, Megaphone, Minus, Plus, Radio, RotateCcw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Flag, ImagePlus, LogIn, Megaphone, Minus, Plus, Radio, RotateCcw, Send, ShieldCheck, Timer, Trash2, X } from 'lucide-react';
 import { useApp } from './app-shell';
+import { DurationForm } from './admin-duration';
 import { SchedulePanel } from './admin-schedule';
 import { StatsPanel } from './admin-stats';
 import { useAuth } from './auth';
@@ -9,11 +10,13 @@ import { Sheet, TeamBadge } from './ui';
 import { fire, supabase, errorMessage } from '@/lib/supabase';
 import type { Race, Team } from '@/lib/data';
 import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
-import { hasStarted, useNow } from '@/lib/races';
+import { closingMinutes, hasStarted, useNow } from '@/lib/races';
+import { durationText, hhmm } from '@/lib/schedule';
+import { byTeamName } from '@/lib/names';
 import { youtubeEmbedUrl } from '@/lib/event-config';
 import { NOTIFICATIONS_MOCK } from '@/lib/notifications';
 import {
-  DOC_ITEMS, duelStageLabel, duelWinner, formatDuel, formatDuration, lapSplits, parseDuel, sortRace,
+  DOC_ITEMS, duelStageLabel, duelWinner, formatDuel, formatDuration, lapSplits, parseDuel,
   type Duel, type DuelStage, type Score, type Status,
 } from '@/lib/scoring';
 
@@ -29,7 +32,6 @@ const dayKey = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-dig
 /** Horário digitado (hora de Brasília) no dia da prova. Brasília não tem horário de verão desde 2019. */
 const atRaceDay = (race: Race, time: string) =>
   new Date(`${dayKey.format(new Date(race.starts_at))}T${time.length === 5 ? `${time}:00` : time}-03:00`).toISOString();
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'pt-BR');
 
 /** Provas lidas direto do banco (sem o cache das outras telas): a largada muda por aqui. */
 function useAdminRaces() {
@@ -121,6 +123,29 @@ function StartRow({ race, onRaceChanged }: { race: Race; onRaceChanged: () => Pr
   </div>;
 }
 
+/** Tempo de prova em vigor, com o atalho para mudar (o relógio regressivo segue o valor novo). */
+function DurationRow({ race, onRaceChanged }: { race: Race; onRaceChanged: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const minutes = race.duration_minutes;
+  const closing = Math.round(closingMinutes(race));
+  const end = minutes && race.started_at ? Date.parse(race.started_at) + minutes * 60_000 : null;
+  return <>
+    <div className="settings-row settings-split">
+      <div>
+        <h3>Tempo de prova {minutes ? durationText(minutes) : 'sem limite'}</h3>
+        <p>{!minutes ? 'Vale até a organização encerrar a prova.'
+          : `${closing ? `Mais ${closing} min para fechar a última volta. ` : ''}${end ? `O relógio zera às ${hhmm(end)}.` : 'O relógio conta a partir da largada.'}`}</p>
+      </div>
+      <button className="button" onClick={() => setOpen(true)} aria-haspopup="dialog"><Timer size={16} /> Mudar</button>
+    </div>
+    <Sheet open={open} onClose={() => setOpen(false)} title="Tempo de prova" subtitle={`Prova ${race.number} · ${race.name}`}>
+      <DurationForm key={`${race.id}:${minutes}:${race.closing_minutes}:${open}`}
+        race={{ id: race.id, durationMinutes: minutes, closingMinutes: race.closing_minutes, startedAt: race.started_at ? Date.parse(race.started_at) : null }}
+        onChanged={async () => { await onRaceChanged(); setOpen(false); }} />
+    </Sheet>
+  </>;
+}
+
 /** Linha de cada barco: posição atual, voltas e a situação (DNF/DNS). */
 function RowInfo({ team, score, detail }: { team: Team; score?: Score; detail: string }) {
   const tone = score && score.status !== 'ok' ? score.status : score?.position && score.position <= 3 ? `p${score.position}` : '';
@@ -156,25 +181,19 @@ function LapAdmin({ race, data, onRaceChanged }: { race: Race; data: ResultsData
     const { data: done, error } = await supabase.rpc('admin_add_lap', { p_race_id: race.id, p_team_id: team.id, p_at: at });
     setTeamBusy(team.id, false);
     if (error || !done) { notify(errorMessage(error)); return; }
-    const ms = Date.parse(done);
-    const count = new Set([...lapsOf(team.id), ms]).size;
-    mark(team.id, ms, 'add');
-    notify(`Volta ${count} de ${team.name} às ${clock.format(ms)}.`, { label: 'Desfazer', run: () => void removeLap(team, ms, false) });
+    // Sem aviso por cima da lista: a linha do barco já mostra a contagem e o horário da volta.
+    mark(team.id, Date.parse(done), 'add');
   }
-  async function removeLap(team: Team, ms: number, undoable = true) {
+  async function removeLap(team: Team, ms: number) {
     const { error } = await supabase.rpc('admin_remove_lap', { p_race_id: race.id, p_team_id: team.id, p_at: new Date(ms).toISOString() });
     if (error) { notify(errorMessage(error)); return; }
     mark(team.id, ms, 'remove');
-    if (undoable) notify('Volta apagada.', { label: 'Desfazer', run: () => void addLap(team, new Date(ms).toISOString()) });
-    else notify('Volta desfeita.');
+    notify('Volta apagada.', { label: 'Desfazer', run: () => void addLap(team, new Date(ms).toISOString()) });
   }
 
   const scores = new Map(data.scores.filter(s => s.race_id === race.id).map(s => [s.team_id, s]));
-  const ranked = sortRace([...scores.values()]).map(s => s.team_id);
-  const teams = [...data.teams].sort((a, b) => {
-    const ia = ranked.indexOf(a.id), ib = ranked.indexOf(b.id);
-    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || byName(a, b);
-  });
+  // Ordem fixa: o barco não muda de lugar na lista a cada volta lançada (a posição vai no selo da linha).
+  const teams = [...data.teams].sort(byTeamName);
   const start = Date.parse(race.started_at ?? race.starts_at);
   const selected = teams.find(t => t.id === sheet?.team) ?? null;
 
@@ -188,7 +207,7 @@ function LapAdmin({ race, data, onRaceChanged }: { race: Race; data: ResultsData
 
   return <>
     <section className="settings-group">
-      <div className="settings-card"><StartRow race={race} onRaceChanged={onRaceChanged} /></div>
+      <div className="settings-card"><StartRow race={race} onRaceChanged={onRaceChanged} /><DurationRow race={race} onRaceChanged={onRaceChanged} /></div>
     </section>
     <section className="settings-group" aria-labelledby="admin-laps">
       <h2 id="admin-laps" className="settings-label">Voltas · toque em + quando o barco fechar a volta</h2>
@@ -333,7 +352,7 @@ function BracketAdmin({ race, data }: { race: Race; data: ResultsData }) {
     <section className="settings-group" aria-labelledby="admin-bracket-status">
       <h2 id="admin-bracket-status" className="settings-label">Situação dos barcos</h2>
       <ul className="settings-card admin-list">
-        {[...data.teams].sort(byName).map(team => <li key={team.id} className="admin-row">
+        {[...data.teams].sort(byTeamName).map(team => <li key={team.id} className="admin-row">
           <button className="admin-row-info" onClick={() => setSheet({ team: team.id, open: true })} aria-haspopup="dialog">
             <RowInfo team={team} score={scores.get(team.id)} detail={scores.get(team.id)?.note || (scores.has(team.id) ? 'Na chave' : 'Fora da chave')} />
           </button>
@@ -358,7 +377,7 @@ function DuelForm({ duel, isNew, teams, onDone }: { duel: Duel; isNew: boolean; 
     time_a: duel.time_a !== null ? formatDuel(duel.time_a) : '', time_b: duel.time_b !== null ? formatDuel(duel.time_b) : '',
   });
   const [busy, setBusy] = useState(false);
-  const sorted = [...teams].sort(byName);
+  const sorted = [...teams].sort(byTeamName);
 
   const save = (next: Duel) => supabase.rpc('admin_save_duel', {
     p_race_id: next.race_id, p_stage: next.stage, p_slot: next.slot, p_team_a: next.team_a, p_team_b: next.team_b, p_time_a: next.time_a, p_time_b: next.time_b,
@@ -436,7 +455,7 @@ function TeamsPanel({ races, data, onChanged }: { races: Race[]; data: ResultsDa
     <section className="settings-group">
       <h2 className="settings-label">Pontos fora das provas e penalidades</h2>
       <ul className="settings-card admin-list">
-        {[...data.teams].sort(byName).map(team => <li key={team.id} className="admin-row">
+        {[...data.teams].sort(byTeamName).map(team => <li key={team.id} className="admin-row">
           <button className="admin-row-info" onClick={() => setSheet({ team: team.id, open: true })} aria-haspopup="dialog">
             <TeamBadge team={team} small />
             <span className="admin-row-main">

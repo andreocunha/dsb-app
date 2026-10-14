@@ -2,6 +2,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Team } from '@/lib/data';
+import { teamNameOnly } from '@/lib/names';
 
 /** Vínculo de alguém com o DSB, como escolhido nas Configurações. */
 export type Affiliation = {
@@ -9,7 +10,7 @@ export type Affiliation = {
   team: Pick<Team, 'id' | 'name' | 'initials' | 'color' | 'logo'> | null;
   status: 'member' | 'alumni' | null;
   /**
-   * Tag de membro, como a do WhatsApp: o nome da equipe ("Solaris"), para membro e ex-membro,
+   * Tag de membro, como a do WhatsApp: o nome da equipe sem o número do barco ("Solaris"), para membro e ex-membro,
    * ou "Organização". Aparece embaixo do nome, no balão e na lista de participantes.
    * Visitante fica sem tag, para não poluir o chat (a situação completa fica nos dados do contato).
    */
@@ -35,7 +36,7 @@ function load() {
       const team = p.team_id ? teamsById.get(p.team_id) ?? null : null;
       if (p.affiliation === 'organization') next.set(p.id, { kind: 'organization', team: null, status: null, tag: 'Organização' });
       else if (p.affiliation === 'visitor') next.set(p.id, { kind: 'visitor', team: null, status: null, tag: null });
-      else if (team) next.set(p.id, { kind: 'team', team, status: p.team_status === 'alumni' ? 'alumni' : 'member', tag: team.name });
+      else if (team) next.set(p.id, { kind: 'team', team, status: p.team_status === 'alumni' ? 'alumni' : 'member', tag: teamNameOnly(team.name) });
     }
     byUser = next;
     listeners.forEach(listener => listener());
@@ -74,5 +75,5 @@ export function affiliationLine(a: Affiliation | null) {
   if (!a) return null;
   if (a.kind === 'organization') return 'Organização do evento';
   if (a.kind === 'visitor') return 'Visitante';
-  return `${a.team!.name} · ${a.status === 'alumni' ? 'Ex-membro' : 'Membro'}`;
+  return `${teamNameOnly(a.team!.name)} · ${a.status === 'alumni' ? 'Ex-membro' : 'Membro'}`;
 }
