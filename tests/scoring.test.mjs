@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bracketColumns, closingWindowMinutes, duelWinner, formatDuel, formatDuration, lapSplits, parseDuel, pointsIntensity, sortRace, sortStandings } from '../lib/scoring.ts';
+import { closingWindowMinutes, duelWinner, formatDuel, formatDuration, lapSplits, matchPlan, parseDuel, pointsIntensity, sortRace, sortStandings } from '../lib/scoring.ts';
 
 const duel = (stage, slot, team_a, team_b, time_a = null, time_b = null) => ({ race_id: 'match-race', stage, slot, team_a, team_b, time_a, time_b });
 const score = (team_id, status, position, laps = 0) => ({ race_id: 'r', team_id, status, position, laps, note: '', last_lap_at: null, stage: null, duel_time: null, points: 0 });
@@ -46,15 +46,70 @@ test('vencedor do duelo: menor tempo; sem tempo perde; sem adversário passa', (
   assert.equal(duelWinner(duel('qf', 1, 'a', 'b', 180, 180)), null);
 });
 
-test('chave completa as fases seguintes com duelos a definir', () => {
-  const columns = bracketColumns([duel('qf', 1, 'a', 'b'), duel('qf', 2, 'c', 'd'), duel('qf', 4, 'g', 'h'), duel('sf', 1, 'a', 'c'), duel('third', 1, 'x', 'y')]);
-  assert.deepEqual(columns.map(c => [c.stage, c.duels.length]), [['qf', 4], ['sf', 2], ['final', 1]]);
-  assert.equal(columns[0].duels[2], null);
-  assert.equal(columns[1].duels[1], null);
-  assert.deepEqual(bracketColumns([]), []);
-  // Antes do sorteio: 15 equipes pedem oitavas (16 vagas, uma passa direto).
-  assert.deepEqual(bracketColumns([], 15).map(c => [c.stage, c.duels.length]), [['r16', 8], ['qf', 4], ['sf', 2], ['final', 1]]);
-  assert.deepEqual(bracketColumns([], 8).map(c => c.stage), ['qf', 'sf', 'final']);
+// Chaveamento da comissão para 2026: An é o duelo n da Etapa 1 (r16).
+const etapa1 = times => [['zenite', 'amorim'], ['solares', 'leviata'], ['sete', 'reis'], ['hurakan', 'hefesto'], ['solaris', 'solmar'], ['arariboia', 'gunes']]
+  .map(([a, b], i) => duel('r16', i + 1, a, b, ...(times?.[i] ?? [])));
+const teamsOf = (plan, code) => { const { duel } = plan.find(p => p.code === code); return [duel.team_a, duel.team_b]; };
+
+test('chave da Instrução Técnica: 13 duelos, com a Etapa 1 lançada e o resto a definir', () => {
+  const plan = matchPlan('match-race', etapa1());
+  assert.deepEqual(plan.map(p => p.code), ['A1', 'A6', 'A2', 'A5', 'A3', 'A4', 'B1', 'B2', 'B3', 'C1', 'C2', 'Final', '3º']);
+  assert.deepEqual(teamsOf(plan, 'A4'), ['hurakan', 'hefesto']);
+  assert.deepEqual(teamsOf(plan, 'B1'), [null, null]);
+  assert.deepEqual(plan.find(p => p.code === 'B1').waiting, { a: 'Vencedor de A1', b: 'Vencedor de A6' });
+  assert.deepEqual(plan.find(p => p.code === 'C1').waiting, { a: 'Vencedor de B1', b: 'Repescagem (B4)' });
+  assert.deepEqual(plan.find(p => p.code === '3º').waiting, { a: 'Perdedor de C1', b: 'Perdedor de C2' });
+  assert.ok(plan.every(p => p.winner === null && !p.stale));
+  assert.equal(matchPlan('match-race', []).length, 13);
+});
+
+test('vencedores se cruzam A1×A6, A2×A5, A3×A4 e o melhor perdedor da Etapa 2 volta em C1', () => {
+  // Na Etapa 1 vence sempre o barco A, menos em A6 (Güneş).
+  const first = etapa1([[100, 110], [101, 111], [102, 112], [103, 113], [104, 114], [120, 105]]);
+  let plan = matchPlan('match-race', first);
+  assert.deepEqual(teamsOf(plan, 'B1'), ['zenite', 'gunes']);
+  assert.deepEqual(teamsOf(plan, 'B2'), ['solares', 'solaris']);
+  assert.deepEqual(teamsOf(plan, 'B3'), ['sete', 'hurakan']);
+  assert.equal(plan.find(p => p.code === 'B1').saved, false);
+
+  // Duas da Etapa 2 terminadas: a repescagem ainda não está definida.
+  const second = [...first, duel('qf', 1, 'zenite', 'gunes', 100, 109), duel('qf', 2, 'solares', 'solaris', 108, 101)];
+  plan = matchPlan('match-race', second);
+  assert.deepEqual(teamsOf(plan, 'C1'), ['zenite', null]);
+  assert.deepEqual(teamsOf(plan, 'C2'), ['solaris', null]);
+  assert.equal(plan.find(p => p.code === 'C1').winner, null);
+
+  // Perdedores da Etapa 2: Güneş 109, Solares 108, Hurakan 107 → Hurakan volta na repescagem.
+  const third = [...second, duel('qf', 3, 'sete', 'hurakan', 102, 107)];
+  plan = matchPlan('match-race', third);
+  assert.deepEqual(teamsOf(plan, 'C1'), ['zenite', 'hurakan']);
+  assert.deepEqual(teamsOf(plan, 'C2'), ['solaris', 'sete']);
+
+  const semis = [...third, duel('sf', 1, 'zenite', 'hurakan', 99, 98), duel('sf', 2, 'solaris', 'sete', 97, 99)];
+  plan = matchPlan('match-race', semis);
+  assert.deepEqual(teamsOf(plan, 'Final'), ['hurakan', 'solaris']);
+  assert.deepEqual(teamsOf(plan, '3º'), ['zenite', 'sete']);
+  assert.equal(plan.find(p => p.code === 'Final').winner, null);
+});
+
+test('barco lançado vale sobre o da chave, e o duelo avisa quando ficou diferente', () => {
+  const first = etapa1([[100, 110], [101, 111], [102, 112], [103, 113], [104, 114], [120, 105]]);
+  // B1 foi lançado com Zênite; depois o tempo de A1 foi corrigido e quem passou foi o Fernando Amorim.
+  first[0] = duel('r16', 1, 'zenite', 'amorim', 100, 90);
+  const plan = matchPlan('match-race', [...first, duel('qf', 1, 'zenite', 'gunes', 100, 109)]);
+  const b1 = plan.find(p => p.code === 'B1');
+  assert.deepEqual([b1.duel.team_a, b1.saved, b1.stale], ['zenite', true, true]);
+  assert.equal(plan.find(p => p.code === 'B2').stale, false);
+});
+
+test('só a Etapa 1 tem "passa direto"', () => {
+  const plan = matchPlan('match-race', [duel('r16', 1, 'zenite', null), duel('r16', 6, 'arariboia', 'gunes', 100, 101)]);
+  assert.equal(plan.find(p => p.code === 'A1').winner, 'a');
+  assert.equal(plan.find(p => p.code === 'A1').waiting.b, 'Passa direto');
+  assert.deepEqual(teamsOf(plan, 'B1'), ['zenite', 'arariboia']);
+  // B2 só com um lado definido não é vitória de ninguém.
+  const half = matchPlan('match-race', [duel('r16', 2, 'solares', 'leviata', 100, 101)]);
+  assert.deepEqual([teamsOf(half, 'B2'), half.find(p => p.code === 'B2').winner], [['solares', null], null]);
 });
 
 test('intensidade da cor vai de 50 a 150 pontos', () => {

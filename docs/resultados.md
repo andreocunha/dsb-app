@@ -21,10 +21,22 @@ Tudo abaixo também pode ser preenchido no Table Editor do Supabase. Os pontos s
 
 ## Match Race
 
-- **`match_duels`**: uma linha por duelo: `stage` (`r32`, `r16`, `qf`, `sf`, `third`, `final`), `slot` (1, 2, 3…), os dois barcos e o tempo de cada um em segundos (`182.4`).
-- Na fase seguinte, o duelo N recebe os vencedores dos duelos 2N−1 e 2N da fase anterior. Por exemplo, o duelo 1 das quartas junta os vencedores dos duelos 1 e 2 das oitavas.
-- Vence o menor tempo. Duelo sem `team_b` é um bye: o `team_a` passa direto.
-- A colocação sai da chave. Quem cai na mesma fase é ordenado pelo tempo que fez.
+A chave segue a Instrução Técnica de 2026, para 12 barcos. O painel já lista os 13 duelos e preenche os barcos de cada um conforme os resultados saem.
+
+Na buzina, toque em **Largada** no duelo; quando cada barco cruzar a chegada, toque em **Chegou** e o tempo dele é gravado na hora. A largada fica guardada no aparelho, então a chegada tem de ser marcada no mesmo aparelho. Para corrigir ou digitar um tempo à mão, toque no duelo.
+
+| Etapa | Duelos | `stage` | Quem entra | Quem sai |
+| --- | --- | --- | --- | --- |
+| 1 | A1 a A6 | `r16` | chaveamento da comissão (1º × 12º, 2º × 11º…) | os 6 perdedores ficam do 7º ao 12º, pelo tempo |
+| 2 | B1 a B3 | `qf` | B1 = A1 × A6, B2 = A2 × A5, B3 = A3 × A4 | o perdedor de melhor tempo volta pela repescagem (B4); os outros dois ficam em 5º e 6º |
+| 3 | C1 e C2 | `sf` | C1 = B1 × repescagem, C2 = B2 × B3 | os perdedores disputam o 3º lugar |
+| 4 | disputa de 3º | `third` | perdedores de C1 e C2 | 3º e 4º |
+| Final | final | `final` | vencedores de C1 e C2 | 1º e 2º |
+
+- **`match_duels`**: uma linha por duelo: `stage`, `slot` (o número do duelo: A4 é `r16` com `slot` 4), os dois barcos e o tempo de cada um em segundos (`182.4`).
+- Vence o menor tempo; barco sem tempo perde o duelo. Na Etapa 1, duelo sem `team_b` é um bye: o `team_a` passa direto.
+- O barco gravado no duelo vale sobre o que a chave indica. Se um resultado anterior for corrigido depois, o painel avisa no duelo seguinte para conferir os barcos.
+- A colocação sai da chave (view `race_scores`). Barco que não largou ou não terminou: marque em "Situação dos barcos".
 
 ## Exceções: `race_status`
 

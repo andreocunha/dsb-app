@@ -360,6 +360,10 @@ export type Database = {
         Returns: undefined
       }
       admin_delete_duel: { Args: { p_race_id: string; p_stage: string; p_slot: number }; Returns: undefined }
+      admin_set_duel_time: {
+        Args: { p_race_id: string; p_stage: string; p_slot: number; p_team_a: string | null; p_team_b: string | null; p_side: string; p_seconds: number | null }
+        Returns: undefined
+      }
       admin_set_team_extras: { Args: { p_team_id: string; p_docs: number; p_article: boolean }; Returns: undefined }
       admin_add_penalty: { Args: { p_team_id: string; p_points: number; p_reason: string; p_race_id?: string | null }; Returns: number }
       admin_delete_penalty: { Args: { p_id: number }; Returns: undefined }

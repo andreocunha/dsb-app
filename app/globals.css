@@ -514,6 +514,7 @@ button.race-row:disabled { cursor: default; }
 .duel-empty { width: 20px; height: 20px; border: 1px dashed var(--border-strong); border-radius: 50%; }
 .duel-name { flex: 1; min-width: 0; overflow: hidden; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
 .duel-time { font-family: var(--font-geist-mono), monospace; font-size: 11px; }
+.duel-code { position: absolute; z-index: 1; padding: 0 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-secondary); font-size: 9.5px; font-weight: 600; line-height: 13px; }
 
 /* Celular: pódio, tabela e, por último, a legenda. */
 .standings-layout { display: flex; flex-direction: column; }

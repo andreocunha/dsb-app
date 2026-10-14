@@ -23,12 +23,11 @@ export const DNF_POINTS = 20;
 
 export const stageLabel: Record<Stage, string> = {
   champion: 'Campeão', final: 'Vice', third_winner: '3º lugar', third: '4º lugar',
-  sf: 'Semifinal', qf: 'Quartas', r16: 'Oitavas', r32: '1ª fase',
+  sf: 'Semifinal', qf: 'Etapa 2', r16: 'Etapa 1', r32: '1ª fase',
 };
 export const duelStageLabel: Record<DuelStage, string> = {
-  r32: '1ª fase', r16: 'Oitavas', qf: 'Quartas', sf: 'Semifinal', third: 'Disputa de 3º', final: 'Final',
+  r32: '1ª fase', r16: 'Etapa 1', qf: 'Etapa 2', sf: 'Etapa 3 · Semifinal', third: 'Etapa 4 · 3º lugar', final: 'Final',
 };
-const STAGE_ORDER: DuelStage[] = ['r32', 'r16', 'qf', 'sf', 'final'];
 
 /** Geral: mais pontos; empate vai para a colocação na prova mais longa (10.1.7); depois o nome. */
 export function sortStandings<T extends { points: number; tiebreak_position: number | null; name: string }>(teams: T[]) {
@@ -82,26 +81,83 @@ export function duelWinner(duel: Duel): 'a' | 'b' | null {
   return null;
 }
 
+type Feed = { code: string; take: 'winner' | 'loser' } | 'repescagem';
+const won = (code: string): Feed => ({ code, take: 'winner' });
+const lost = (code: string): Feed => ({ code, take: 'loser' });
+
 /**
- * Colunas da chave, da primeira fase até a final. Cada fase tem metade dos duelos da anterior;
- * um duelo que ainda não foi cadastrado vem como null ("a definir").
- * Sem nenhum duelo, `teamCount` desenha a chave vazia do tamanho que a prova vai ter.
+ * Chave do Match Race pela Instrução Técnica de 2026 (12 barcos). A Etapa 1 (A1 a A6) vem do
+ * chaveamento da comissão; daí em diante cada duelo sabe de onde chegam os barcos. `col` e `row`
+ * são o lugar no desenho: a Etapa 1 fica na ordem em que os vencedores se cruzam (A1 com A6…).
+ * No banco, A = r16, B = qf, C = sf, e o slot é o número do duelo.
  */
-export function bracketColumns(duels: Duel[], teamCount = 0) {
-  const present = STAGE_ORDER.filter(stage => duels.some(d => d.stage === stage));
-  if (!present.length) {
-    if (teamCount < 2) return [];
-    const rounds = Math.min(Math.ceil(Math.log2(teamCount)), STAGE_ORDER.length);
-    return STAGE_ORDER.slice(STAGE_ORDER.length - rounds).map((stage, i) =>
-      ({ stage, duels: Array.from({ length: 2 ** (rounds - 1 - i) }, () => null) }));
+const MATCH_PLAN: { code: string; stage: DuelStage; slot: number; col: number; row: number; a?: Feed; b?: Feed }[] = [
+  { code: 'A1', stage: 'r16', slot: 1, col: 0, row: 0 },
+  { code: 'A6', stage: 'r16', slot: 6, col: 0, row: 1 },
+  { code: 'A2', stage: 'r16', slot: 2, col: 0, row: 2 },
+  { code: 'A5', stage: 'r16', slot: 5, col: 0, row: 3 },
+  { code: 'A3', stage: 'r16', slot: 3, col: 0, row: 4 },
+  { code: 'A4', stage: 'r16', slot: 4, col: 0, row: 5 },
+  { code: 'B1', stage: 'qf', slot: 1, col: 1, row: 0.5, a: won('A1'), b: won('A6') },
+  { code: 'B2', stage: 'qf', slot: 2, col: 1, row: 2.5, a: won('A2'), b: won('A5') },
+  { code: 'B3', stage: 'qf', slot: 3, col: 1, row: 4.5, a: won('A3'), b: won('A4') },
+  { code: 'C1', stage: 'sf', slot: 1, col: 2, row: 0.5, a: won('B1'), b: 'repescagem' },
+  { code: 'C2', stage: 'sf', slot: 2, col: 2, row: 3.5, a: won('B2'), b: won('B3') },
+  { code: 'Final', stage: 'final', slot: 1, col: 3, row: 2, a: won('C1'), b: won('C2') },
+  { code: '3º', stage: 'third', slot: 1, col: 3, row: 4.25, a: lost('C1'), b: lost('C2') },
+];
+
+export type PlanDuel = {
+  code: string; col: number; row: number;
+  /** O duelo como está valendo: os barcos lançados ou, na falta, os que a chave indica. */
+  duel: Duel;
+  saved: boolean;
+  winner: 'a' | 'b' | null;
+  /** O que aparece no lugar do barco enquanto ele não está definido. */
+  waiting: { a: string; b: string };
+  /** Duelos cujos vencedores chegam neste (as linhas do desenho). */
+  feeders: string[];
+  /** Barco lançado diferente do que a chave indica: um resultado anterior mudou depois. */
+  stale: boolean;
+};
+
+/** Os 13 duelos da chave, na ordem em que acontecem, com os barcos que os resultados já definem. */
+export function matchPlan(raceId: string, duels: Duel[]): PlanDuel[] {
+  const plan: PlanDuel[] = [];
+  const sides = ({ duel, winner }: PlanDuel) => !winner ? null
+    : winner === 'a' ? { winner: duel.team_a, loser: duel.team_b, loserTime: duel.time_b } : { winner: duel.team_b, loser: duel.team_a, loserTime: duel.time_a };
+  // Repescagem (B4): o perdedor de melhor tempo da Etapa 2, depois que os três duelos terminam.
+  const repescagem = () => {
+    const losers = plan.filter(p => p.duel.stage === 'qf').map(sides);
+    if (losers.some(l => !l)) return null;
+    return losers.filter(l => l!.loserTime !== null).sort((x, y) => x!.loserTime! - y!.loserTime!)[0]?.loser ?? null;
+  };
+  const teamFrom = (feed?: Feed) => {
+    if (!feed) return null;
+    if (feed === 'repescagem') return repescagem();
+    const from = sides(plan.find(p => p.code === feed.code)!);
+    return from && from[feed.take];
+  };
+  const label = (feed?: Feed) => !feed ? 'A definir' : feed === 'repescagem' ? 'Repescagem (B4)' : `${feed.take === 'winner' ? 'Vencedor' : 'Perdedor'} de ${feed.code}`;
+
+  for (const { code, stage, slot, col, row, a, b } of MATCH_PLAN) {
+    const saved = duels.find(d => d.stage === stage && d.slot === slot);
+    const expected = [teamFrom(a), teamFrom(b)];
+    const duel: Duel = {
+      race_id: raceId, stage, slot, time_a: saved?.time_a ?? null, time_b: saved?.time_b ?? null,
+      team_a: saved?.team_a ?? expected[0], team_b: saved?.team_b ?? expected[1],
+    };
+    // Só a Etapa 1 tem "passa direto"; nas outras, um lado vazio é barco que ainda vai chegar.
+    const bye = !a && !b && !!saved && !!duel.team_a !== !!duel.team_b;
+    plan.push({
+      code, col, row, duel, saved: !!saved,
+      winner: bye || (duel.team_a && duel.team_b) ? duelWinner(duel) : null,
+      waiting: { a: label(a), b: bye && duel.team_a ? 'Passa direto' : label(b) },
+      feeders: [a, b].flatMap(feed => feed && feed !== 'repescagem' && feed.take === 'winner' ? [feed.code] : []),
+      stale: expected.some(team => team && team !== duel.team_a && team !== duel.team_b),
+    });
   }
-  const first = STAGE_ORDER.indexOf(present[0]);
-  const firstCount = Math.max(...duels.filter(d => d.stage === present[0]).map(d => d.slot));
-  const size = Math.max(firstCount, 2 ** (STAGE_ORDER.length - 1 - first));
-  return STAGE_ORDER.slice(first).map((stage, i) => {
-    const count = Math.max(1, size / 2 ** i);
-    return { stage, duels: Array.from({ length: count }, (_, k) => duels.find(d => d.stage === stage && d.slot === k + 1) ?? null) };
-  });
+  return plan;
 }
 
 /** 0 a 1: quanto mais pontos na prova, mais forte a cor da célula (50 → 0, 150 → 1). */

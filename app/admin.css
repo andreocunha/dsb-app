@@ -57,11 +57,21 @@
 .admin-duel { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; text-align: left; }
 .admin-duel:hover { background: var(--surface-hover); }
 .admin-duel > svg { flex-shrink: 0; color: var(--text-tertiary); }
+.admin-duel .lap-number { width: auto; min-width: 26px; padding: 0 5px; }
 .admin-duel-sides { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
 .duel-side { display: flex; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 14px; }
 .duel-side > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .duel-side small { flex-shrink: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
 .duel-side.won { color: var(--text); font-weight: 600; }
+.admin-duel-stale { color: var(--danger); font-size: 12px; }
+.admin-duel-how { margin: 0 4px 16px; }
+.admin-duel-row { display: flex; flex-wrap: wrap; align-items: center; padding-right: 12px; }
+.admin-duel-row .admin-duel { flex: 1; width: auto; min-width: 0; }
+.admin-duel-live { display: flex; flex-basis: 100%; flex-direction: column; gap: 8px; padding: 0 0 12px 12px; }
+.admin-duel-live > div { display: flex; align-items: center; justify-content: space-between; }
+.admin-duel-clock { color: var(--danger); font-size: 24px; font-variant-numeric: tabular-nums; }
+.admin-duel-live .button.primary { justify-content: flex-start; min-height: 52px; font-size: 15px; }
+.admin-duel-live .button.primary:disabled { opacity: .45; }
 .admin-new { width: 100%; min-height: 44px; margin-bottom: 24px; }
 
 .admin-extra { min-height: 48px; }

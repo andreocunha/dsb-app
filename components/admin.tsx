@@ -13,18 +13,19 @@ import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
 import { closingMinutes, hasStarted, useNow } from '@/lib/races';
 import { durationText, hhmm } from '@/lib/schedule';
 import { byTeamName } from '@/lib/names';
+import { useLocalState } from '@/lib/local-state';
 import { youtubeEmbedUrl } from '@/lib/event-config';
 import { NOTIFICATIONS_MOCK } from '@/lib/notifications';
 import {
-  DOC_ITEMS, duelStageLabel, duelWinner, formatDuel, formatDuration, lapSplits, parseDuel,
-  type Duel, type DuelStage, type Score, type Status,
+  DOC_ITEMS, duelStageLabel, duelWinner, formatDuel, formatDuration, lapSplits, matchPlan, parseDuel,
+  type Duel, type DuelStage, type PlanDuel, type Score, type Status,
 } from '@/lib/scoring';
 
 type Tab = 'races' | 'agenda' | 'teams' | 'notify' | 'live' | 'stats';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'races', label: 'Provas' }, { id: 'agenda', label: 'Agenda' }, { id: 'teams', label: 'Equipes' }, { id: 'notify', label: 'Notificação' }, { id: 'live', label: 'Live' }, { id: 'stats', label: 'Números' },
 ];
-const STAGES: DuelStage[] = ['r32', 'r16', 'qf', 'sf', 'third', 'final'];
+const STAGES: DuelStage[] = ['r16', 'qf', 'sf', 'third', 'final'];
 const STATUS: { id: Status; label: string }[] = [{ id: 'ok', label: 'Normal' }, { id: 'dnf', label: 'DNF' }, { id: 'dns', label: 'DNS' }];
 
 const clock = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' });
@@ -315,39 +316,28 @@ function StatusForm({ race, team }: { race: Race; team: Team }) {
 }
 
 function BracketAdmin({ race, data }: { race: Race; data: ResultsData }) {
-  const [editing, setEditing] = useState<{ duel: Duel; isNew: boolean; open: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ entry: PlanDuel; open: boolean } | null>(null);
   const [sheet, setSheet] = useState<{ team: string; open: boolean } | null>(null);
-  const duels = data.duels.filter(d => d.race_id === race.id);
+  const plan = matchPlan(race.id, data.duels.filter(d => d.race_id === race.id));
   const teams = new Map(data.teams.map(t => [t.id, t]));
   const scores = new Map(data.scores.filter(s => s.race_id === race.id).map(s => [s.team_id, s]));
   const selected = data.teams.find(t => t.id === sheet?.team) ?? null;
-
-  function newDuel() {
-    const stage = [...STAGES].reverse().find(s => duels.some(d => d.stage === s)) ?? 'qf';
-    const slot = Math.max(0, ...duels.filter(d => d.stage === stage).map(d => d.slot)) + 1;
-    setEditing({ duel: { race_id: race.id, stage, slot, team_a: null, team_b: null, time_a: null, time_b: null }, isNew: true, open: true });
-  }
-  const side = (team: string | null, time: number | null, won: boolean) =>
-    <span className={`duel-side ${won ? 'won' : ''}`}><span>{team ? teams.get(team)?.name ?? team : 'A definir'}</span><small>{time !== null ? formatDuel(time) : '–'}</small></span>;
+  const stageOf = ({ code, duel }: PlanDuel) => duel.stage === 'final' || duel.stage === 'third' ? duelStageLabel[duel.stage] : `${duelStageLabel[duel.stage]} · ${code}`;
+  // O título do duelo são os barcos; o código da instrução (A1, B2…) fica de apoio.
+  const titleOf = (entry: PlanDuel) => entry.duel.team_a && entry.duel.team_b
+    ? `${teams.get(entry.duel.team_a)?.name ?? entry.duel.team_a} × ${teams.get(entry.duel.team_b)?.name ?? entry.duel.team_b}` : stageOf(entry);
 
   return <>
-    {STAGES.filter(stage => duels.some(d => d.stage === stage)).map(stage => <section key={stage} className="settings-group">
+    <p className="settings-hint admin-duel-how">Na buzina, toque em Largada. Quando cada barco cruzar a chegada, toque em Chegou: o tempo é gravado na hora. Para corrigir ou digitar um tempo, toque no duelo.</p>
+    {STAGES.map(stage => <section key={stage} className="settings-group">
       <h2 className="settings-label">{duelStageLabel[stage]}</h2>
       <ul className="settings-card admin-list">
-        {duels.filter(d => d.stage === stage).sort((a, b) => a.slot - b.slot).map(duel => {
-          const winner = duelWinner(duel);
-          return <li key={duel.slot}>
-            <button className="admin-duel" onClick={() => setEditing({ duel, isNew: false, open: true })} aria-haspopup="dialog">
-              <span className="lap-number">{duel.slot}</span>
-              <span className="admin-duel-sides">{side(duel.team_a, duel.time_a, winner === 'a')}{side(duel.team_b, duel.time_b, winner === 'b')}</span>
-              <ChevronRight size={18} />
-            </button>
-          </li>;
-        })}
+        {plan.filter(entry => entry.duel.stage === stage).sort((a, b) => a.duel.slot - b.duel.slot).map(entry =>
+          <DuelRow key={entry.code} entry={entry} teams={teams} onEdit={() => setEditing({ entry, open: true })} />)}
       </ul>
+      {stage === 'r16' && <p className="settings-hint">Os 6 perdedores ficam do 7º ao 12º, pelo tempo.</p>}
+      {stage === 'qf' && <p className="settings-hint">O perdedor de melhor tempo volta em C1 pela repescagem (B4); os outros dois ficam em 5º e 6º.</p>}
     </section>)}
-    {!duels.length && <p className="panel-note">Nenhum duelo cadastrado. Na fase seguinte, o duelo N recebe os vencedores dos duelos 2N−1 e 2N.</p>}
-    <button className="button primary admin-new" onClick={newDuel}><Plus size={16} /> Novo duelo</button>
 
     <section className="settings-group" aria-labelledby="admin-bracket-status">
       <h2 id="admin-bracket-status" className="settings-label">Situação dos barcos</h2>
@@ -360,8 +350,8 @@ function BracketAdmin({ race, data }: { race: Race; data: ResultsData }) {
       </ul>
     </section>
 
-    <Sheet open={!!editing?.open} onClose={() => setEditing(e => e && { ...e, open: false })} title={editing?.isNew ? 'Novo duelo' : `${editing ? duelStageLabel[editing.duel.stage] : ''} · Duelo ${editing?.duel.slot ?? ''}`}>
-      {editing && <DuelForm key={`${editing.duel.stage}-${editing.duel.slot}-${editing.isNew}`} duel={editing.duel} isNew={editing.isNew} teams={data.teams}
+    <Sheet open={!!editing?.open} onClose={() => setEditing(e => e && { ...e, open: false })} title={editing ? titleOf(editing.entry) : 'Duelo'} subtitle={editing && titleOf(editing.entry) !== stageOf(editing.entry) ? stageOf(editing.entry) : undefined}>
+      {editing && <DuelForm key={`${editing.entry.code}-${editing.entry.duel.team_a}-${editing.entry.duel.team_b}`} duel={editing.entry.duel} saved={editing.entry.saved} teams={data.teams}
         onDone={() => setEditing(e => e && { ...e, open: false })} />}
     </Sheet>
     <Sheet open={!!sheet?.open} onClose={() => setSheet(s => s && { ...s, open: false })} title={selected?.name ?? 'Equipe'} subtitle={`Prova ${race.number} · ${race.name}`}>
@@ -370,10 +360,86 @@ function BracketAdmin({ race, data }: { race: Race; data: ResultsData }) {
   </>;
 }
 
-function DuelForm({ duel, isNew, teams, onDone }: { duel: Duel; isNew: boolean; teams: Team[]; onDone: () => void }) {
+/** Relógio do duelo em andamento, contado da largada marcada no aparelho. */
+function DuelClock({ start }: { start: number }) {
+  const [now, setNow] = useState(start);
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, []);
+  return <strong className="admin-duel-clock">{formatDuel(Math.max(now - start, 0) / 1000)}</strong>;
+}
+
+/** Um duelo na lista: largada na buzina e um toque na chegada de cada barco; o resto vai pelo formulário. */
+function DuelRow({ entry, teams, onEdit }: { entry: PlanDuel; teams: Map<string, Team>; onEdit: () => void }) {
+  const { notify } = useApp();
+  const { code, duel, waiting } = entry;
+  // A largada fica no aparelho (vale sem internet): o tempo do barco é o toque de chegada menos ela.
+  const [startedAt, setStartedAt] = useLocalState<number | null>(`dsb-duel-start:${duel.race_id}:${code}`, null);
+  // O tempo real chega com um pequeno atraso: a chegada marcada aparece na hora por aqui.
+  const [arrived, setArrived] = useState<{ a?: number; b?: number }>({});
+  // Depois da segunda chegada o quadro fica um instante: um toque repetido não cai na Largada do duelo de baixo.
+  const [closing, setClosing] = useState<number | null>(null);
+  const times = { a: duel.time_a ?? arrived.a ?? null, b: duel.time_b ?? arrived.b ?? null };
+  const ready = !!duel.team_a && !!duel.team_b;
+  const winner = ready ? duelWinner({ ...duel, time_a: times.a, time_b: times.b }) : entry.winner;
+  const running = startedAt !== null && (times.a === null || times.b === null);
+  const live = running ? startedAt : closing;
+  const nameOf = (side: 'a' | 'b') => { const id = duel[`team_${side}`]; return id ? teams.get(id)?.name ?? id : waiting[side]; };
+
+  const saveTime = (side: 'a' | 'b', seconds: number | null) => supabase.rpc('admin_set_duel_time', {
+    p_race_id: duel.race_id, p_stage: duel.stage, p_slot: duel.slot, p_team_a: duel.team_a, p_team_b: duel.team_b, p_side: side, p_seconds: seconds,
+  });
+  async function arrive(side: 'a' | 'b', seconds: number, start: number) {
+    setArrived(current => ({ ...current, [side]: seconds }));
+    if (times[side === 'a' ? 'b' : 'a'] !== null) {
+      setStartedAt(null);
+      setClosing(start);
+      setTimeout(() => setClosing(null), 1500);
+    }
+    const { error } = await saveTime(side, seconds);
+    // O tempo já foi medido no toque: se a internet falhar, é só mandar de novo.
+    if (error) { notify(`Não gravou ${formatDuel(seconds)} de ${nameOf(side)}.`, { label: 'Tentar de novo', run: () => void arrive(side, seconds, start) }); return; }
+    notify(`${nameOf(side)}: ${formatDuel(seconds)}`, { label: 'Desfazer', run: () => void undo(side, start) });
+  }
+  async function undo(side: 'a' | 'b', start: number) {
+    const { error } = await saveTime(side, null);
+    if (error) { notify(errorMessage(error)); return; }
+    setArrived(current => ({ ...current, [side]: undefined }));
+    setStartedAt(start);
+  }
+  function stop(start: number) {
+    setStartedAt(null);
+    notify(times.a === null && times.b === null ? 'Largada cancelada.' : 'Relógio parado.', { label: 'Desfazer', run: () => setStartedAt(start) });
+  }
+
+  const side = (key: 'a' | 'b') =>
+    <span className={`duel-side ${winner === key ? 'won' : ''}`}><span>{nameOf(key)}</span><small>{times[key] !== null ? formatDuel(times[key]) : '–'}</small></span>;
+
+  return <li className="admin-duel-row">
+    <button className="admin-duel" onClick={() => { setArrived({}); onEdit(); }} aria-haspopup="dialog">
+      <span className="lap-number">{code}</span>
+      <span className="admin-duel-sides">
+        {side('a')}{side('b')}
+        {entry.stale && <small className="admin-duel-stale">Confira os barcos: um resultado anterior mudou depois deste duelo.</small>}
+      </span>
+      <ChevronRight size={18} />
+    </button>
+    {ready && startedAt === null && closing === null && times.a === null && times.b === null &&
+      <button className="button lap-button" onClick={() => { setArrived({}); setStartedAt(Date.now()); }} aria-label={`Largada do duelo ${code}`}><Flag size={18} /> Largada</button>}
+    {live !== null && <div className="admin-duel-live">
+      <div>{running ? <DuelClock start={live} /> : <strong className="admin-duel-clock">Fim</strong>}<button className="button" disabled={!running} onClick={() => stop(live)}><X size={16} /> {times.a === null && times.b === null ? 'Cancelar largada' : 'Encerrar'}</button></div>
+      {/* Quem já chegou continua no lugar, apagado: o botão do outro barco não sobe para baixo do dedo. */}
+      {(['a', 'b'] as const).map(key =>
+        <button key={key} className="button primary" disabled={times[key] !== null} onClick={() => void arrive(key, Math.max(0.1, Math.round((Date.now() - live) / 100) / 10), live)}>
+          <Check size={18} /> {times[key] !== null ? `${nameOf(key)} · ${formatDuel(times[key])}` : `Chegou: ${nameOf(key)}`}
+        </button>)}
+    </div>}
+  </li>;
+}
+
+/** `duel` já vem com os barcos que a chave indica; `saved` diz se ele já está lançado no banco. */
+function DuelForm({ duel, saved, teams, onDone }: { duel: Duel; saved: boolean; teams: Team[]; onDone: () => void }) {
   const { notify } = useApp();
   const [form, setForm] = useState({
-    stage: duel.stage, slot: String(duel.slot), team_a: duel.team_a ?? '', team_b: duel.team_b ?? '',
+    team_a: duel.team_a ?? '', team_b: duel.team_b ?? '',
     time_a: duel.time_a !== null ? formatDuel(duel.time_a) : '', time_b: duel.time_b !== null ? formatDuel(duel.time_b) : '',
   });
   const [busy, setBusy] = useState(false);
@@ -388,11 +454,9 @@ function DuelForm({ duel, isNew, teams, onDone }: { duel: Duel; isNew: boolean; 
     const time_a = form.time_a.trim() ? parseDuel(form.time_a) : null;
     const time_b = form.time_b.trim() ? parseDuel(form.time_b) : null;
     if ((form.time_a.trim() && time_a === null) || (form.time_b.trim() && time_b === null)) { notify('Tempo inválido. Use 3:02,4 ou 182,4 (segundos).'); return; }
-    const slot = Number(form.slot);
-    if (!Number.isInteger(slot) || slot < 1) { notify('Número do duelo inválido.'); return; }
-    if (isNew && teams.length && !form.team_a && !form.team_b) { notify('Escolha pelo menos um barco.'); return; }
+    if (!form.team_a && !form.team_b) { notify('Escolha pelo menos um barco.'); return; }
     setBusy(true);
-    const { error } = await save({ race_id: duel.race_id, stage: form.stage, slot, team_a: form.team_a || null, team_b: form.team_b || null, time_a, time_b });
+    const { error } = await save({ ...duel, team_a: form.team_a || null, team_b: form.team_b || null, time_a, time_b });
     setBusy(false);
     if (error) { notify(errorMessage(error)); return; }
     notify('Duelo salvo.');
@@ -422,23 +486,11 @@ function DuelForm({ duel, isNew, teams, onDone }: { duel: Duel; isNew: boolean; 
   </div>;
 
   return <form className="admin-form" onSubmit={e => void submit(e)}>
-    {isNew && <div className="admin-duel-fields">
-      <label className="admin-field">
-        <span>Fase</span>
-        <select value={form.stage} onChange={e => setForm({ ...form, stage: e.target.value as DuelStage })}>
-          {STAGES.map(s => <option key={s} value={s}>{duelStageLabel[s]}</option>)}
-        </select>
-      </label>
-      <label className="admin-field">
-        <span>Duelo nº</span>
-        <input type="number" min={1} max={32} inputMode="numeric" value={form.slot} onChange={e => setForm({ ...form, slot: e.target.value })} />
-      </label>
-    </div>}
     {sideFields('a', 'Barco A')}
     {sideFields('b', 'Barco B')}
-    <p className="settings-hint">Vence o menor tempo. Sem tempo, o barco perde o duelo.</p>
+    <p className="settings-hint">Aqui é só para corrigir ou digitar um tempo: o normal é tocar em Largada e em Chegou na lista. Vence o menor tempo; sem tempo, o barco perde o duelo.</p>
     <div className="account-actions">
-      {!isNew && <button className="button danger" type="button" disabled={busy} onClick={() => void remove()}><Trash2 size={16} /> Apagar</button>}
+      {saved && <button className="button danger" type="button" disabled={busy} onClick={() => void remove()}><Trash2 size={16} /> Apagar</button>}
       <button className="button primary" type="submit" disabled={busy}><Check size={16} /> {busy ? 'Salvando…' : 'Salvar duelo'}</button>
     </div>
   </form>;

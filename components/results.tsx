@@ -7,8 +7,8 @@ import { closingMinutes, nextRace, useNow } from '@/lib/races';
 import { clock, dayLabel, hhmm, itemFromRace, phaseOf, startsIn, LATE_AFTER } from '@/lib/schedule';
 import { useClock } from '@/lib/use-schedule';
 import {
-  DOC_ITEMS, ITEM_POINTS, bracketColumns, duelWinner, formatDuel, formatDuration,
-  lapSplits, pointsIntensity, sortRace, sortStandings, stageLabel, type Duel, type Score,
+  DOC_ITEMS, ITEM_POINTS, duelStageLabel, formatDuel, formatDuration, lapSplits, matchPlan,
+  pointsIntensity, sortRace, sortStandings, stageLabel, type PlanDuel, type Score,
 } from '@/lib/scoring';
 import { Sheet, TeamBadge } from './ui';
 import { ShareArt, shareArtSubtitle } from './share-art';
@@ -217,7 +217,7 @@ function RaceHeader({ race }: { race: Race }) {
   const minutes = race.duration_minutes;
   const start = Date.parse(race.starts_at);
   const rule = race.kind === 'bracket'
-    ? 'Duelos X1 eliminatórios: passa quem fizer o menor tempo. Quem cai na mesma fase é ordenado pelo tempo.'
+    ? 'Duelos X1 eliminatórios: passa quem fizer o menor tempo. Na Etapa 2, o perdedor de melhor tempo volta pela repescagem. Quem cai na mesma etapa é ordenado pelo tempo.'
     : minutes
       ? `${minutes} min de prova, com até ${Math.round(closingMinutes(race))} min para fechar a última volta. Vence quem completar mais voltas.`
       : 'Vence quem completar mais voltas; no empate, quem fechou a última volta primeiro.';
@@ -400,44 +400,40 @@ const LapRace = memo(function LapRace({ race, data }: { race: Race; data: Result
   </>;
 });
 
-// Chave do Match Race desenhada em px: cada coluna é uma fase e o duelo seguinte
-// fica na altura do meio dos dois que o alimentam.
+// Chave do Match Race desenhada em px: cada coluna é uma etapa e cada duelo fica na linha que
+// a chave da Instrução Técnica dá para ele (matchPlan).
 const CARD_W = 176, CARD_H = 64, GAP_X = 36, SLOT = 80, HEAD = 28;
+const BRACKET_HEADS = ['r16', 'qf', 'sf', 'final'] as const;
 
 const MatchRace = memo(function MatchRace({ race, data }: { race: Race; data: ResultsData }) {
-  const duels = data.duels.filter(d => d.race_id === race.id);
   const published = sortRace(data.scores.filter(s => s.race_id === race.id));
   const pending = !published.length;
   const scores = pending ? waitingRows(race, data.teams) : published;
 
   const teams = new Map(data.teams.map(t => [t.id, t]));
-  const columns = bracketColumns(duels, data.teams.length);
-  const third = duels.find(d => d.stage === 'third');
-  const final = duels.find(d => d.stage === 'final');
-  const finalWinner = final ? duelWinner(final) : null;
+  const plan = matchPlan(race.id, data.duels.filter(d => d.race_id === race.id));
+  const byCode = new Map(plan.map(entry => [entry.code, entry]));
+  const third = plan.find(entry => entry.duel.stage === 'third')!;
+  const { duel: final, winner: finalWinner } = plan.find(entry => entry.duel.stage === 'final')!;
 
-  const rows = columns[0]?.duels.length ?? 0;
   const colX = (c: number) => c * (CARD_W + GAP_X);
-  const centerY = (c: number, k: number) => { const span = 2 ** c; return HEAD + SLOT * (span * k + (span - 1) / 2) + SLOT / 2; };
-  const finalCol = columns.length - 1;
-  const thirdY = columns.length ? centerY(finalCol, 0) + CARD_H + 56 : 0;
-  const width = colX(finalCol) + CARD_W;
-  const height = Math.max(HEAD + SLOT * rows, third ? thirdY + CARD_H / 2 + 4 : 0);
+  const centerY = (row: number) => HEAD + SLOT * row + SLOT / 2;
+  const cardStyle = (entry: PlanDuel) => ({ left: colX(entry.col), top: centerY(entry.row) - CARD_H / 2, width: CARD_W, height: CARD_H });
+  const width = colX(BRACKET_HEADS.length - 1) + CARD_W;
+  const height = HEAD + SLOT * (Math.max(...plan.map(entry => entry.row)) + 1);
 
   const lines: React.CSSProperties[] = [];
-  columns.slice(0, -1).forEach((column, c) => {
-    for (let k = 0; k < column.duels.length; k += 2) {
-      const x1 = colX(c) + CARD_W, half = GAP_X / 2;
-      const ya = centerY(c, k), yb = centerY(c, k + 1), yn = centerY(c + 1, k / 2);
-      lines.push({ left: x1, top: ya, width: half, height: 1.5 }, { left: x1, top: yb, width: half, height: 1.5 },
-        { left: x1 + half, top: ya, width: 1.5, height: yb - ya + 1.5 }, { left: x1 + half, top: yn, width: half, height: 1.5 });
-    }
-  });
+  for (const entry of plan) for (const code of entry.feeders) {
+    const from = byCode.get(code)!;
+    const x = colX(from.col) + CARD_W, half = GAP_X / 2, ya = centerY(from.row), yb = centerY(entry.row);
+    lines.push({ left: x, top: ya, width: half, height: 1.5 }, { left: x + half, top: Math.min(ya, yb), width: 1.5, height: Math.abs(yb - ya) + 1.5 },
+      { left: x + half, top: yb, width: half, height: 1.5 });
+  }
 
   return <>
     <RaceHeader race={race} />
     <div className="match-layout">
-    {final && finalWinner && <section className="final-card" aria-label="Final">
+    {finalWinner && <section className="final-card" aria-label="Final">
       <div className="final-card-title"><h2>Final</h2>{final.time_a !== null && final.time_b !== null && <small>diferença {Math.abs(final.time_a - final.time_b).toFixed(1).replace('.', ',')}s</small>}</div>
       {(finalWinner === 'a' ? ['a', 'b'] as const : ['b', 'a'] as const).map((side, i) => {
         const team = teams.get((side === 'a' ? final.team_a : final.team_b) ?? '');
@@ -450,21 +446,20 @@ const MatchRace = memo(function MatchRace({ race, data }: { race: Race; data: Re
       })}
     </section>}
 
-    {columns.length > 0 && <section className="bracket-section" aria-label="Chaveamento">
-      <div className="bracket-title"><h2>Chaveamento</h2>{columns.length > 2 && <small className="bracket-hint">arraste para o lado →</small>}</div>
+    <section className="bracket-section" aria-label="Chaveamento">
+      <div className="bracket-title"><h2>Chaveamento</h2><small className="bracket-hint">arraste para o lado →</small></div>
       <div className="bracket-scroll">
         <div className="bracket" style={{ width, height }}>
-          {columns.map((column, c) => <span key={column.stage} className="bracket-head" style={{ left: colX(c), width: CARD_W }}>{column.stage === 'final' ? 'Final' : stageLabel[column.stage]}</span>)}
-          {third && <span className="bracket-head" style={{ left: colX(finalCol), top: thirdY - CARD_H / 2 - 22, width: CARD_W }}>Disputa de 3º</span>}
+          {BRACKET_HEADS.map((stage, c) => <span key={stage} className="bracket-head" style={{ left: colX(c), width: CARD_W }}>{duelStageLabel[stage]}</span>)}
+          <span className="bracket-head" style={{ left: colX(third.col), top: centerY(third.row) - CARD_H / 2 - 22, width: CARD_W }}>{duelStageLabel.third}</span>
           {lines.map((style, i) => <span key={i} className="bracket-line" style={style} />)}
-          {columns.map((column, c) => column.duels.map((duel, k) =>
-            <DuelCard key={`${column.stage}-${k}`} duel={duel} teams={teams} champion={column.stage === 'final'} style={{ left: colX(c), top: centerY(c, k) - CARD_H / 2, width: CARD_W, height: CARD_H }} />))}
-          {third && <DuelCard duel={third} teams={teams} style={{ left: colX(finalCol), top: thirdY - CARD_H / 2, width: CARD_W, height: CARD_H }} />}
+          {plan.map(entry => <DuelCard key={entry.code} entry={entry} teams={teams} style={cardStyle(entry)} />)}
+          {plan.filter(entry => entry.col < 3).map(entry => <span key={entry.code} className="duel-code" style={{ left: colX(entry.col) + 10, top: centerY(entry.row) - CARD_H / 2 - 7 }}>{entry.code}</span>)}
         </div>
       </div>
-    </section>}
+    </section>
 
-    {scores.length > 0 && <section className={`card race-results match-ranking ${final && finalWinner ? '' : 'wide'}`} aria-label="Classificação da prova">
+    {scores.length > 0 && <section className={`card race-results match-ranking ${finalWinner ? '' : 'wide'}`} aria-label="Classificação da prova">
       <h2 className="card-subtitle">{pending ? `${scores.length} equipes inscritas` : 'Classificação da prova'}</h2>
       <ol>
         {scores.map(score => {
@@ -485,21 +480,20 @@ const MatchRace = memo(function MatchRace({ race, data }: { race: Race; data: Re
   </>;
 });
 
-function DuelCard({ duel, teams, champion = false, style }: { duel: Duel | null; teams: Map<string, Team>; champion?: boolean; style: React.CSSProperties }) {
-  const winner = duel ? duelWinner(duel) : null;
-  const decided = duel && winner && duel.team_a && duel.team_b;
+function DuelCard({ entry, teams, style }: { entry: PlanDuel; teams: Map<string, Team>; style: React.CSSProperties }) {
+  const { duel, winner } = entry;
+  const champion = duel.stage === 'final';
   const side = (key: 'a' | 'b') => {
-    const id = duel?.[key === 'a' ? 'team_a' : 'team_b'];
-    const time = duel?.[key === 'a' ? 'time_a' : 'time_b'] ?? null;
+    const id = duel[`team_${key}`], time = duel[`time_${key}`];
     const team = id ? teams.get(id) : undefined;
-    const state = !decided ? '' : winner === key ? (champion ? 'win champion' : 'win') : 'lose';
+    const state = !winner ? '' : winner === key ? (champion ? 'win champion' : 'win') : 'lose';
     return <span className={`duel-side ${state}`}>
       {team ? <TeamBadge team={team} small /> : <span className="duel-empty" />}
-      <span className="duel-name">{team?.name ?? (duel && duel.team_a && !duel.team_b ? 'Passa direto' : 'A definir')}</span>
+      <span className="duel-name">{team?.name ?? entry.waiting[key]}</span>
       {time !== null && <span className="duel-time">{formatDuel(time)}</span>}
     </span>;
   };
-  return <div className={`duel-card ${champion && decided ? 'champion' : ''}`} style={style}>{side('a')}{side('b')}</div>;
+  return <div className={`duel-card ${champion && winner ? 'champion' : ''}`} style={style}>{side('a')}{side('b')}</div>;
 }
 
 /** Detalhe de uma equipe: página dentro do sheet de resultados (não outro sheet por cima). */
