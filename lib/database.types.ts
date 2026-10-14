@@ -115,9 +115,9 @@ export type Database = {
         Relationships: []
       }
       match_duels: {
-        Row: { race_id: string; slot: number; stage: string; team_a: string | null; team_b: string | null; time_a: number | null; time_b: number | null }
-        Insert: { race_id: string; slot: number; stage: string; team_a?: string | null; team_b?: string | null; time_a?: number | null; time_b?: number | null }
-        Update: { race_id?: string; slot?: number; stage?: string; team_a?: string | null; team_b?: string | null; time_a?: number | null; time_b?: number | null }
+        Row: { race_id: string; slot: number; stage: string; team_a: string | null; team_b: string | null; time_a: number | null; time_b: number | null; started_at: string | null }
+        Insert: { race_id: string; slot: number; stage: string; team_a?: string | null; team_b?: string | null; time_a?: number | null; time_b?: number | null; started_at?: string | null }
+        Update: { race_id?: string; slot?: number; stage?: string; team_a?: string | null; team_b?: string | null; time_a?: number | null; time_b?: number | null; started_at?: string | null }
         Relationships: []
       }
       penalties: {
@@ -360,6 +360,10 @@ export type Database = {
         Returns: undefined
       }
       admin_delete_duel: { Args: { p_race_id: string; p_stage: string; p_slot: number }; Returns: undefined }
+      admin_start_duel: {
+        Args: { p_race_id: string; p_stage: string; p_slot: number; p_team_a: string | null; p_team_b: string | null; p_at: string | null }
+        Returns: undefined
+      }
       admin_set_duel_time: {
         Args: { p_race_id: string; p_stage: string; p_slot: number; p_team_a: string | null; p_team_b: string | null; p_side: string; p_seconds: number | null }
         Returns: undefined

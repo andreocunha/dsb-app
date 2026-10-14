@@ -107,6 +107,9 @@ const MATCH_PLAN: { code: string; stage: DuelStage; slot: number; col: number; r
   { code: '3º', stage: 'third', slot: 1, col: 3, row: 4.25, a: lost('C1'), b: lost('C2') },
 ];
 
+/** Código do duelo na Instrução Técnica (A1, B2, Final…), pela fase e pelo número. */
+export const duelCode = (stage: DuelStage, slot: number) => MATCH_PLAN.find(p => p.stage === stage && p.slot === slot)?.code ?? null;
+
 export type PlanDuel = {
   code: string; col: number; row: number;
   /** O duelo como está valendo: os barcos lançados ou, na falta, os que a chave indica. */

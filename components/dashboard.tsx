@@ -9,6 +9,7 @@ import { eventConfig, youtubeEmbedUrl } from '@/lib/event-config';
 import { useLiveUrl } from '@/lib/live-url';
 import { ResultsSheet } from './results';
 import { ScheduleCard } from './schedule';
+import { RaceFeed } from './race-feed';
 import { useNotificationCenter } from './notifications';
 import { useAuth } from './auth';
 import { supabase } from '@/lib/supabase';
@@ -119,6 +120,7 @@ export function Dashboard({ visible }: { visible: boolean }) {
           allowFullScreen
           referrerPolicy="strict-origin-when-cross-origin"
         />
+        <RaceFeed active={!mapHidden} />
         {/* A live sai junto com a home, para o áudio não seguir tocando escondido. */}
         {visible && live !== 'off' && <Live mode={live} raceName={current?.item.title ?? 'Desafio Solar Brasil'} setMode={setLive} />}
       </div>

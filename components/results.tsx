@@ -200,7 +200,8 @@ function Legend() {
 
 function ScoreCell({ race, score }: { race: Race; score?: Score }) {
   const label = <span className="sr-only">Prova {race.number}: </span>;
-  if (!score) return <span className="score-cell empty">{label}–</span>;
+  // Sem colocação ainda (ex.: chave lançada antes dos duelos): não é zero ponto, é prova por disputar.
+  if (!score || (score.status === 'ok' && score.position === null)) return <span className="score-cell empty">{label}–</span>;
   if (score.status !== 'ok') return <span className={`score-cell ${score.status}`}>{label}{score.status.toUpperCase()}</span>;
   const t = pointsIntensity(score.points);
   return <span className={`score-cell ${t > .5 ? 'strong' : ''}`} style={{ '--t': t } as React.CSSProperties}>{label}{score.points}</span>;
@@ -539,7 +540,7 @@ function TeamDetail({ team, standings, races, data }: { team: Team; standings: T
               <span className="chip-number">{race.number}</span>
               <span className="race-row-main"><strong>{race.name}</strong><small>{detail}</small></span>
               {score && <PositionBadge score={score} />}
-              <strong className="team-race-points">{score ? score.points : '–'}</strong>
+              <strong className="team-race-points">{score && (score.status !== 'ok' || score.position !== null) ? score.points : '–'}</strong>
             </li>;
           })}
         </ol>

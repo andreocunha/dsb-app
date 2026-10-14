@@ -384,6 +384,13 @@ function DuelRow({ entry, teams, onEdit }: { entry: PlanDuel; teams: Map<string,
   const live = running ? startedAt : closing;
   const nameOf = (side: 'a' | 'b') => { const id = duel[`team_${side}`]; return id ? teams.get(id)?.name ?? id : waiting[side]; };
 
+  // O relógio do mapa conta da largada gravada no banco; o tempo oficial continua sendo o medido aqui.
+  async function announce(at: number | null) {
+    const { error } = await supabase.rpc('admin_start_duel', {
+      p_race_id: duel.race_id, p_stage: duel.stage, p_slot: duel.slot, p_team_a: duel.team_a, p_team_b: duel.team_b, p_at: at === null ? null : new Date(at).toISOString(),
+    });
+    if (error) notify('O relógio do mapa não atualizou (o tempo daqui segue valendo).', { label: 'Tentar de novo', run: () => void announce(at) });
+  }
   const saveTime = (side: 'a' | 'b', seconds: number | null) => supabase.rpc('admin_set_duel_time', {
     p_race_id: duel.race_id, p_stage: duel.stage, p_slot: duel.slot, p_team_a: duel.team_a, p_team_b: duel.team_b, p_side: side, p_seconds: seconds,
   });
@@ -405,9 +412,15 @@ function DuelRow({ entry, teams, onEdit }: { entry: PlanDuel; teams: Map<string,
     setArrived(current => ({ ...current, [side]: undefined }));
     setStartedAt(start);
   }
+  function begin(at: number) {
+    setArrived({});
+    setStartedAt(at);
+    void announce(at);
+  }
   function stop(start: number) {
     setStartedAt(null);
-    notify(times.a === null && times.b === null ? 'Largada cancelada.' : 'Relógio parado.', { label: 'Desfazer', run: () => setStartedAt(start) });
+    void announce(null);
+    notify(times.a === null && times.b === null ? 'Largada cancelada.' : 'Relógio parado.', { label: 'Desfazer', run: () => begin(start) });
   }
 
   const side = (key: 'a' | 'b') =>
@@ -423,7 +436,7 @@ function DuelRow({ entry, teams, onEdit }: { entry: PlanDuel; teams: Map<string,
       <ChevronRight size={18} />
     </button>
     {ready && startedAt === null && closing === null && times.a === null && times.b === null &&
-      <button className="button lap-button" onClick={() => { setArrived({}); setStartedAt(Date.now()); }} aria-label={`Largada do duelo ${code}`}><Flag size={18} /> Largada</button>}
+      <button className="button lap-button" onClick={() => begin(Date.now())} aria-label={`Largada do duelo ${code}`}><Flag size={18} /> Largada</button>}
     {live !== null && <div className="admin-duel-live">
       <div>{running ? <DuelClock start={live} /> : <strong className="admin-duel-clock">Fim</strong>}<button className="button" disabled={!running} onClick={() => stop(live)}><X size={16} /> {times.a === null && times.b === null ? 'Cancelar largada' : 'Encerrar'}</button></div>
       {/* Quem já chegou continua no lugar, apagado: o botão do outro barco não sobe para baixo do dedo. */}
