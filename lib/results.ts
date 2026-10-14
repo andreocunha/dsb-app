@@ -6,10 +6,15 @@ import type { Duel, Penalty, Score } from './scoring';
 
 export type ResultsData = { teams: Team[]; scores: Score[]; duels: Duel[]; penalties: Penalty[] };
 
+// O Supabase devolve o mesmo canal para um nome já em uso e recusa ouvintes novos nele depois de
+// inscrito. A home fica montada por baixo das outras telas, então o resultado de uma prova e o
+// painel da organização pedem as voltas da mesma prova ao mesmo tempo: cada assinatura tem seu canal.
+let channelSeq = 0;
+
 // Durante a prova as voltas chegam uma a uma: junta as mudanças e recarrega uma vez só.
 function onResultsChange(name: string, tables: { table: string; filter?: string }[], reload: () => void) {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const channel = supabase.channel(name);
+  const channel = supabase.channel(`${name}-${++channelSeq}`);
   for (const { table, filter } of tables) {
     channel.on('postgres_changes', { event: '*', schema: 'public', table, filter }, () => {
       clearTimeout(timer);
