@@ -80,7 +80,7 @@ div.fx-slot .fx-slot-logo.empty { color: var(--text-tertiary); }
 .fx-list { margin-top: 12px; }
 .fx-list li { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
 .fx-list li.you .fx-list-name { color: var(--brand); font-weight: 600; }
-.fx-pos { width: 22px; color: var(--text-tertiary); font-size: 13px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+.fx-pos { flex-shrink: 0; width: 28px; white-space: nowrap; color: var(--text-tertiary); font-size: 13px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 .fx-pos.p1 { color: var(--team-gold); }
 .fx-pos.p2 { color: var(--text-secondary); }
 .fx-pos.p3 { color: var(--team-orange); }
