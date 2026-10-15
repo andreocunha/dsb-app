@@ -1,12 +1,10 @@
 'use client';
 import { useState } from 'react';
-import { Check, ChevronRight, Flag, RotateCcw, Square } from 'lucide-react';
+import { Check, Flag, RotateCcw, Square } from 'lucide-react';
 import { useApp } from './app-shell';
 import { DurationForm } from './admin-duration';
-import { Sheet } from './ui';
 import { supabase, errorMessage } from '@/lib/supabase';
-import { useClock, useSchedule } from '@/lib/use-schedule';
-import { dayIndex, dayLabel, durationText, hhmm, phases, shiftLabel, shiftOf, type Phase, type ScheduleItem } from '@/lib/schedule';
+import { dayIndex, dayLabel, durationText, hhmm, type Phase, type ScheduleItem } from '@/lib/schedule';
 
 const MINUTE = 60_000;
 const dateKey = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Sao_Paulo' });
@@ -14,66 +12,38 @@ const dateKey = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-di
 const fromInputs = (date: string, time: string) => Date.parse(`${date}T${time}:00-03:00`);
 const toInputs = (ms: number) => ({ date: dateKey.format(ms), time: hhmm(ms) });
 
-function phaseText(item: ScheduleItem, phase: Phase) {
-  switch (phase.kind) {
-    case 'live': return phase.endsAt ? `Acontecendo · termina ${hhmm(phase.endsAt)}` : `Acontecendo desde ${hhmm(phase.startedAt)}`;
-    case 'closing': return `Última volta até ${hhmm(phase.limitAt)}`;
-    case 'late': return 'Passou do horário · marque a largada';
-    case 'done': return item.kind === 'race' ? 'Encerrada' : 'Encerrado';
-    default: { const shift = shiftOf(item); return shift ? `${shiftLabel[shift.kind]} · antes ${hhmm(shift.originalAt)}` : 'No horário'; }
-  }
-}
+type Section = 'time' | 'duration' | 'start';
+const SECTIONS: { id: Section; label: string }[] = [{ id: 'time', label: 'Horário' }, { id: 'duration', label: 'Duração' }, { id: 'start', label: 'Largada' }];
 
-/** Aba Agenda do painel: atrasar ou remarcar qualquer item, largar e encerrar as provas. */
-export function SchedulePanel() {
-  const { items, reload } = useSchedule('programacao-admin');
-  const now = useClock(false);
-  const [selected, setSelected] = useState<{ key: string; open: boolean } | null>(null);
-  if (!items || !now) return <p className="panel-note">Carregando…</p>;
-  const list = phases(items, now);
-  const current = list.find(entry => entry.item.key === selected?.key) ?? null;
-
-  const days: { day: number; entries: typeof list }[] = [];
-  for (const entry of list) {
-    const day = dayIndex(entry.item.startsAt);
-    if (days.at(-1)?.day !== day) days.push({ day, entries: [] });
-    days.at(-1)!.entries.push(entry);
-  }
+/**
+ * O que a organização muda num item da programação (aberto pela própria programação, tocando no
+ * item): horário de qualquer item e, nas provas, duração e largada, uma coisa de cada vez.
+ */
+export function ScheduleItemEditor({ item, phase, onChanged }: { item: ScheduleItem; phase: Phase; onChanged: () => void }) {
+  const race = item.kind === 'race';
+  // Abre no que faz sentido agora: prova andando muda a duração; atrasada, marca a largada.
+  const [section, setSection] = useState<Section>(!race ? 'time' : item.startedAt !== null ? 'duration' : phase.kind === 'late' ? 'start' : 'time');
+  const show = race ? section : 'time';
 
   return <>
-    {days.map(({ day, entries }) => <section key={day} className="settings-group">
-      <h2 className="settings-label">{dayLabel(entries[0].item.startsAt, now)}</h2>
-      <ul className="settings-card admin-list">
-        {entries.map(({ item, phase }) => <li key={item.key} className="admin-row">
-          <button className="admin-row-info" onClick={() => setSelected({ key: item.key, open: true })} aria-haspopup="dialog">
-            <span className="admin-agenda-time">{hhmm(item.startsAt)}</span>
-            <span className="admin-row-main">
-              <strong>{item.label ? `${item.label} · ${item.title}` : item.title}</strong>
-              <small className={`admin-agenda-${phase.kind}`}>{phaseText(item, phase)}</small>
-            </span>
-            <ChevronRight size={16} aria-hidden="true" />
-          </button>
-        </li>)}
-      </ul>
-    </section>)}
-    <p className="settings-hint">Mudar um horário aparece na hora para todo mundo, com o horário anterior riscado, e fica no histórico. Nas provas, também muda o fechamento do fantasy e o lembrete de 1 hora antes.</p>
-    <Sheet open={!!selected?.open} onClose={() => setSelected(s => s && { ...s, open: false })}
-      title={current?.item.title ?? 'Programação'} subtitle={current ? [current.item.label, `${dayLabel(current.item.startsAt)}, ${hhmm(current.item.startsAt)}`].filter(Boolean).join(' · ') : undefined}>
-      {current && <>
-        {current.item.kind === 'race' && <RaceControls item={current.item} phase={current.phase} onChanged={reload} />}
-        {current.item.kind === 'race' && <DurationForm key={`${current.item.key}:${current.item.durationMinutes}:${current.item.closingMinutes}`} race={current.item} onChanged={reload} />}
-        <Reschedule key={`${current.item.key}:${current.item.startsAt}`} item={current.item} onChanged={reload} />
-        {current.item.changes.length > 0 && <section className="admin-sheet-section">
-          <h3>Histórico de horários</h3>
-          <ul className="lap-list">
-            {[...current.item.changes].reverse().map(change => <li key={change.changed_at}>
-              <span className="lap-time"><s>{hhmm(Date.parse(change.previous_at))}</s> → {dayIndex(Date.parse(change.previous_at)) !== dayIndex(Date.parse(change.new_at)) ? `${dayLabel(Date.parse(change.new_at))}, ` : ''}{hhmm(Date.parse(change.new_at))}{change.reason && ` · ${change.reason}`}</span>
-              <small className="admin-when">{dayLabel(Date.parse(change.changed_at))}, {hhmm(Date.parse(change.changed_at))}</small>
-            </li>)}
-          </ul>
-        </section>}
-      </>}
-    </Sheet>
+    {race && <div className="segmented admin-item-tabs" role="radiogroup" aria-label="O que mudar">
+      {SECTIONS.map(s => <button key={s.id} role="radio" aria-checked={show === s.id} onClick={() => setSection(s.id)}>{s.label}</button>)}
+    </div>}
+    {show === 'time' && <>
+      <Reschedule key={`${item.key}:${item.startsAt}`} item={item} onChanged={onChanged} />
+      {item.changes.length > 0 && <section className="admin-sheet-section">
+        <h3>Histórico de horários</h3>
+        <ul className="lap-list">
+          {[...item.changes].reverse().map(change => <li key={change.changed_at}>
+            <span className="lap-time"><s>{hhmm(Date.parse(change.previous_at))}</s> → {dayIndex(Date.parse(change.previous_at)) !== dayIndex(Date.parse(change.new_at)) ? `${dayLabel(Date.parse(change.new_at))}, ` : ''}{hhmm(Date.parse(change.new_at))}{change.reason && ` · ${change.reason}`}</span>
+            <small className="admin-when">{dayLabel(Date.parse(change.changed_at))}, {hhmm(Date.parse(change.changed_at))}</small>
+          </li>)}
+        </ul>
+      </section>}
+      <p className="settings-hint">Mudar um horário aparece na hora para todo mundo, com o horário anterior riscado, e fica no histórico. Nas provas, também muda o fechamento do fantasy e o lembrete de 1 hora antes.</p>
+    </>}
+    {show === 'duration' && <DurationForm key={`${item.key}:${item.durationMinutes}:${item.closingMinutes}`} race={item} onChanged={onChanged} />}
+    {show === 'start' && <RaceControls item={item} phase={phase} onChanged={onChanged} />}
   </>;
 }
 

@@ -168,7 +168,8 @@ const Standings = memo(function Standings({ races, data, standings, onTeam }: { 
       <ol>
         {standings.map((team, index) => {
           const gap = leader - team.points;
-          return <li key={team.id}>
+          // No celular os três primeiros já estão no pódio logo acima (o CSS esconde as linhas deles).
+          return <li key={team.id} className={index < 3 ? 'on-podium' : undefined}>
             <button className="standings-row" onClick={() => onTeam(team.id)}>
               <span className={`position ${index === 0 ? 'p1' : ''}`}>{index + 1}</span>
               <TeamBadge team={team} small />

@@ -191,6 +191,11 @@ img.avatar { object-fit: cover; }
 .schedule-status small { color: var(--text-tertiary); font-size: 12px; }
 .schedule-status .countdown { color: var(--text-secondary); font-size: 13px; }
 .schedule-row.is-done .schedule-time, .schedule-row.is-done .schedule-main { opacity: .5; }
+/* Organização: a linha inteira abre a edição do item. */
+.schedule-admin-hint { margin: 0 0 6px; color: var(--text-tertiary); font-size: 12px; }
+.schedule-row.is-editable { display: block; }
+.schedule-row-button { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: start; width: 100%; text-align: left; }
+.schedule-row-button:active { opacity: .6; }
 .schedule-row.is-current { margin: 0 -12px; padding: 10px 12px; border-bottom-color: transparent; border-radius: 12px; background: var(--brand-soft); }
 .hud-actions { display: flex; gap: 6px; }
 .hud-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); font-size: 13px; font-weight: 500; }
@@ -396,9 +401,12 @@ img.avatar { object-fit: cover; }
 .standings-total strong { font-family: var(--font-geist-mono), monospace; font-size: 17px; font-weight: 600; letter-spacing: -.4px; }
 .standings-total small { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
 .standings-gap { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-/* No celular a linha mostra total e distância para o líder; as células por prova ficam no detalhe da equipe. */
+/* No celular a linha mostra total e distância para o líder; as células por prova ficam no detalhe da equipe.
+   Sem as células, as linhas do pódio repetiriam o que o pódio já mostra: a lista começa no 4º. */
 @container (max-width: 519px) {
-  .standings-head, .standings .score-cells, .standings-side .results-legend { display: none; }
+  .standings-head, .standings .score-cells, .standings-side .results-legend, .standings li.on-podium { display: none; }
+  .standings li.on-podium + li:not(.on-podium) { border-top: 0; }
+  .standings:not(:has(li:not(.on-podium))) { display: none; }
   .standings-main { gap: 1px; }
   .standings { padding: 0; }
 }

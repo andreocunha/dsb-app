@@ -28,7 +28,7 @@ export function Dashboard({ visible }: { visible: boolean }) {
   const [results, setResults] = useState(false);
   const [live, setLive] = useState<LiveMode>('off');
   const now = useNow();
-  const { items } = useSchedule();
+  const { items, reload } = useSchedule();
   // Nome do que está acontecendo (ou vem a seguir), para a barra da live.
   const current = items && now ? featured(phases(items, now)) : null;
   const { isAdmin } = useAuth();
@@ -95,7 +95,7 @@ export function Dashboard({ visible }: { visible: boolean }) {
   return (
     <div className={`home fill ${live === 'pip' ? 'has-pip' : ''}`} hidden={!visible}>
       <div className="home-hud">
-        <ScheduleCard items={items} actions={<div className="hud-actions">
+        <ScheduleCard items={items} onChanged={reload} actions={<div className="hud-actions">
           <button className="hud-results" aria-haspopup="dialog" aria-label="Resultado" onClick={() => setResults(true)}><Trophy size={16} /><span>Resultado</span></button>
           <button className="hud-live" aria-pressed={live !== 'off'} aria-label="Live" onClick={() => setLive(live === 'off' ? 'full' : 'off')}><Radio size={16} /><span>Live</span></button>
           {notifications.bell}

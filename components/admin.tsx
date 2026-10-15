@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Flag, ImagePlus, LogIn, Megaphone, Minus, Plus, Radio, RotateCcw, Send, ShieldCheck, Timer, Trash2, X } from 'lucide-react';
 import { useApp } from './app-shell';
 import { DurationForm } from './admin-duration';
-import { SchedulePanel } from './admin-schedule';
 import { AttemptsAdmin, HeatsAdmin } from './admin-runs';
 import { StatsPanel } from './admin-stats';
 import { useAuth } from './auth';
@@ -22,9 +21,9 @@ import {
   type Duel, type DuelStage, type PlanDuel, type Score, type Status,
 } from '@/lib/scoring';
 
-type Tab = 'races' | 'agenda' | 'teams' | 'notify' | 'live' | 'stats';
+type Tab = 'races' | 'teams' | 'notify' | 'live' | 'stats';
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'races', label: 'Provas' }, { id: 'agenda', label: 'Agenda' }, { id: 'teams', label: 'Equipes' }, { id: 'notify', label: 'Notificação' }, { id: 'live', label: 'Live' }, { id: 'stats', label: 'Números' },
+  { id: 'races', label: 'Provas' }, { id: 'teams', label: 'Equipes' }, { id: 'notify', label: 'Notificação' }, { id: 'live', label: 'Live' }, { id: 'stats', label: 'Números' },
 ];
 const STAGES: DuelStage[] = ['r16', 'qf', 'sf', 'third', 'final'];
 const STATUS: { id: Status; label: string }[] = [{ id: 'ok', label: 'Normal' }, { id: 'dnf', label: 'DNF' }, { id: 'dns', label: 'DNS' }];
@@ -71,7 +70,6 @@ export function Admin() {
     {isAdmin === null || !races || !data
       ? <p className="panel-note">{error ? 'Não foi possível carregar. Confira sua conexão.' : 'Carregando…'}</p>
       : tab === 'races' ? <RacesPanel races={races} data={data} onRaceChanged={reloadRaces} />
-      : tab === 'agenda' ? <SchedulePanel />
       : tab === 'teams' ? <TeamsPanel races={races} data={data} onChanged={reload} />
       : tab === 'notify' ? <NotifyPanel />
       : tab === 'live' ? <LivePanel />
