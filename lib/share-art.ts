@@ -135,6 +135,8 @@ export async function drawRacePost(data: ResultsData, race: Race) {
     let best: { team: string; ms: number } | null = null;
     for (const [team, times] of byTeam) for (const ms of lapSplits(times, start)) if (!best || ms < best.ms) best = { team, ms };
     if (best) highlight = { label: 'Melhor volta', value: formatDuration(best.ms), team: teams.get(best.team)?.name ?? '' };
+  } else if ((race.kind === 'attempts' || race.kind === 'heats') && scores[0]?.run_time) {
+    highlight = { label: race.kind === 'attempts' ? 'Melhor tempo' : 'Vencedor', value: formatDuel(scores[0].run_time), team: teams.get(scores[0].team_id)?.name ?? '' };
   } else if (scores[0]?.duel_time) {
     highlight = { label: 'Campeão', value: formatDuel(scores[0].duel_time), team: teams.get(scores[0].team_id)?.name ?? '' };
   }
@@ -156,7 +158,7 @@ export async function drawRacePost(data: ResultsData, race: Race) {
     text(ctx, score.position ? `${score.position}º` : score.status.toUpperCase(), 134, y + 59, { weight: 600, size: 26, color: tone[1], align: 'center', mono: true });
     logo(ctx, logos, team, 230, y + 49, 62);
     text(ctx, team.name, 280, y + 46, { weight: 700, size: 34, color: '#252332', max: 540 });
-    text(ctx, detail(score, leader, start), 280, y + 80, { size: 23, color: '#656785', max: 540 });
+    text(ctx, detail(score, leader, start, race), 280, y + 80, { size: 23, color: '#656785', max: 540 });
     text(ctx, `${score.points} pts`, 984, y + 62, { weight: 600, size: 36, color: '#252332', align: 'right', mono: true });
   });
 
@@ -199,9 +201,15 @@ export async function drawLineupPost(data: ResultsData, races: Race[], race: Rac
   return toBlob(el);
 }
 
-function detail(score: Score, leader: Score, start: number) {
+function detail(score: Score, leader: Score, start: number, race: Race) {
   if (score.status === 'dns') return 'Não largou';
-  if (score.status === 'dnf') return `Não terminou · ${score.laps} voltas`;
+  const timed = race.kind === 'attempts' || race.kind === 'heats';
+  if (score.status === 'dnf') return timed ? 'Não fez tempo válido' : `Não terminou · ${score.laps} voltas`;
+  if (timed) {
+    if (score.run_time === null) return 'Sem tempo';
+    const label = race.kind === 'attempts' ? 'Melhor tempo' : score.runs > 1 && (score.position ?? 99) <= 3 ? 'Bateria 2' : 'Bateria 1';
+    return `${label} · ${formatDuel(score.run_time)}`;
+  }
   if (score.stage) return stageLabel[score.stage] + (score.duel_time && (score.position ?? 0) > 4 ? ` · ${formatDuel(score.duel_time)}` : '');
   const last = score.last_lap_at ? Date.parse(score.last_lap_at) : null;
   if (!last) return `${score.laps} voltas`;

@@ -4,6 +4,7 @@ import { Check, ChevronDown, ChevronRight, Flag, ImagePlus, LogIn, Megaphone, Mi
 import { useApp } from './app-shell';
 import { DurationForm } from './admin-duration';
 import { SchedulePanel } from './admin-schedule';
+import { AttemptsAdmin, HeatsAdmin } from './admin-runs';
 import { StatsPanel } from './admin-stats';
 import { useAuth } from './auth';
 import { Sheet, TeamBadge } from './ui';
@@ -98,13 +99,14 @@ function RacesPanel({ races, data, onRaceChanged }: { races: Race[]; data: Resul
       </select>
       <ChevronDown size={16} aria-hidden="true" />
     </label>
-    {race.kind === 'bracket'
-      ? <BracketAdmin key={race.id} race={race} data={data} />
+    {race.kind === 'bracket' ? <BracketAdmin key={race.id} race={race} data={data} />
+      : race.kind === 'attempts' ? <AttemptsAdmin key={race.id} race={race} data={data} onRaceChanged={onRaceChanged} />
+      : race.kind === 'heats' ? <HeatsAdmin key={race.id} race={race} data={data} onRaceChanged={onRaceChanged} />
       : <LapAdmin key={race.id} race={race} data={data} onRaceChanged={onRaceChanged} />}
   </>;
 }
 
-function StartRow({ race, onRaceChanged }: { race: Race; onRaceChanged: () => Promise<void> }) {
+export function StartRow({ race, onRaceChanged }: { race: Race; onRaceChanged: () => Promise<void> }) {
   const { notify } = useApp();
   const [busy, setBusy] = useState(false);
   async function setStart(at: string | null) {
@@ -148,7 +150,7 @@ function DurationRow({ race, onRaceChanged }: { race: Race; onRaceChanged: () =>
 }
 
 /** Linha de cada barco: posição atual, voltas e a situação (DNF/DNS). */
-function RowInfo({ team, score, detail }: { team: Team; score?: Score; detail: string }) {
+export function RowInfo({ team, score, detail }: { team: Team; score?: Score; detail: string }) {
   const tone = score && score.status !== 'ok' ? score.status : score?.position && score.position <= 3 ? `p${score.position}` : '';
   return <>
     <span className={`position-badge ${tone}`}>{score?.status !== 'ok' && score ? score.status.toUpperCase() : score?.position ? `${score.position}º` : '–'}</span>
@@ -266,7 +268,7 @@ function LapList({ laps, start, onRemove, onAdd }: {
 }
 
 /** DNF, DNS, colocação à mão e observação (tabela race_status). */
-function StatusForm({ race, team }: { race: Race; team: Team }) {
+export function StatusForm({ race, team }: { race: Race; team: Team }) {
   const { notify } = useApp();
   const [draft, setDraft] = useState<{ status: Status; position: string; note: string } | null>(null);
   const [saved, setSaved] = useState<string>('');
@@ -302,7 +304,7 @@ function StatusForm({ race, team }: { race: Race; team: Team }) {
     <div className="segmented admin-status" role="radiogroup" aria-label="Situação">
       {STATUS.map(s => <button key={s.id} type="button" role="radio" aria-checked={draft.status === s.id} onClick={() => setDraft({ ...draft, status: s.id })}>{s.label}</button>)}
     </div>
-    <p className="settings-hint">{draft.status === 'dnf' ? 'Largou e não terminou (inclui reboque): 20 pontos.' : draft.status === 'dns' ? 'Não largou: 0 pontos.' : `Colocação pelas ${race.kind === 'bracket' ? 'fases da chave' : 'voltas'}, ou a definida abaixo.`}</p>
+    <p className="settings-hint">{draft.status === 'dnf' ? 'Largou e não terminou (inclui reboque): 20 pontos.' : draft.status === 'dns' ? 'Não largou: 0 pontos.' : `Colocação ${{ bracket: 'pelas fases da chave', attempts: 'pelo melhor tempo', heats: 'pelas baterias', laps: 'pelas voltas' }[race.kind]}, ou a definida abaixo.`}</p>
     {draft.status === 'ok' && <label className="admin-field">
       <span>Colocação à mão (opcional)</span>
       <input type="number" min={1} max={99} inputMode="numeric" placeholder="Calculada" value={draft.position} onChange={e => setDraft({ ...draft, position: e.target.value })} />
@@ -364,7 +366,7 @@ function BracketAdmin({ race, data }: { race: Race; data: ResultsData }) {
 const duelStartKey = (raceId: string, code: string) => `dsb-duel-start:${raceId}:${code}`;
 
 /** Relógio do duelo em andamento, contado da largada marcada no aparelho. */
-function DuelClock({ start }: { start: number }) {
+export function DuelClock({ start }: { start: number }) {
   const [now, setNow] = useState(start);
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 100); return () => clearInterval(id); }, []);
   return <strong className="admin-duel-clock">{formatDuel(Math.max(now - start, 0) / 1000)}</strong>;

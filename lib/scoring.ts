@@ -9,17 +9,28 @@ export type Stage = DuelStage | 'champion' | 'third_winner';
 export type Score = {
   race_id: string; team_id: string; status: Status; note: string; laps: number; last_lap_at: string | null;
   stage: Stage | null; duel_time: number | null; position: number | null; points: number;
+  /** Slalom e Sprint: tentativas ou baterias corridas, e o tempo (s) que decide a colocação. */
+  runs: number; run_time: number | null;
 };
 export type Duel = {
   race_id: string; stage: DuelStage; slot: number;
   team_a: string | null; team_b: string | null; time_a: number | null; time_b: number | null;
 };
+/** Tentativa do Slalom ou bateria do Sprint (tabela race_runs). `seconds` vazio: sem tempo, ou na água. */
+export type Run = { race_id: string; team_id: string; run: number; started_at: string | null; ended_at: string | null; seconds: number | null };
 export type Penalty = { id: number; team_id: string; race_id: string | null; points: number; reason: string; created_at: string };
 
 /** Itens de documentação pré-evento (3.1.1 a 3.1.7) e pontos por item entregue (3.4 e 4.4). */
 export const DOC_ITEMS = 7;
 export const ITEM_POINTS = 20;
 export const DNF_POINTS = 20;
+/** Instrução Técnica 2026: até 3 tentativas no Slalom; os 3 primeiros do Sprint fazem a bateria 2. */
+export const SLALOM_ATTEMPTS = 3;
+export const SPRINT_FINALISTS = 3;
+/** Slalom: o próximo larga até 3 min depois da chegada do anterior. */
+export const SLALOM_WINDOW = 3 * 60_000;
+/** Toque de largada muito depois dos 3 min é uma pausa na prova, não um barco atrasado: conta do toque. */
+export const SLALOM_PAUSE = 10 * 60_000;
 
 export const stageLabel: Record<Stage, string> = {
   champion: 'Campeão', final: 'Vice', third_winner: '3º lugar', third: '4º lugar',
@@ -162,6 +173,36 @@ export function matchPlan(raceId: string, duels: Duel[]): PlanDuel[] {
   }
   return plan;
 }
+
+/** Barco na água: largou e ainda não chegou nem ficou sem tempo. */
+export const isRunning = (run: Run) => run.started_at !== null && run.ended_at === null && run.seconds === null;
+
+/**
+ * Largada do Slalom: o tempo conta quando o barco abre a volta ou ao fim dos 3 min depois da
+ * chegada do anterior, o que vier primeiro. Devolve o instante em que o tempo começa a contar.
+ */
+export function slalomStart(tap: number, previousEnd: number | null) {
+  if (previousEnd === null) return tap;
+  const limit = previousEnd + SLALOM_WINDOW;
+  return tap > limit && tap < limit + SLALOM_PAUSE ? limit : tap;
+}
+
+/** Próxima tentativa livre do barco no Slalom (1 a 3), ou null se já usou as três. */
+export function nextAttempt(runs: Run[], teamId: string) {
+  const used = new Set(runs.filter(r => r.team_id === teamId).map(r => r.run));
+  for (let n = 1; n <= SLALOM_ATTEMPTS; n++) if (!used.has(n)) return n;
+  return null;
+}
+
+/** Sprint: os 3 mais rápidos da bateria 1 (no empate de tempo, entram todos os empatados). */
+export function sprintFinalists(runs: Run[]) {
+  const timed = runs.filter(r => r.run === 1 && r.seconds !== null).sort((a, b) => a.seconds! - b.seconds!);
+  const cut = timed[SPRINT_FINALISTS - 1]?.seconds;
+  return timed.filter((r, i) => i < SPRINT_FINALISTS || r.seconds === cut).map(r => r.team_id);
+}
+
+/** Diferença de tempo em segundos → +1,3s ou +1:02,4. */
+export const formatGap = (seconds: number) => `+${seconds < 60 ? `${(Math.round(seconds * 10) / 10).toFixed(1).replace('.', ',')}s` : formatDuel(seconds)}`;
 
 /** 0 a 1: quanto mais pontos na prova, mais forte a cor da célula (50 → 0, 150 → 1). */
 export const pointsIntensity = (points: number) => Math.min(1, Math.max(0, (points - 50) / 100));

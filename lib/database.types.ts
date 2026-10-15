@@ -132,6 +132,12 @@ export type Database = {
         Update: { completed_at?: string; race_id?: string; team_id?: string }
         Relationships: []
       }
+      race_runs: {
+        Row: { race_id: string; team_id: string; run: number; started_at: string | null; ended_at: string | null; seconds: number | null }
+        Insert: { race_id: string; team_id: string; run: number; started_at?: string | null; ended_at?: string | null; seconds?: number | null }
+        Update: { race_id?: string; team_id?: string; run?: number; started_at?: string | null; ended_at?: string | null; seconds?: number | null }
+        Relationships: []
+      }
       race_status: {
         Row: { note: string; position: number | null; race_id: string; status: string; team_id: string }
         Insert: { note?: string; position?: number | null; race_id: string; status?: string; team_id: string }
@@ -204,6 +210,8 @@ export type Database = {
           stage: string | null
           status: string | null
           team_id: string | null
+          runs: number | null
+          run_time: number | null
         }
         Relationships: []
       }
@@ -368,6 +376,10 @@ export type Database = {
         Args: { p_race_id: string; p_stage: string; p_slot: number; p_team_a: string | null; p_team_b: string | null; p_side: string; p_seconds: number | null }
         Returns: undefined
       }
+      admin_start_runs: { Args: { p_race_id: string; p_run: number; p_team_ids: string[]; p_at: string }; Returns: undefined }
+      admin_set_run: { Args: { p_race_id: string; p_team_id: string; p_run: number; p_seconds: number | null; p_at?: string | null }; Returns: undefined }
+      admin_close_runs: { Args: { p_race_id: string; p_run: number; p_at?: string | null }; Returns: undefined }
+      admin_delete_run: { Args: { p_race_id: string; p_team_id: string; p_run: number }; Returns: undefined }
       admin_set_team_extras: { Args: { p_team_id: string; p_docs: number; p_article: boolean }; Returns: undefined }
       admin_add_penalty: { Args: { p_team_id: string; p_points: number; p_reason: string; p_race_id?: string | null }; Returns: number }
       admin_delete_penalty: { Args: { p_id: number }; Returns: undefined }

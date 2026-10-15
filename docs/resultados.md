@@ -38,6 +38,14 @@ Na buzina, toque em **Largada** no duelo; quando cada barco cruzar a chegada, to
 - O barco gravado no duelo vale sobre o que a chave indica. Se um resultado anterior for corrigido depois, o painel avisa no duelo seguinte para conferir os barcos.
 - A colocação sai da chave (view `race_scores`). Barco que não largou ou não terminou: marque em "Situação dos barcos".
 
+## Slalom e Sprint (provas de tempo)
+
+Seguem a Instrução Técnica de 2026. A colocação sai dos tempos (view `race_scores`), e cada linha de **`race_runs`** é uma tentativa do Slalom ou a participação do barco numa bateria do Sprint (`run`), com o tempo em segundos (`seconds`). O tempo é medido no aparelho da organização: o toque de chegada menos a largada.
+
+- **Slalom** (`kind = attempts`): um barco por vez, até 3 tentativas, e vale o melhor tempo. No painel, toque em **Largar** quando o barco abrir a volta e em **Chegou** na chegada (ou **Sem tempo**). O próximo larga até 3 min depois da chegada do anterior: se o toque vier depois disso, o tempo conta do fim dos 3 min, e o painel avisa. Toque bem depois dos 3 min (mais 10 min) é tratado como pausa na prova e conta do toque.
+- **Sprint** (`kind = heats`): todos largam juntos. Na **bateria 1**, escolha os barcos (todos, menos quem está DNS), toque em **Largada** e em **Chegou** para cada barco; **Encerrar** deixa quem não chegou sem tempo. A **bateria 2** já vem com os 3 mais rápidos da bateria 1. Eles ficam com 1º, 2º e 3º pela bateria 2, e do 4º em diante vale a bateria 1.
+- Equipe que largou e não fez nenhum tempo válido fica **DNF sozinha** (20 pontos). Para corrigir ou digitar um tempo, toque na equipe.
+
 ## Exceções: `race_status`
 
 Só é preciso criar uma linha quando:

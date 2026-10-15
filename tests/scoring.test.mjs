@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closingWindowMinutes, duelWinner, formatDuel, formatDuration, lapSplits, matchPlan, parseDuel, pointsIntensity, sortRace, sortStandings } from '../lib/scoring.ts';
+import { SLALOM_WINDOW, closingWindowMinutes, duelWinner, formatDuel, formatDuration, formatGap, isRunning, lapSplits, matchPlan, nextAttempt, parseDuel, pointsIntensity, slalomStart, sortRace, sortStandings, sprintFinalists } from '../lib/scoring.ts';
 
 const duel = (stage, slot, team_a, team_b, time_a = null, time_b = null) => ({ race_id: 'match-race', stage, slot, team_a, team_b, time_a, time_b });
 const score = (team_id, status, position, laps = 0) => ({ race_id: 'r', team_id, status, position, laps, note: '', last_lap_at: null, stage: null, duel_time: null, points: 0 });
@@ -124,4 +124,42 @@ test('lê o tempo do X1 digitado no painel', () => {
   assert.equal(parseDuel(' 182,45 '), 182.45);
   assert.equal(parseDuel('0:59'), 59);
   for (const text of ['', 'abc', '3:75', '0', '-12', '1:2:3']) assert.equal(parseDuel(text), null);
+});
+
+const run = (team_id, n, seconds, extra = {}) => ({ race_id: 'r', team_id, run: n, started_at: '2026-10-17T12:00:00Z', ended_at: '2026-10-17T12:01:00Z', seconds, ...extra });
+
+test('slalom: o tempo conta do toque ou do fim dos 3 min depois da chegada anterior', () => {
+  const end = 1_000_000;
+  assert.equal(slalomStart(end + 60_000, null), end + 60_000);
+  assert.equal(slalomStart(end + 60_000, end), end + 60_000);
+  assert.equal(slalomStart(end + SLALOM_WINDOW + 20_000, end), end + SLALOM_WINDOW);
+  // Muito depois dos 3 min é pausa na prova: conta do toque.
+  assert.equal(slalomStart(end + SLALOM_WINDOW + 15 * 60_000, end), end + SLALOM_WINDOW + 15 * 60_000);
+});
+
+test('slalom: próxima tentativa livre, até 3', () => {
+  assert.equal(nextAttempt([], 'a'), 1);
+  assert.equal(nextAttempt([run('a', 1, 60), run('b', 1, 61)], 'a'), 2);
+  assert.equal(nextAttempt([run('a', 1, 60), run('a', 3, null)], 'a'), 2);
+  assert.equal(nextAttempt([run('a', 1, 60), run('a', 2, 61), run('a', 3, null)], 'a'), null);
+});
+
+test('barco na água: largou e ainda não chegou nem ficou sem tempo', () => {
+  assert.equal(isRunning(run('a', 1, null, { ended_at: null })), true);
+  assert.equal(isRunning(run('a', 1, null)), false);
+  assert.equal(isRunning(run('a', 1, 58.4, { ended_at: null })), false);
+  assert.equal(isRunning(run('a', 1, null, { started_at: null, ended_at: null })), false);
+});
+
+test('sprint: os 3 mais rápidos da bateria 1 vão para a bateria 2', () => {
+  const heat = [run('a', 1, 50), run('b', 1, 48), run('c', 1, 52.5), run('d', 1, 55), run('e', 1, null), run('b', 2, 47)];
+  assert.deepEqual(sprintFinalists(heat), ['b', 'a', 'c']);
+  // Empate no 3º tempo: entram os dois.
+  assert.deepEqual(sprintFinalists([...heat, run('f', 1, 52.5)]), ['b', 'a', 'c', 'f']);
+});
+
+test('diferença de tempo: segundos com décimo, ou minutos', () => {
+  assert.equal(formatGap(1.26), '+1,3s');
+  assert.equal(formatGap(0.6), '+0,6s');
+  assert.equal(formatGap(62.4), '+1:02,4');
 });

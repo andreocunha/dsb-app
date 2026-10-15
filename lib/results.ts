@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import type { Team } from './data';
-import type { Duel, Penalty, Score } from './scoring';
+import type { Duel, Penalty, Run, Score } from './scoring';
 
 export type ResultsData = { teams: Team[]; scores: Score[]; duels: Duel[]; penalties: Penalty[] };
 
@@ -54,7 +54,7 @@ export function useResults(active = true, channel = 'resultados') {
     const reload = () => loadResults().then(next => { if (alive) { setData(next); setError(false); } }, () => { if (alive) setError(true); });
     reloadRef.current = () => void reload();
     void reload();
-    const stop = onResultsChange(channel, [{ table: 'race_laps' }, { table: 'race_status' }, { table: 'match_duels' }, { table: 'penalties' }], reload);
+    const stop = onResultsChange(channel, [{ table: 'race_laps' }, { table: 'race_runs' }, { table: 'race_status' }, { table: 'match_duels' }, { table: 'penalties' }], reload);
     return () => { alive = false; reloadRef.current = () => {}; stop(); };
   }, [active, channel]);
   // Documentação e artigo (tabela teams) não chegam pelo tempo real: o painel recarrega depois de salvar.
@@ -80,4 +80,23 @@ export function useRaceLaps(raceId: string) {
   }, [raceId]);
   // Ao trocar de prova, não mostra as voltas da anterior enquanto carrega.
   return laps?.raceId === raceId ? laps.byTeam : null;
+}
+
+/** Tentativas do Slalom ou baterias do Sprint de uma prova, ao vivo. `reload` busca de novo na hora. */
+export function useRaceRuns(raceId: string) {
+  const [runs, setRuns] = useState<{ raceId: string; list: Run[] } | null>(null);
+  const reloadRef = useRef(async () => {});
+  useEffect(() => {
+    let alive = true;
+    const reload = async () => {
+      const { data, error } = await supabase.from('race_runs').select('*').eq('race_id', raceId).order('run');
+      if (alive && !error) setRuns({ raceId, list: data as Run[] });
+    };
+    reloadRef.current = reload;
+    void reload();
+    const stop = onResultsChange(`tentativas-${raceId}`, [{ table: 'race_runs', filter: `race_id=eq.${raceId}` }], () => void reload());
+    return () => { alive = false; reloadRef.current = async () => {}; stop(); };
+  }, [raceId]);
+  const reload = useCallback(() => reloadRef.current(), []);
+  return { runs: runs?.raceId === raceId ? runs.list : null, reload };
 }

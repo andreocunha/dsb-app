@@ -2,12 +2,12 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Share2, Trophy } from 'lucide-react';
 import { useRaces, type Race, type Team } from '@/lib/data';
-import { useRaceLaps, useResults, type ResultsData } from '@/lib/results';
+import { useRaceLaps, useRaceRuns, useResults, type ResultsData } from '@/lib/results';
 import { closingMinutes, nextRace, useNow } from '@/lib/races';
 import { clock, dayLabel, hhmm, itemFromRace, phaseOf, startsIn, LATE_AFTER } from '@/lib/schedule';
 import { useClock } from '@/lib/use-schedule';
 import {
-  DOC_ITEMS, ITEM_POINTS, duelStageLabel, formatDuel, formatDuration, lapSplits, matchPlan,
+  DOC_ITEMS, ITEM_POINTS, SLALOM_ATTEMPTS, duelStageLabel, formatDuel, formatDuration, formatGap, isRunning, lapSplits, matchPlan,
   pointsIntensity, sortRace, sortStandings, stageLabel, type PlanDuel, type Score,
 } from '@/lib/scoring';
 import { Sheet, TeamBadge } from './ui';
@@ -107,6 +107,7 @@ export function ResultsSheet({ open, onClose }: { open: boolean; onClose: () => 
       </div>
       {!race ? <Standings races={races} data={data} standings={standings} onTeam={openTeam} />
         : race.kind === 'bracket' ? <MatchRace key={race.id} race={race} data={data} />
+        : race.kind === 'attempts' || race.kind === 'heats' ? <TimedRace key={race.id} race={race} data={data} />
         : <LapRace key={race.id} race={race} data={data} />}
     </>}
   </Sheet>;
@@ -220,6 +221,10 @@ function RaceHeader({ race }: { race: Race }) {
   const start = Date.parse(race.starts_at);
   const rule = race.kind === 'bracket'
     ? 'Duelos X1 eliminatórios: passa quem fizer o menor tempo. Na Etapa 2, o perdedor de melhor tempo volta pela repescagem. Quem cai na mesma etapa é ordenado pelo tempo.'
+    : race.kind === 'attempts'
+    ? `Um barco por vez, até ${SLALOM_ATTEMPTS} tentativas por equipe: vale o melhor tempo. O próximo larga até 3 min depois da chegada do anterior; o tempo conta quando o barco abre a volta ou ao fim dos 3 min.`
+    : race.kind === 'heats'
+    ? 'Todos largam juntos e a classificação é pelo tempo de chegada. Os 3 primeiros fazem a segunda bateria, que define o pódio.'
     : minutes
       ? `${minutes} min de prova, com até ${Math.round(closingMinutes(race))} min para fechar a última volta. Vence quem completar mais voltas.`
       : 'Vence quem completar mais voltas; no empate, quem fechou a última volta primeiro.';
@@ -251,7 +256,7 @@ function RaceStatus({ race }: { race: Race }) {
 const waitingRows = (race: Race, teams: Team[]): Score[] =>
   [...teams].sort(byTeamName).map(team => ({
     race_id: race.id, team_id: team.id, status: 'ok', note: '', laps: 0, last_lap_at: null,
-    stage: null, duel_time: null, position: null, points: 0,
+    stage: null, duel_time: null, position: null, points: 0, runs: 0, run_time: null,
   }));
 
 function formatTick(ms: number) {
@@ -402,6 +407,116 @@ const LapRace = memo(function LapRace({ race, data }: { race: Race; data: Result
   </>;
 });
 
+/** Tentativa ou bateria numa linha da lista: 1ª tentativa, Bateria 2. */
+const runName = (heats: boolean, run: number) => heats ? `Bateria ${run}` : `${run}ª tentativa`;
+
+/**
+ * Slalom (melhor tempo entre até 3 tentativas) e Sprint (bateria 1 para todos; os 3 primeiros
+ * fazem a bateria 2, que define o pódio). A colocação vem pronta do banco; aqui entram os tempos.
+ */
+const TimedRace = memo(function TimedRace({ race, data }: { race: Race; data: ResultsData }) {
+  const { runs } = useRaceRuns(race.id);
+  const now = useNow();
+  const [open, setOpen] = useState<string | null>(null);
+  const heats = race.kind === 'heats';
+  const published = sortRace(data.scores.filter(s => s.race_id === race.id));
+  const pending = !published.length;
+  const scores = pending ? waitingRows(race, data.teams) : published;
+  const teams = new Map(data.teams.map(t => [t.id, t]));
+  const list = runs ?? [];
+  const runsOf = (teamId: string) => list.filter(r => r.team_id === teamId).sort((a, b) => a.run - b.run);
+  const running = list.filter(isRunning);
+  const done = now > 0 && phaseOf(itemFromRace(race), now).kind === 'done';
+
+  const leader = !pending && scores[0]?.status === 'ok' && scores[0].position !== null ? scores[0] : null;
+  const heat1 = list.filter(r => r.run === 1 && r.seconds !== null).sort((a, b) => a.seconds! - b.seconds!);
+  const final = list.filter(r => r.run === 2).sort((a, b) => (a.seconds ?? Infinity) - (b.seconds ?? Infinity));
+  const finalOver = final.length > 0 && !final.some(isRunning);
+  const best = heats ? heat1[0] ?? null
+    : list.filter(r => r.seconds !== null).sort((a, b) => a.seconds! - b.seconds!)[0] ?? null;
+  const finished = scores.filter(s => s.status === 'ok' && s.run_time !== null).length;
+
+  function detail(score: Score) {
+    if (pending) return 'Aguardando a largada';
+    const mine = runsOf(score.team_id);
+    const out = mine.find(isRunning);
+    if (out) return `Na água agora · ${runName(heats, out.run).toLowerCase()}`;
+    if (score.status === 'dns') return 'Não largou';
+    if (score.status === 'dnf') return heats ? 'Não completou a bateria 1' : `Sem tempo válido · ${mine.length} ${mine.length === 1 ? 'tentativa' : 'tentativas'}`;
+    if (score.run_time === null && !mine.some(r => r.seconds !== null)) return 'Sem tempo ainda';
+    if (heats) {
+      const b1 = mine.find(r => r.run === 1)?.seconds ?? null;
+      const b2 = mine.find(r => r.run === 2);
+      if (b2) return `Bateria 2: ${b2.seconds !== null ? formatDuel(b2.seconds) : 'sem tempo'}${b1 !== null ? ` · bateria 1: ${formatDuel(b1)}` : ''}`;
+      return b1 === null ? 'Sem tempo' : `Bateria 1: ${formatDuel(b1)}${heat1[0] && heat1[0].team_id !== score.team_id ? ` · ${formatGap(b1 - heat1[0].seconds!)}` : ''}`;
+    }
+    const tries = `${mine.length} ${mine.length === 1 ? 'tentativa' : 'tentativas'}`;
+    const time = score.run_time!;
+    return leader && leader !== score && leader.run_time !== null ? `${formatDuel(time)} · ${formatGap(time - leader.run_time)} · ${tries}` : `${formatDuel(time)} · ${tries}`;
+  }
+
+  return <>
+    <RaceHeader race={race} />
+    <div className="lap-layout timed-layout">
+    <div className="lap-side">
+    <div className="race-summary">
+      <div><span>{done ? 'Vencedor' : 'Liderando'}</span><strong className="name">{leader ? teams.get(leader.team_id)?.name : '–'}</strong><small>{leader?.run_time != null ? formatDuel(leader.run_time) : 'a definir'}</small></div>
+      <div><span>{heats ? 'Melhor da bateria 1' : 'Melhor tempo'}</span><strong>{best ? formatDuel(best.seconds!) : '–'}</strong><small>{best ? teams.get(best.team_id)?.name : 'a definir'}</small></div>
+      {pending
+        ? <div><span>Inscritas</span><strong>{scores.length}</strong><small>equipes</small></div>
+        : <div><span>Com tempo</span><strong>{finished}/{scores.length}</strong><small>{scores.filter(s => s.status === 'dnf').length} DNF · {scores.filter(s => s.status === 'dns').length} DNS</small></div>}
+    </div>
+    {running.length > 0 && <p className="live-note"><span className="live-dot" />
+      {running.length === 1 ? `${teams.get(running[0].team_id)?.name ?? 'Um barco'} na água agora · ${runName(heats, running[0].run).toLowerCase()}` : `Bateria ${running[0].run} na água agora · ${running.length} barcos`}</p>}
+    {!running.length && !done && !pending && <p className="live-note">Parcial: a prova ainda pode mudar.</p>}
+
+    {heats && final.length > 0 && <section className="final-card" aria-label="Bateria 2">
+      <div className="final-card-title"><h2>Bateria 2 · pódio</h2>{!finalOver && <small>em andamento</small>}</div>
+      {final.map((run, i) => {
+        const team = teams.get(run.team_id);
+        const score = scores.find(s => s.team_id === run.team_id);
+        return team && <div key={run.team_id} className={`final-side ${finalOver && i === 0 && run.seconds !== null ? 'champion' : ''}`}>
+          <TeamBadge team={team} />
+          <span><strong>{team.name}</strong><small>{isRunning(run) ? 'na água' : score?.position ? `${score.position}º · ${score.points} pts` : 'sem tempo'}</small></span>
+          {run.seconds !== null && <strong className="final-time">{formatDuel(run.seconds)}</strong>}
+        </div>;
+      })}
+    </section>}
+    </div>
+
+    <div className="lap-main">
+    <section className="card race-results" aria-label={`Resultado da ${race.name}`}>
+      <ol>
+        {scores.map(score => {
+          const team = teams.get(score.team_id);
+          const mine = runsOf(score.team_id);
+          const isOpen = open === score.team_id;
+          const fastest = Math.min(...mine.filter(r => r.seconds !== null).map(r => r.seconds!));
+          return <li key={score.team_id}>
+            <button className="race-row" onClick={() => setOpen(isOpen ? null : score.team_id)} aria-expanded={isOpen} disabled={!mine.length}>
+              <PositionBadge score={score} />
+              {team && <TeamBadge team={team} small />}
+              <span className="race-row-main"><strong>{team?.name ?? score.team_id}</strong><small>{detail(score)}{score.note && ` · ${score.note}`}</small></span>
+              <span className="race-row-points"><strong>{pending || (score.status === 'ok' && score.position === null) ? '–' : score.points}</strong><small>pts</small></span>
+              {mine.length > 0 && <ChevronDown size={16} className="race-row-chevron" />}
+            </button>
+            {isOpen && <ul className="run-list" aria-label={`${heats ? 'Baterias' : 'Tentativas'} de ${team?.name ?? 'equipe'}`}>
+              {mine.map(run => <li key={run.run} className={!heats && run.seconds === fastest && mine.length > 1 ? 'best' : undefined}>
+                <span>{runName(heats, run.run)}</span>
+                <strong>{isRunning(run) ? 'na água' : run.seconds !== null ? formatDuel(run.seconds) : 'sem tempo'}</strong>
+                {!heats && run.seconds === fastest && mine.length > 1 && <small>vale esta</small>}
+                {heats && run.run === 2 && <small>pódio</small>}
+              </li>)}
+            </ul>}
+          </li>;
+        })}
+      </ol>
+    </section>
+    </div>
+  </div>
+  </>;
+});
+
 // Chave do Match Race desenhada em px: cada coluna é uma etapa e cada duelo fica na linha que
 // a chave da Instrução Técnica dá para ele (matchPlan).
 const CARD_W = 176, CARD_H = 64, GAP_X = 36, SLOT = 80, HEAD = 28;
@@ -533,8 +648,10 @@ function TeamDetail({ team, standings, races, data }: { team: Team; standings: T
             const score = scores.get(scoreKey(race.id, team.id));
             const detail = !score ? 'Sem resultado ainda'
               : score.status === 'dns' ? 'Não largou'
-              : score.status === 'dnf' ? `Não terminou · ${score.laps} ${score.laps === 1 ? 'volta' : 'voltas'}`
+              : score.status === 'dnf' ? (race.kind === 'laps' ? `Não terminou · ${score.laps} ${score.laps === 1 ? 'volta' : 'voltas'}` : 'Não fez tempo válido')
               : race.kind === 'bracket' ? (score.stage ? stageLabel[score.stage] : 'Chave em andamento')
+              : race.kind === 'attempts' ? (score.run_time !== null ? `Melhor tempo ${formatDuel(score.run_time)}` : 'Sem tempo ainda')
+              : race.kind === 'heats' ? (score.run_time !== null ? `${score.position && score.position <= 3 && score.runs > 1 ? 'Bateria 2' : 'Bateria 1'} · ${formatDuel(score.run_time)}` : 'Sem tempo ainda')
               : `${score.laps} voltas`;
             return <li key={race.id}>
               <span className="chip-number">{race.number}</span>

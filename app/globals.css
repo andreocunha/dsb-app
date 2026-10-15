@@ -502,6 +502,14 @@ button.race-row:disabled { cursor: default; }
 .lap-leg.best > span { background: var(--team-gold-bg); color: var(--team-gold); }
 .lap-leg small { color: var(--team-gold); font-size: 11px; font-weight: 600; }
 
+/* Slalom e Sprint: as tentativas (ou baterias) do barco, com a que vale em destaque. */
+.run-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0 12px 14px 60px; list-style: none; }
+.run-list li { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 12.5px; }
+.run-list li > span { min-width: 92px; color: var(--text-secondary); }
+.run-list li > strong { padding: 2px 8px; border-radius: 6px; background: var(--brand-soft); font-variant-numeric: tabular-nums; font-weight: 600; }
+.run-list li.best > strong { background: var(--team-gold-bg); color: var(--team-gold); }
+.run-list li small { color: var(--team-gold); font-size: 11px; font-weight: 600; }
+
 /* Match Race: chave de mata-mata com rolagem lateral no celular. */
 .final-card { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; padding: 14px; border-radius: 18px; background: var(--brand); color: var(--on-brand); }
 .final-card-title { display: flex; align-items: baseline; justify-content: space-between; }

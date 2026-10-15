@@ -9,7 +9,7 @@ export type Team = {
   race_points: number; docs_delivered: number; article_delivered: boolean; penalty_points: number; tiebreak_position: number | null;
 };
 export type Race = {
-  id: string; number: number; name: string; starts_at: string; kind: 'laps' | 'bracket';
+  id: string; number: number; name: string; starts_at: string; kind: 'laps' | 'bracket' | 'attempts' | 'heats';
   duration_minutes: number | null; closing_minutes: number | null; started_at: string | null; finished_at: string | null;
 };
 

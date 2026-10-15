@@ -175,3 +175,19 @@
   .stat-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .stat-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
 }
+
+/* Slalom e Sprint: quem está na água, o prazo de 3 min e a escolha dos barcos da bateria. */
+.admin-run-live { padding-top: 12px; }
+.admin-run-who { display: flex; flex-direction: column; min-width: 0; }
+.admin-run-who strong { overflow: hidden; font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.admin-run-who small { color: var(--text-secondary); font-size: 12px; }
+.admin-run-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.admin-run-window { margin: 0 4px 16px; padding: 10px 12px; border-radius: 12px; background: var(--brand-soft); font-size: 14px; font-variant-numeric: tabular-nums; }
+.admin-run-window.late { background: var(--danger-soft); color: var(--danger); }
+.admin-heat-pick { padding: 6px 12px; }
+.admin-heat-team { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.admin-heat-team strong { overflow: hidden; font-size: 14px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.admin-heat-go { padding: 12px; }
+.admin-heat-go .button { width: 100%; min-height: 52px; font-size: 15px; }
+.admin-run-field { gap: 12px; padding: 8px 0; }
+.admin-run-field .admin-inline-form { flex: 1; }
