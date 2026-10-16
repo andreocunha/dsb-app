@@ -7,7 +7,7 @@ import { closingMinutes, nextRace, useNow } from '@/lib/races';
 import { clock, dayLabel, hhmm, itemFromRace, phaseOf, startsIn, LATE_AFTER } from '@/lib/schedule';
 import { useClock } from '@/lib/use-schedule';
 import {
-  DOC_ITEMS, ITEM_POINTS, SLALOM_ATTEMPTS, duelStageLabel, formatDuel, formatDuration, formatGap, isRunning, lapSplits, matchPlan,
+  ITEM_POINTS, SLALOM_ATTEMPTS, duelStageLabel, formatDuel, formatDuration, formatGap, isRunning, lapSplits, matchPlan,
   pointsIntensity, sortRace, sortStandings, stageLabel, type PlanDuel, type Score,
 } from '@/lib/scoring';
 import { Sheet, TeamBadge } from './ui';
@@ -196,7 +196,7 @@ function Legend() {
     <span><span className="swatch" /> 50 pts</span>
     <span><span className="score-cell dnf">DNF</span> largou e não terminou · 20 pts</span>
     <span><span className="score-cell dns">DNS</span> não largou · 0 pts</span>
-    <span>O total já soma documentação pré-evento e artigo científico ({ITEM_POINTS} pts por item). Toque na equipe para ver de onde vêm os pontos.</span>
+    <span>O total já soma as obrigações pré-evento da tabela oficial da organização. Toque na equipe para ver de onde vêm os pontos.</span>
   </div>;
 }
 
@@ -635,8 +635,8 @@ function TeamDetail({ team, standings, races, data }: { team: Team; standings: T
         </div>
         <ul className="points-breakdown">
           <li><span className="swatch strong" />Provas<strong>{int(team.race_points)}</strong></li>
-          <li><span className="swatch extras" />Documentação pré-evento · {team.docs_delivered} de {DOC_ITEMS} itens<strong>+{team.docs_delivered * ITEM_POINTS}</strong></li>
-          <li><span className="swatch extras" />Artigo científico · {team.article_delivered ? 'entregue' : 'não entregue'}<strong>+{team.article_delivered ? ITEM_POINTS : 0}</strong></li>
+          {/* A organização publica um número só (documentação e artigo juntos), sem dizer o que entra nele. */}
+          <li><span className="swatch extras" />Obrigações pré-evento · tabela oficial<strong>+{extrasOf(team)}</strong></li>
           {penalties.map(p => <li key={p.id} className="penalty"><span className="swatch penalty" />{p.reason} · {new Date(p.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })}<strong>{minus(p.points)}</strong></li>)}
           <li className="total">Total<strong>{int(team.points)}</strong></li>
         </ul>
