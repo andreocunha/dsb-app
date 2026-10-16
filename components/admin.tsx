@@ -554,7 +554,7 @@ function TeamsPanel({ races, data, onChanged }: { races: Race[]; data: ResultsDa
             <TeamBadge team={team} small />
             <span className="admin-row-main">
               <strong>{team.name}</strong>
-              <small>Documentação {team.docs_delivered}/{DOC_ITEMS} · {team.article_delivered ? 'artigo entregue' : 'sem artigo'}{team.penalty_points < 0 ? ` · ${team.penalty_points} em penalidades` : ''}</small>
+              <small>Pré-evento {team.docs_delivered}/{DOC_ITEMS}{team.penalty_points < 0 ? ` · ${team.penalty_points} em penalidades` : ''}</small>
             </span>
             <span className="admin-row-points">{team.points.toLocaleString('pt-BR')} pts</span>
           </button>
@@ -569,15 +569,16 @@ function TeamsPanel({ races, data, onChanged }: { races: Race[]; data: ResultsDa
 
 function TeamExtras({ team, races, penalties, onChanged }: { team: Team; races: Race[]; penalties: ResultsData['penalties']; onChanged: () => void }) {
   const { notify } = useApp();
-  const [extras, setExtras] = useState({ docs: team.docs_delivered, article: team.article_delivered });
+  const [docs, setDocs] = useState(team.docs_delivered);
   const [penalty, setPenalty] = useState({ points: '', reason: '', race: '' });
   const [busy, setBusy] = useState(false);
 
-  async function saveExtras(next: typeof extras) {
-    const previous = extras;
-    setExtras(next);
-    const { error } = await supabase.rpc('admin_set_team_extras', { p_team_id: team.id, p_docs: next.docs, p_article: next.article });
-    if (error) { setExtras(previous); notify(errorMessage(error)); return; }
+  // A tabela oficial de pré-evento já inclui o artigo científico: ele não soma à parte.
+  async function saveDocs(next: number) {
+    const previous = docs;
+    setDocs(next);
+    const { error } = await supabase.rpc('admin_set_team_extras', { p_team_id: team.id, p_docs: next, p_article: false });
+    if (error) { setDocs(previous); notify(errorMessage(error)); return; }
     onChanged();
   }
   async function addPenalty(e: React.FormEvent) {
@@ -601,17 +602,13 @@ function TeamExtras({ team, races, penalties, onChanged }: { team: Team; races: 
     <section className="admin-sheet-section">
       <h3>Pontos fora das provas</h3>
       <div className="settings-split admin-extra">
-        <div><strong>Documentação no prazo</strong><small>20 pontos por item entregue</small></div>
+        <div><strong>Obrigações pré-evento</strong><small>20 pontos por item, como na tabela oficial (já inclui o artigo)</small></div>
         <div className="stepper">
-          <button className="icon-button" disabled={extras.docs <= 0} onClick={() => void saveExtras({ ...extras, docs: extras.docs - 1 })} aria-label="Um item a menos"><Minus size={16} /></button>
-          <span aria-live="polite">{extras.docs}/{DOC_ITEMS}</span>
-          <button className="icon-button" disabled={extras.docs >= DOC_ITEMS} onClick={() => void saveExtras({ ...extras, docs: extras.docs + 1 })} aria-label="Um item a mais"><Plus size={16} /></button>
+          <button className="icon-button" disabled={docs <= 0} onClick={() => void saveDocs(docs - 1)} aria-label="Um item a menos"><Minus size={16} /></button>
+          <span aria-live="polite">{docs}/{DOC_ITEMS}</span>
+          <button className="icon-button" disabled={docs >= DOC_ITEMS} onClick={() => void saveDocs(docs + 1)} aria-label="Um item a mais"><Plus size={16} /></button>
         </div>
       </div>
-      <label className="settings-split admin-extra toggle-row">
-        <div><strong>Artigo científico</strong><small>20 pontos</small></div>
-        <button type="button" role="switch" className="toggle" aria-checked={extras.article} aria-label="Artigo científico entregue" onClick={() => void saveExtras({ ...extras, article: !extras.article })}><span /></button>
-      </label>
     </section>
 
     <section className="admin-sheet-section">
