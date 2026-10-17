@@ -123,6 +123,12 @@ test('lê o tempo do X1 digitado no painel', () => {
   assert.equal(parseDuel('182.4'), 182.4);
   assert.equal(parseDuel(' 182,45 '), 182.45);
   assert.equal(parseDuel('0:59'), 59);
+  // Teclado numérico do celular, sem ":".
+  assert.equal(parseDuel('1.02,4'), 62.4);
+  assert.equal(parseDuel('1,02,4'), 62.4);
+  assert.equal(parseDuel('1.02.4'), 62.4);
+  assert.equal(parseDuel('1:02.4'), 62.4);
+  assert.equal(parseDuel('1.75,4'), null);
   for (const text of ['', 'abc', '3:75', '0', '-12', '1:2:3']) assert.equal(parseDuel(text), null);
 });
 

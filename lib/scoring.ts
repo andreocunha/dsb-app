@@ -76,10 +76,12 @@ export function formatDuel(seconds: number) {
 }
 /** Tempo de X1 digitado no painel (3:02,4 · 182.4 · 182,4) → segundos; null se não der para ler. */
 export function parseDuel(text: string) {
-  const match = text.trim().replace(',', '.').match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/);
+  // O teclado numérico do celular não tem ":", então "1.02,4" e "1,02,4" também valem minuto e segundos.
+  const match = text.trim().match(/^(?:(\d+)(?::|[.,](?=\d+[.,]\d+$)))?(\d+)(?:[.,](\d+))?$/);
   if (!match) return null;
-  const seconds = Number(match[1] ?? 0) * 60 + Number(match[2]);
-  if (match[1] && Number(match[2]) >= 60) return null;
+  const [, min, sec, frac] = match;
+  if (min !== undefined && Number(sec) >= 60) return null;
+  const seconds = Number(min ?? 0) * 60 + Number(`${sec}.${frac ?? 0}`);
   return seconds > 0 && seconds < 100_000 ? Math.round(seconds * 100) / 100 : null;
 }
 
@@ -179,7 +181,8 @@ export const isRunning = (run: Run) => run.started_at !== null && run.ended_at =
 
 /**
  * Largada do Slalom: o tempo conta quando o barco abre a volta ou ao fim dos 3 min depois da
- * chegada do anterior, o que vier primeiro. Devolve o instante em que o tempo começa a contar.
+ * chegada do anterior, o que vier primeiro. Devolve esse instante; o painel conta do toque e só
+ * oferece este horário como opção quando ele é diferente.
  */
 export function slalomStart(tap: number, previousEnd: number | null) {
   if (previousEnd === null) return tap;

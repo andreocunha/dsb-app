@@ -515,7 +515,7 @@ function DuelForm({ code, duel, saved, teams, onDone }: { code: string; duel: Du
         </label>
         <label className="admin-field">
           <span>Tempo</span>
-          <input inputMode="decimal" placeholder={out ? 'Sem tempo' : '3:02,4'} disabled={out} value={out ? '' : form[`time_${key}`]} onChange={e => setForm({ ...form, [`time_${key}`]: e.target.value })} />
+          <input inputMode="decimal" placeholder={out ? 'Sem tempo' : '3.02,4'} disabled={out} value={out ? '' : form[`time_${key}`]} onChange={e => setForm({ ...form, [`time_${key}`]: e.target.value })} />
         </label>
       </div>
       {both && <label className="settings-split admin-extra toggle-row">

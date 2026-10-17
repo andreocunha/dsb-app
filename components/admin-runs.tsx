@@ -87,7 +87,7 @@ function NextWindow({ end }: { end: number }) {
   return <p className={`admin-run-window ${now >= limit ? 'late' : ''}`}>
     {now < limit
       ? <>Próximo barco larga em até <strong>{formatDuration(limit - now)}</strong></>
-      : <>Passou dos 3 min: o tempo do próximo já conta desde <strong>{clock.format(limit)}</strong></>}
+      : <>Passou dos 3 min (fim às <strong>{clock.format(limit)}</strong>): ao largar, dá para contar desde esse horário</>}
   </p>;
 }
 
@@ -111,17 +111,19 @@ export function AttemptsAdmin({ race, data, onRaceChanged }: { race: Race; data:
   const { notify } = useApp();
   const selected = teams.find(t => t.id === sheet?.team) ?? null;
 
+  // Conta sempre do toque. Passou dos 3 min, o fim da janela fica como opção: a "última chegada"
+  // pode ser antiga (largada cancelada, tentativa apagada) e contar dela sozinho dá tempo errado.
   function launch(team: Team, attempt: number, tap: number) {
-    const at = slalomStart(tap, lastEnd);
-    if (at !== tap) notify(`${team.name}: o tempo conta desde ${clock.format(at)}, o fim dos 3 min.`);
-    void live.start([team.id], attempt, at);
+    const late = slalomStart(tap, lastEnd);
+    void live.start([team.id], attempt, tap);
+    if (late !== tap) notify(`${team.name} largou mais de 3 min depois da última chegada.`, { label: `Contar desde ${clock.format(late)}`, run: () => void live.start([team.id], attempt, late) });
   }
 
   return <>
     <section className="settings-group">
       <div className="settings-card"><StartRow race={race} onRaceChanged={onRaceChanged} /></div>
     </section>
-    <p className="settings-hint admin-duel-how">Um barco por vez, até {SLALOM_ATTEMPTS} tentativas; vale o melhor tempo. Toque em Largar quando o barco abrir a volta e em Chegou na chegada. Se o barco passar dos 3 min depois da chegada do anterior, o tempo conta do fim dos 3 min.</p>
+    <p className="settings-hint admin-duel-how">Um barco por vez, até {SLALOM_ATTEMPTS} tentativas; vale o melhor tempo. Toque em Largar quando o barco abrir a volta e em Chegou na chegada. O tempo conta do toque em Largar. Se passar dos 3 min depois da chegada do anterior, o aviso da largada oferece contar do fim dos 3 min.</p>
     {running.length > 0
       ? <section className="settings-group" aria-label="Na água">
         <h2 className="settings-label">Na água</h2>
@@ -302,7 +304,7 @@ function TeamSheet({ race, team, open, runs, onClose, onChanged }: {
             return <RunField key={`${n}:${run?.seconds ?? ''}:${run ? 1 : 0}`} race={race} team={team} n={n} run={run} onChanged={onChanged} />;
           })}
         </ol>
-        <p className="settings-hint">Digite o tempo como 1:02,4 ou 62,4 (segundos). Vazio grava sem tempo. Equipe que largou e não fez nenhum tempo fica DNF sozinha.</p>
+        <p className="settings-hint">Digite o tempo como 1.02,4 (minuto e segundos) ou 62,4 (só segundos). Vazio grava sem tempo. Equipe que largou e não fez nenhum tempo fica DNF sozinha.</p>
       </section>
       <StatusForm key={team.id} race={race} team={team} />
     </>}
@@ -318,7 +320,7 @@ function RunField({ race, team, n, run, onChanged }: { race: Race; team: Team; n
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const seconds = text.trim() ? parseDuel(text) : null;
-    if (text.trim() && seconds === null) { notify('Tempo inválido. Use 1:02,4 ou 62,4 (segundos).'); return; }
+    if (text.trim() && seconds === null) { notify('Tempo inválido. Use 1.02,4 (minuto e segundos) ou 62,4 (só segundos).'); return; }
     setBusy(true);
     const { error } = await supabase.rpc('admin_set_run', { p_race_id: race.id, p_team_id: team.id, p_run: n, p_seconds: seconds });
     setBusy(false);
@@ -343,7 +345,7 @@ function RunField({ race, team, n, run, onChanged }: { race: Race; team: Team; n
     <form className="admin-inline-form" onSubmit={e => void save(e)}>
       <label className="admin-field">
         <span>{runLabel(race, n)}{running ? ' · na água agora' : run && run.seconds === null ? ' · sem tempo' : !run ? ' · não corrida' : ''}</span>
-        <input inputMode="decimal" placeholder={running ? 'Na água' : '1:02,4'} value={text} onChange={e => setText(e.target.value)} />
+        <input inputMode="decimal" placeholder={running ? 'Na água' : '1.02,4'} value={text} onChange={e => setText(e.target.value)} />
       </label>
       <button className="button" type="submit" disabled={busy}><Check size={16} /> Salvar</button>
       {run && <button className="icon-button danger" type="button" disabled={busy} onClick={() => void remove()} aria-label={`Apagar ${runLabel(race, n)}`}><Trash2 size={16} /></button>}
